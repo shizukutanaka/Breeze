@@ -37,24 +37,17 @@ Detaljerte bruksanvisninger finner du i [manualen](MANUAL-nb.md) (versjoner på 
 
 Vi skriver også ærlig om grensene. For å levere meldinger finnes det en kortvarig oppbevaring på serveren (uleverte konvolutter i maks 7 dager, tilkoblingssignaler i 5 minutter, registre over adresser og enheter i 90 dager, gruppeinformasjon og varselabonnementer i 30 dager. Alt slettes automatisk, og innholdet kan ikke leses). Sikkerhetskopiering til skyen er slått av fra starten. Hvis du plasserer Breeze på din egen server, har du også denne oppbevaringen under din egen kontroll.
 
-## En utforming som gjør kriminalitet ulønnsom
-
-Breeze er laget slik at misbruk koster tid og penger for den som misbruker. Vi sier ikke at den «gjør kriminalitet umulig». Den er utformet for å «gjøre det ulønnsomt».
-
-- **Ingen gratis plattform å snylte på.** Siden det ikke finnes noen sentral gratisserver, må også den som misbruker, skaffe et sted med en konto i eget navn og for egne penger.
-- **Det koster å sende.** Hver sending krever en liten beregning (arbeidsbevis), og mengden er begrenset. Masseutsendelser og trakassering lønner seg ikke.
-- **Rapportering som ikke kan bortforklares.** Den som mottar en melding, kan rapportere selve leveringen som bevis. Avsenderen kan ikke hevde at den ikke ble sendt.
-- **Den som plasserte serveren, har makten til å stoppe det.** Det som skjer på din egen server, kan du stoppe selv. Du trenger ingens tillatelse.
-
 ## Funksjoner
 
 - Samtaler én-til-én og gruppesamtaler (opptil 1 000 personer)
-- Tale- og videosamtaler
+- Tale- og videosamtaler (gruppesamtaler opptil 8 personer)
 - Sende filer (opptil 50MB i én-til-én-samtaler. Det går også i grupper, men størrelsesgrensen er mindre)
 - Flere enheter og flere kontoer til ulike formål (for eksempel jobb og privat. Både antall enheter og antall kontoer er gratis og ubegrenset)
-- Velges automatisk blant 8 språk (engelsk, japansk, koreansk, kinesisk (Taiwan), spansk, thai, indonesisk, portugisisk)
+- 51 språk (engelsk pluss 50 språkfiler), velges automatisk for å passe til enhetens språk
 - Profiler med bilde, klistremerker, posisjonsdeling
-- Kommandoer som `/help` (mer enn 60 typer)
+- Kommandoer som `/help` (71 typer)
+- Strømmoduser tilpasset batteriet ditt (automatisk / normal / strømsparing / nødmodus). Etter hvert som batteriet tømmes, spres leveringskontroller ut slik at batteriet varer lenger. En sikring for katastrofer og andre tider da du ikke kan lade
+- Lettleste skjermer (oppmerksomhet på fargekontrast, tekststørrelse og betjening med bare tastaturet)
 
 ## Forskjeller fra andre meldingstjenester
 

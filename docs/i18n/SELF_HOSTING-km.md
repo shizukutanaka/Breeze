@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **នោះហើយ។** មុខងារទាំងអស់ដំណើរការ លើកលែងតែការជូនដំណឹងរុញ។ សូមកត់សម្គាល់
@@ -215,9 +215,9 @@ wrangler pages deploy . --project-name=breeze
 | ការផ្ញើសារ P2P | ✓ | WebRTC DataChannel |
 | ការហៅជាសំឡេង/វីដេអូ | ✓ | WebRTC + STUN ឥតគិតថ្លៃ |
 | ការបញ្ជូនបន្ត TURN | ✓ | Open Relay (20GB/ខែ ឥតគិតថ្លៃ) |
-| ក្រុម (សមាជិក ១០០ នាក់) | ✓ | Sender Key O(1) |
+| ក្រុម (សមាជិក ១,០០០ នាក់) | ✓ | Sender Key O(1) |
 | ការផ្ទេរឯកសារ | ✓ | រហូតដល់ 50MB តាមរយៈ P2P |
-| ៨ ភាសា | ✓ | EN + ៧ ទីតាំងពេញលេញ រកឃើញដោយស្វ័យប្រវត្តិ |
+| ៥១ ភាសា | ✓ | អង់គ្លេសមានស្រាប់ + ឯកសារទីតាំងពេញលេញ ៥០ រកឃើញដោយស្វ័យប្រវត្តិ |
 | ក្រៅបណ្តាញ/PWA | ✓ | Service Worker |
 | ការជូនដំណឹងរុញ | ✗ | ត្រូវការសោ VAPID |
 
@@ -233,7 +233,7 @@ wrangler pages deploy . --project-name=breeze
 | ការអាន KV | 100,000/ថ្ងៃ | ~200/ថ្ងៃ |
 | ការសរសេរ KV | 1,000/ថ្ងៃ | ~350/ថ្ងៃ (បានធ្វើឱ្យប្រសើរ) |
 | ការរក្សាទុក KV | 1 GB | ~10 KB/អ្នកប្រើប្រាស់ |
-| ទ្រព្យសកម្មឋិតិវន្ត | គ្មានដែនកំណត់ | ~400 KB (HTML តែមួយ) |
+| ទ្រព្យសកម្មឋិតិវន្ត | គ្មានដែនកំណត់ | ~894 KB (HTML តែមួយ) |
 
 **គាំទ្រអ្នកប្រើប្រាស់សកម្មដំណាលគ្នា ~៣ នាក់នៅលើកម្រិតឥតគិតថ្លៃ។**
 

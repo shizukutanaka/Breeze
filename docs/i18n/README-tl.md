@@ -37,24 +37,17 @@ Nasa [manwal](MANUAL-tl.md) ang detalyadong paraan ng paggamit (maaaring piliin 
 
 Tapat din naming isinusulat ang saklaw. Para sa paghahatid, may maikling pag-iimbak sa server (mga sobreng hindi pa naihatid: pinakamaraming 7 araw, mga senyas ng koneksyon: 5 minuto, mga tala ng address at device: 90 araw, impormasyon ng grupo at mga subscription sa notification: 30 araw. Lahat ay awtomatikong nawawala, at hindi mababasa ang nilalaman). Ang backup na pag-iimbak sa cloud ay naka-off sa simula. Kung ilalagay mo ito sa sarili mong server, ang pag-iimbak na iyon ay nasa ilalim din ng iyong pamamahala.
 
-## Dinisenyo para hindi sulit gamitin sa krimen
-
-Ginawa ang Breeze para mahirapan at gumastos ang umaabuso. Hindi namin sinasabing "ginagawang imposible ang krimen". Ito ay disenyong "ginagawang hindi sulit".
-
-- **Walang libreng masasakyan.** Walang sentral na libreng server, kaya kahit ang umaabuso ay kailangang maghanda ng lugar gamit ang account sa sarili niyang pangalan at sarili niyang gastos.
-- **May pasanin ang pagpapadala.** Sa bawat pagpapadala, isang maliit na kalkulasyon (proof of work) ang hinihingi, at may itinakdang limitasyon sa dami. Hindi sulit ang maramihang spam na pagpapadala.
-- **Maaaring mag-ulat nang hindi maitatanggi.** Ang tumanggap ay maaaring iulat ang mismong natanggap na pagpapadala bilang ebidensya. Hindi maitatanggi ng nagpadala na "hindi ako nagpadala".
-- **Ang kapangyarihang huminto ay nasa naglagay.** Ang nangyayari sa sarili mong server ay mapahihinto mo mismo. Hindi kailangan ng pahintulot ng sinuman.
-
 ## Mga magagawa
 
 - Usapang isa-sa-isa at panggrupong usapan (hanggang 1,000 tao)
-- Voice call at video call
+- Voice call at video call (panggrupong tawag hanggang 8 tao)
 - Pagpapadala ng file (sa isa-sa-isa, hanggang 50MB. Maaari ring magpadala sa grupo, ngunit mas maliit ang limitasyon ng laki)
 - Paghihiwalay ng gamit ng maraming device at maraming account (para sa trabaho at personal, halimbawa. Walang limitasyon sa bilang ng device at account, at libre)
-- Awtomatikong pinipili mula sa 8 wika (Ingles, Hapon, Koreano, Tsino (Taiwan), Espanyol, Thai, Indones, Portuges)
+- 51 wika (Ingles at 50 file ng wika), awtomatikong pinipili ayon sa wika ng iyong device
 - Profile na may larawan, mga sticker, pagbabahagi ng lokasyon
-- Mga utos tulad ng `/help` (higit sa 60 uri)
+- Mga utos tulad ng `/help` (71 uri)
+- Mga power mode na akma sa iyong baterya (awtomatiko / normal / pagtitipid ng kuryente / emergency). Habang nauubos ang baterya, pinapalayo ang mga pagsusuri ng paghahatid para mas tumagal ang baterya. Isang pananggalang para sa mga sakuna at iba pang panahong hindi ka makapag-charge
+- Mga screen na madaling basahin (pansin sa contrast ng kulay, laki ng teksto, at pagpapatakbo gamit ang keyboard lamang)
 
 ## Pagkakaiba sa ibang mga messenger
 

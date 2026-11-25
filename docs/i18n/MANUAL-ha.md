@@ -24,16 +24,19 @@ Daga [shafin saukewa](https://github.com/shizukutanaka/Breeze/releases/latest), 
 
 Kowane fayil yana da lambar tabbatarwa (SHA256SUMS.txt). Idan ka damu, za ka iya duba cewa lambar fayilin da ka sauke ta dace.
 
-> **Game da shafin gwaji**: Shafin gwaji da aka buɗe a baya (breeze.pages.dev) a tsaye yake yanzu (idan ka buɗe shi, za ka ga 404). Har sai an dawo da shi, don Allah ka yi amfani da sigar manhaja. Abin da ka sa a sabarka ba zai shafi wannan tsayawar ba.
+> **Game da shafin samfur**: An samar da samfur don duba yadda yake aiki (https://breeze-469.pages.dev/). Abin da ke can manhaja ɗaya ce, amma samfur na iya canzawa ko tsayawa ba tare da sanarwa ba. Don amfani na gaske, don Allah ka yi amfani da wanda ka sa a sabarka. Wanda ka sa a sabarka ba zai shafi ko samfur ya tsaya ba.
 
 ### Saita na farko
 
 1. Buɗe manhajar.
-2. Shigar da suna. Shi ke nan, an gama shiri. Ba rajista, ba lambar waya.
+2. Shigar da sunanka ka danna "Ƙirƙiri asusu". Shi ke nan, an gama shiri. Ba rajista, ba lambar waya.
+
+- Idan kana son dawo da asalin da ka ƙirƙira a baya, buɗe "Dawo da asusu da yake" kuma hanyoyin dawo da shi (fayilin ajiyar tanadi, kalmar dawo da shi, da sauransu) za su fito.
+- Idan ƙirƙira ta gama, kati zai fito da yake jagorantar ka ka kare maɓallinka da kalmar sirri (ba ya ɓacewa bayan wani lokaci). Ga asali mai muhimmanci, bi jagorar ka ƙara kariyar.
 
 A wannan lokacin, ana ƙirƙirar "maɓalli" a cikin na'urarka. Shi ne asalinka da kansa.
 **Babu jerin asusu a saba.** Asalinka yana cikin na'urarka kaɗai.
-Wannan batu yana da muhimmanci a babin ajiyar tanadi (8).
+Wannan batu yana da muhimmanci a babin ajiyar tanadi (9).
 
 ### Game da "asali na zubarwa"
 
@@ -45,11 +48,13 @@ Hakan yana bayyana a allo ma. Kada ka zaɓa shi ga asalin da za ka yi amfani da 
 
 ## 2. Haɗuwa da wani
 
-Akwai hanyoyi 3 na haɗuwa da wanda kake son magana da shi.
+Idan ka danna maɓallin "Ƙara aboki" a allon lambobin sadarwa, zaɓuɓɓuka uku za su fito.
 
-- **Ba da ID**: Gaya wa ɗayan ID naka, ka sa shi ya shigar da shi.
-- **Lambar QR**: Nuna lambar QR ta gayyata, ka sa ɗayan ya karanta ta.
-- **Hanyar gayyata**: Kwafi saƙon gayyata daga "Gayyaci aboki", ka aiko shi ta hanyar sadarwarka ta yau da kullum (imel, da sauransu). Idan ɗayan ya buɗe hanyar ya shigar da suna, za ku iya tattaunawa nan da nan.
+- **Ƙara lambar sadarwa**: Shigar da ID na ɗayan, ko ka duba lambar QR.
+- **Gayyaci aboki**: Kwafi hanyar gayyata ka aiko ta ta hanyar sadarwarka ta yau da kullum (imel, da sauransu). Idan ɗayan ya buɗe hanyar ya shigar da suna, za ku iya tattaunawa nan da nan.
+- **Ƙirƙiri ƙungiya**: Kawai shigar da sunan ƙungiya don ƙirƙira ta (babi na 4).
+
+ID naka ana nuna shi a cikakken siffarsa idan ka buɗe bayanin martabarka, kuma za ka iya kwafe shi kamar yadda yake. Za ka iya ba da cikakken ID, ba gajeren ID kaɗai ba.
 
 Idan ɗayan ma ya buɗe manhajar, za ku haɗu kai tsaye ku yi tattaunawa.
 
@@ -58,14 +63,23 @@ Idan ɗayan ma ya buɗe manhajar, za ku haɗu kai tsaye ku yi tattaunawa.
 ## 3. Tattaunawa
 
 - Kawai ka shigar da saƙo ka aiko. Za ka iya aiko hotuna, sitika, da wuri ma.
+- Buɗe "+" da ke kusa da filin shigarwa, kuma haɗe-haɗen fayil, saƙonnin murya, shigar da murya, bayanan wuri, sitika, saitin "ba a buƙatar amsa", da ƙari za su fito tare.
 - **Aika fayiloli**: Har zuwa 50MB a tattaunawa ta mutum ɗaya da ɗaya. A ƙungiyoyi, ƙarama ce, har zuwa kimanin 50KB.
 - Fayiloli masu haɗari kamar fayilolin da ake gudanarwa ana toshe su ta atomatik.
 - Idan ɗayan bai buɗe manhajar ba, saƙon yana zama a cikin "akwatin ajiya" a ɓoye, kuma yana isa gare shi idan ya buɗe. Sabar da ke ɗauke da akwatin ajiya ba za ta iya karanta abin da ke ciki ba. Wasikun da ba su isa ba suna gogewa ta atomatik bayan **kwanaki 7** a mafi yawa.
 - Za ka iya fitar da tarihin tattaunawa zuwa fayil, ko shigo da shi.
 
+### Karanta allo
+
+- **Matsayin aikawa**: Za ka iya ganewa daga alamar da ke kusa da saƙo. ✓ na nufin an aika, ✓ a cikin da'ira na nufin an ajiye shi a akwatin ajiya, ✓✓ na nufin ya isa ga ɗayan, wanda aka karanta alama ce shuɗi, gazawa kuma alama ce ja. Ana bambanta su da siffa ma, ba launi kaɗai ba.
+- **Jerin lambobin sadarwa**: Lokacin da ka yi magana ta ƙarshe ana nuna shi a matsayin lokaci ga yau, "Jiya" ga jiya, wata/rana ga wannan shekara, da shekara/wata/rana ga duk abin da ya gabata. Lambobin sadarwa da ke da saƙonnin da ba ka karanta ba, sunansu da lokacinsu an ƙara musu nauyi.
+- **Katinka**: A saman jerin akwai katin bayanin martabarka; danna shi don buɗe bayanin martabarka. Yana gungurawa tare da jerin.
+- **Shafukan ƙasa a waya**: A faɗin waya, shafukan "Lambobin sadarwa" da "Saituna" suna fitowa a ƙasan allo.
+- **Kan tattaunawa**: Daga gunkin bincike za ka iya bincike a cikin tattaunawa. Daga menu na "⋮" za ka iya duba lambar tsaro, kashe sanarwa, liƙa, ƙirƙiri zaɓe, da ƙari.
+
 ### Umarnai
 
-Idan ka shigar da `/help` a filin shigarwa, jerin umarnai da ake iya amfani da su (fiye da nau'ika 60) zai fito.
+Idan ka shigar da `/` a filin shigarwa, shawarwarin umarnai za su fito. Shigar da `/help` don ganin jerin umarnai da za ka iya amfani da su (nau'ika 71).
 Wasu ayyuka, kamar saitawa da haɗa na'urori, ana yin su daga umarnai.
 
 ---
@@ -73,7 +87,7 @@ Wasu ayyuka, kamar saitawa da haɗa na'urori, ana yin su daga umarnai.
 ## 4. Ƙungiyoyi
 
 - Ƙungiya za ta iya ƙunsar har zuwa **mutane 1,000**.
-- Yadda ake ƙirƙira shi ne kawai shigar da sunan ƙungiya. Gayyata tana ta "hanyar gayyatar ƙungiya". Wanda ya karɓi hanyar zai iya shiga ta hanyar shigar da suna.
+- Don ƙirƙira, kawai shigar da sunan ƙungiya a ƙarƙashin "Ƙirƙiri ƙungiya" a cikin "Ƙara aboki" (za ka iya ƙirƙira da umarnin `/newgroup` ma). Gayyata tana ta "hanyar gayyatar ƙungiya". Wanda ya karɓi hanyar zai iya shiga ta hanyar shigar da suna.
 - Ana iya aiko fayiloli a ƙungiyoyi ma, amma iyakar ƙarama ce, kimanin 50KB. Saƙonnin murya ba a iya aikawa a ƙungiyoyi tukuna ba.
 - Idan akwai memba da ke amfani da tsohuwar sigar manhajar, wannan ƙungiya ba za ta iya amfani da sabuwar hanyar tsaro mai ƙarfi (ƙungiya v5) ba, kuma gargadi zai fito a allo. Zai kunna idan kowa ya sabunta zuwa sabuwar siga.
 
@@ -81,7 +95,7 @@ Wasu ayyuka, kamar saitawa da haɗa na'urori, ana yin su daga umarnai.
 
 ## 5. Kira
 
-- Za ka iya yin kiran murya da kiran bidiyo na mutum ɗaya da ɗaya. Akwai kiran ƙungiya ma.
+- Za ka iya yin kiran murya da kiran bidiyo na mutum ɗaya da ɗaya. Akwai kiran ƙungiya ma (har zuwa mutane 8).
 - **Lambar tabbatar da kira**: A allon kira, ana nuna lambar tabbatarwa. Karanta ta tare da ɗayan, ku duba cewa ta dace a allunan duka. Idan ba ta dace ba, akwai yiwuwar wani yana sauraron a tsakiya. A wannan yanayi, katse kiran.
 - Kiran ƙungiya na iya kasa farawa sai dai idan manhajojin kowa sune sababbin sigogi.
 
@@ -91,11 +105,15 @@ Wasu ayyuka, kamar saitawa da haɗa na'urori, ana yin su daga umarnai.
 
 - Don amfani da asali ɗaya a na'urori da yawa, haɗa na'urorin da umarnin `/link`.
 - Za ka iya ƙirƙirar asusu da yawa ka yi amfani da su daban-daban (misali na aiki da na sirri). Adadin na'urori da asusu kyauta ne ba tare da iyaka ba.
-- Ana zaɓar harshe ta atomatik daga harsuna 8: Turanci, Jafananci, Koriyanci, Sinanci (Taiwan), Sifaniyanci, Thai, Indonesiyanci, da Fotugisanci (Brazil).
+- **Yadda ake ƙirƙirar asusu**: Danna maɓallin "+" da ke kusa da shafukan asusu a saman jerin lambobin sadarwa. Shigar da suna ka zaɓi emoji na gunkin, kuma sabon asusu zai ƙirƙiru kuma a canza zuwa gare shi ta atomatik.
+- **Canza asusu**: Shafukan asusu suna bayyana kullum a saman jerin lambobin sadarwa. Danna ɗaya don canzawa (a kwamfuta za ka iya canzawa da Ctrl+1–9 ma). Danna ka riƙe shafi don sake masa suna, canza gunkinsa, ko goge shi.
+- Ana zaɓar harshe ta atomatik daga harsuna 51, ciki har da Turanci, bisa harshen na'urarka.
 
 ---
 
 ## 7. Saitunan kiyaye tsaro
+
+Saituna suna buɗewa a matsayin allo na kansu. A waya, buɗe su daga shafin "Saituna" da ke ƙasan allo; a kwamfuta, daga maɓallin gira da ke allo (za ka iya buɗe su da umarnin `/settings` ma). Yi amfani da aikin komawa don komawa allon da ka ke.
 
 - **Kulle ta atomatik**: Akwai saitin da yake kullewa ta atomatik idan ka canza shafi (tab).
 - **Kalmar sirri ta maɓalli**: Za ka iya kare maɓallin da ke cikin na'urarka ta hanyar nannaɗe shi da kalmar sirri. Ana buƙatar shigarwa idan ka buɗe manhajar.
@@ -103,14 +121,31 @@ Wasu ayyuka, kamar saitawa da haɗa na'urori, ana yin su daga umarnai.
 
 ---
 
-## 8. Ajiyar tanadi da dawo da shi (babin da ya fi muhimmanci)
+## 8. Batir da gaggawa (hanyoyin wuta)
+
+A saitin "Yanayin wuta", za ka iya zaɓar yadda ake amfani da batir.
+
+- **Ta atomatik (matakin batir)**: Yana canzawa ta atomatik gwargwadon batir da ya rage.
+- **Na yau da kullum**: Kamar yadda aka saba.
+- **Tanadin wuta**: Yana faɗaɗa lokutan duba isarwa zuwa mafi yawa sau ɗaya a kowane sakan 60, kuma yana dakatar da siginar kasancewa.
+- **Na gaggawa (ga bala'i)**: Yana faɗaɗa lokutan duba isarwa zuwa mafi yawa sau ɗaya a kowane mintuna 10. Yi amfani da shi a bala'i ko wani lokaci da ba za ka iya caji ba.
+
+Abin da ke cin batir ba yawan sadarwa ba ne, adadin lokutan da rediyo ke farkawa ne. Don haka ɓangaren aikawa ba a faɗaɗa shi ba; ɓangaren sauraro kaɗai. Aikawa har yanzu yana fita nan da nan, kamar yadda aka saba. Idan ka fara caji, yana komawa ta atomatik mataki ɗaya zuwa ɓangaren da ya fi sauƙi.
+
+A na'urorin da ba za su iya karanta matakin batir ta atomatik ba (kamar burauzar iPhone), "Ta atomatik" yana aiki kamar Na yau da kullum, kuma zaɓin hannu yana aiki kamar yadda aka zaɓa.
+
+---
+
+## 9. Ajiyar tanadi da dawo da shi (babin da ya fi muhimmanci)
 
 Asalin Breeze maɓalli ne kawai da ke cikin na'urarka. Babu jerin asusu a saba, kuma wanda ya ƙirƙira ma ba shi da maɓallinka.
 **Idan ka rasa na'urarka, za ka rasa asalinka ma.** Ga asali mai muhimmanci, lallai ka yi ajiyar tanadi.
 
+Ajiyar tanadi da dawo da shi ana yin su daga sashen "Ajiyar tanadi da dawo da shi" na saituna (akwai maɓallai uku: "Ajiyar tanadi zuwa gajimare", "Dawo da shi", da "Dawo da shi daga fayil"). A karon farko da ka ƙara lambar sadarwa, kati da yake ƙarfafa ka ka yi ajiyar tanadi zai fito sau ɗaya kawai.
+
 ### Yadda ake yin ajiyar tanadi
 
-1. Zaɓi "Ƙirƙiri ajiyar tanadi".
+1. Daga "Ajiyar tanadi da dawo da shi" a saituna, zaɓi ƙirƙirar ajiyar tanadi.
 2. Saita kalmar sirri ta ajiyar tanadi (haruffa 6 ko fiye).
 3. Zaɓi inda za ka ajiye.
    - **Ajiye a fayil**: Riƙe fayilin ajiyar tanadi a hannunka (ana ba da shawara).
@@ -130,7 +165,7 @@ A sabuwar na'ura, dawo da shi ta hanyar amfani da fayilin ajiyar tanadi (ko ajiy
 
 ---
 
-## 9. Akwatin ajiya da ra'ayin kuɗi
+## 10. Akwatin ajiya da ra'ayin kuɗi
 
 - Wasiku ga wanda ba ya kan layi suna zama a cikin "akwatin ajiya" ta sabar isarwa a ɓoye (har zuwa kwanaki 7).
 - Isarwa tana da iyaka don hana amfani ba daidai ba (yawan da za a iya ajiyewa da yawan lokuta). Idan ka kai iyakar, ba za ka iya ajiye sababbin wasiku a wannan lokacin ba, amma **wasikun da suka riga suka isa ba za su taɓa gogewa ba**. Dalili da lokacin jira suna bayyana a allo.
@@ -147,7 +182,7 @@ Iyakar bayanan da ke zama a ɓangaren saba (duk suna gogewa ta atomatik, kuma ba
 
 ---
 
-## 10. Yadda ake sabuntawa (sigar tebur)
+## 11. Yadda ake sabuntawa (sigar tebur)
 
 1. Idan akwai sabuwar siga, sanarwa tana fitowa a allo.
 2. Idan ka danna "Sauke", zai je ya ɗauki sabuwar sigar (ba ya girkawa ta atomatik).
@@ -157,7 +192,7 @@ Idan gazawa ta faru a tsakiyar sabuntawa (kamar lambar tabbatarwa ba ta dace ba)
 
 ---
 
-## 11. Idan ka samu matsala
+## 12. Idan ka samu matsala
 
 | Alama | Abin da za a duba |
 |---|---|
@@ -167,13 +202,13 @@ Idan gazawa ta faru a tsakiyar sabuntawa (kamar lambar tabbatarwa ba ta dace ba)
 | Lambar tabbatar da kira ba ta dace ba | Katse kiran, ka sake kira. Kada ka ci gaba alhali ba ta dace ba. |
 | Ka manta kalmar sirri | Ba za a iya dawo da shi ba. Ƙirƙiri sabon asali, ka sake gaya wa ɗayan. |
 | Ka rasa na'urarka | Idan akwai ajiyar tanadi, za ka iya dawo da shi a sabuwar na'ura. Idan babu, zai zama sabon asali. |
-| Shafin gwaji ba ya buɗewa (404) | A tsaye yake yanzu. Yi amfani da sigar manhaja. |
+| Shafin samfur ba ya buɗewa | Samfur na iya tsayawa ba tare da sanarwa ba. Don Allah ka yi amfani da wanda ka sa a sabarka. |
 
 Rahoton matsala, don Allah zuwa [shafin Issue](https://github.com/shizukutanaka/Breeze/issues).
 
 ---
 
-## 12. Alkawuran Breeze
+## 13. Alkawuran Breeze
 
 - Ba za mu nuna tallace-tallace ba. A cikin manhajar ma, ko a ko'ina.
 - Ba za mu bi diddigi ba. Babu nazarin yadda ake amfani, babu tsarin talla, babu sayar da bayanai, ko kaɗan.
@@ -184,4 +219,4 @@ Kwatance dalla-dalla da sauran manzonni an rubuta shi a cikin "shafin kwatance" 
 
 ---
 
-*Wannan littafin bayani ya dogara ne da abin da ke ciki a lokacin Breeze v3.8.0.*
+*Wannan littafin bayani yana nuna halin Breeze a ranar 2026-11-25.*

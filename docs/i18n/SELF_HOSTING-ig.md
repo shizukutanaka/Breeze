@@ -198,7 +198,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Ọ bụ ya.** Atụmatụ niile na-arụ ọrụ ma e wezụga ọkwa ntanye (push). Rịba ama
@@ -214,9 +214,9 @@ emechiri-na-ndabara bụ ụzọ Docker dị n'elu.
 | Ozi P2P | ✓ | WebRTC DataChannel |
 | Oku olu/vidiyo | ✓ | WebRTC + STUN n'efu |
 | Nnyefe TURN | ✓ | Open Relay (20GB/ọnwa n'efu) |
-| Otu (ndị otu 100) | ✓ | Sender Key O(1) |
+| Otu (ndị otu 1,000) | ✓ | Sender Key O(1) |
 | Nnyefe faịlụ | ✓ | Ruo 50MB site na P2P |
-| Asụsụ 8 | ✓ | EN + mpaghara 7 zuru oke, a na-achọpụta na-akpaghị aka |
+| Asụsụ 51 | ✓ | Bekee arụnyere n'ime + faịlụ mpaghara 50 zuru oke, a na-achọpụta na-akpaghị aka |
 | Na-anọghị n'ịntanetị/PWA | ✓ | Service Worker |
 | Ọkwa ntanye | ✗ | Ọ chọrọ igodo VAPID |
 
@@ -232,7 +232,7 @@ obere akaụntụ mpaghara na-enweghị oke n'efu na-enweghị mgbochi atụmat�
 | Ịgụ KV | 100,000/ụbọchị | ~200/ụbọchị |
 | Ide KV | 1,000/ụbọchị | ~350/ụbọchị (emeziri) |
 | Nchekwa KV | 1 GB | ~10 KB/onye ọrụ |
-| Akụrụngwa kwụ ọtọ | Enweghị oke | ~400 KB (HTML otu) |
+| Akụrụngwa kwụ ọtọ | Enweghị oke | ~894 KB (HTML otu) |
 
 **Na-akwado ~ndị ọrụ 3 na-arụ ọrụ n'otu oge na ọkwa n'efu.**
 

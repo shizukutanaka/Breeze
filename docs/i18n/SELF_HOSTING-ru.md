@@ -211,7 +211,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Вот и всё.** Все функции работают, кроме push-уведомлений. Обратите
@@ -227,9 +227,9 @@ wrangler pages deploy . --project-name=breeze
 | Сообщения P2P | ✓ | WebRTC DataChannel |
 | Голосовые/видеозвонки | ✓ | WebRTC + бесплатный STUN |
 | Ретранслятор TURN | ✓ | Open Relay (20 ГБ/месяц бесплатно) |
-| Группы (100 участников) | ✓ | Sender Key O(1) |
+| Группы (1 000 участников) | ✓ | Sender Key O(1) |
 | Передача файлов | ✓ | До 50 МБ через P2P |
-| 8 языков | ✓ | EN + 7 полных локалей, определяются автоматически |
+| 51 язык | ✓ | Английский встроен + 50 полных файлов локалей, определяются автоматически |
 | Офлайн/PWA | ✓ | Service Worker |
 | Push-уведомления | ✗ | Нужны ключи VAPID |
 
@@ -246,7 +246,7 @@ wrangler pages deploy . --project-name=breeze
 | Чтения KV | 100 000/день | ~200/день |
 | Записи KV | 1 000/день | ~350/день (оптимизировано) |
 | Хранилище KV | 1 ГБ | ~10 КБ/пользователь |
-| Статические ресурсы | Без ограничений | ~400 КБ (один HTML) |
+| Статические ресурсы | Без ограничений | ~894 КБ (один HTML) |
 
 **Поддерживает ~3 одновременных активных пользователей на бесплатном тарифе.**
 

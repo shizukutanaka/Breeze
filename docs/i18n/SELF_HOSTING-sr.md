@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **То је то.** Све функције раде осим push обавештења. Имајте на уму
@@ -215,9 +215,9 @@ wrangler pages deploy . --project-name=breeze
 | P2P размена порука | ✓ | WebRTC DataChannel |
 | Гласовни/видео позиви | ✓ | WebRTC + бесплатан STUN |
 | TURN релеј | ✓ | Open Relay (20GB месечно бесплатно) |
-| Групе (100 чланова) | ✓ | Sender Key O(1) |
+| Групе (1,000 чланова) | ✓ | Sender Key O(1) |
 | Пренос датотека | ✓ | До 50MB преко P2P |
-| 8 језика | ✓ | EN + 7 потпуних локала, аутоматски детектовано |
+| 51 језик | ✓ | Енглески уграђен + 50 потпуних датотека локала, аутоматски детектовано |
 | Ван мреже/PWA | ✓ | Service Worker |
 | Push обавештења | ✗ | Потребни су VAPID кључеви |
 
@@ -233,7 +233,7 @@ wrangler pages deploy . --project-name=breeze
 | KV читања | 100.000 дневно | ~200 дневно |
 | KV писања | 1.000 дневно | ~350 дневно (оптимизовано) |
 | KV складиште | 1 GB | ~10 KB по кориснику |
-| Статички ресурси | Неограничено | ~400 KB (један HTML) |
+| Статички ресурси | Неограничено | ~894 KB (један HTML) |
 
 **Подржава ~3 истовремено активна корисника на бесплатном плану.**
 

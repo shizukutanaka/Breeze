@@ -37,24 +37,17 @@ Batafsil foydalanish [qo'llanmada](MANUAL-uz.md) (boshqa tillarni qo'llanma bosh
 
 Halollik uchun qamrovni ham yozamiz. Yetkazish uchun serverda qisqa muddatli saqlash bor (yetkazilmagan konvertlar ko'pi bilan 7 kun, ulanish signallari 5 daqiqa, manzil va qurilma yozuvlari 90 kun, guruh ma'lumotlari va bildirishnoma obunalari 30 kun. Hammasi avtomatik o'chiriladi va mazmun o'qilmaydi). Bulutga zaxira nusxa dastlab o'chirilgan. O'z serveringizga joylashtirsangiz, shu saqlashni ham o'z boshqaruvingiz ostiga olishingiz mumkin.
 
-## Jinoyatda ishlatish foydali emas qilib loyihalangan
-
-Breeze suiiste'mol qiluvchi tomon uchun qimmat va mashaqqatli bo'ladigan qilib yasalgan. «Jinoyatni imkonsiz qilamiz» demaymiz. «Foydali emas» qiladigan loyihadir.
-
-- **Tekin minish uchun zamin yo'q.** Markaziy bepul server bo'lmagani uchun suiiste'mol qiluvchilar ham o'z nomiga hisob va o'z mablag'i bilan joylashtirish joyini tayyorlashga majbur.
-- **Yuborishga yuklama tushadi.** Har bir yuborish kichik hisoblashni (ish isbotini) talab qiladi va hajm chegarasi ham belgilangan. Ommaviy spam yuborishlar foydali emas.
-- **Inkor qilib bo'lmaydigan shikoyat qilish mumkin.** Qabul qiluvchi olgan yuborishning o'zini dalil sifatida shikoyat qila oladi. Yuboruvchi «yubormaganman» deb qochib qutula olmaydi.
-- **To'xtatish huquqi joylashtirgan odamda.** O'z serveringizda bo'lgan narsani o'zingiz to'xtata olasiz. Hech kimning ruxsati kerak emas.
-
 ## Imkoniyatlar
 
 - Yakkama-yakka suhbatlar va guruh suhbatlari (ko'pi bilan 1 000 kishi)
-- Ovozli qo'ng'iroqlar va videoqo'ng'iroqlar
+- Ovozli qo'ng'iroqlar va videoqo'ng'iroqlar (guruh qo'ng'iroqlari ko'pi bilan 8 kishi)
 - Fayl yuborish (yakkama-yakkada ko'pi bilan 50MB. Guruhlarda ham yuborish mumkin, lekin hajm chegarasi kichikroq)
 - Bir nechta qurilma va bir nechta hisobdan foydalanish (masalan, ish va shaxsiy. Qurilmalar soni ham, hisoblar soni ham bepul va cheksiz)
-- 8 tildan (ingliz, yapon, koreys, xitoy (Tayvan), ispan, tay, indonez va portugal) avtomatik tanlanadi
+- 51 til (ingliz tili va 50 ta til fayli), qurilmangiz tiliga mos ravishda avtomatik tanlanadi
 - Suratli profil, stikerlar, joylashuvni ulashish
-- `/help` kabi buyruq amallari (60 dan ortiq turi)
+- `/help` kabi buyruq amallari (71 turi)
+- Batareyangizga mos quvvat rejimlari (avtomatik / normal / quvvat tejash / favqulodda). Batareya kamaygan sari, batareya uzoqroq yetishi uchun yetkazishni tekshirish oralig'i uzaytiriladi. Falokatlar va quvvatlay olmaydigan boshqa paytlar uchun ehtiyot
+- O'qish oson ekranlar (rang kontrasti, matn o'lchami va faqat klaviatura bilan boshqarishga e'tibor)
 
 ## Boshqa messenjerlardan farqi
 

@@ -209,7 +209,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Dat is het.** Alle functies werken, behalve pushmeldingen. Merk op
@@ -225,9 +225,9 @@ standaard gesloten verpakking is het Docker-pad hierboven.
 | P2P-berichten | ✓ | WebRTC DataChannel |
 | Spraak-/videogesprekken | ✓ | WebRTC + gratis STUN |
 | TURN-relay | ✓ | Open Relay (20 GB/maand gratis) |
-| Groepen (100 leden) | ✓ | Sender Key O(1) |
+| Groepen (1.000 leden) | ✓ | Sender Key O(1) |
 | Bestandsoverdracht | ✓ | Tot 50 MB via P2P |
-| 8 talen | ✓ | EN + 7 volledige locales, automatisch gedetecteerd |
+| 51 talen | ✓ | Engels ingebouwd + 50 volledige locale-bestanden, automatisch gedetecteerd |
 | Offline/PWA | ✓ | Service Worker |
 | Pushmeldingen | ✗ | Heeft VAPID-sleutels nodig |
 
@@ -244,7 +244,7 @@ onbeperkte lokale subaccounts, zonder planblokkering.
 | KV-lezingen | 100.000/dag | ~200/dag |
 | KV-schrijvingen | 1.000/dag | ~350/dag (geoptimaliseerd) |
 | KV-opslag | 1 GB | ~10 KB/gebruiker |
-| Statische assets | Onbeperkt | ~400 KB (één HTML) |
+| Statische assets | Onbeperkt | ~894 KB (één HTML) |
 
 **Ondersteunt ~3 gelijktijdige actieve gebruikers op de gratis versie.**
 

@@ -181,7 +181,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **就這樣。** 除推送通知外所有功能都運作。注意
@@ -197,9 +197,9 @@ Cloudflare 部署上的註冊是**開放**的，除非你自己設定
 | P2P 訊息 | ✓ | WebRTC DataChannel |
 | 語音/視訊通話 | ✓ | WebRTC + 免費 STUN |
 | TURN 中轉 | ✓ | Open Relay（每月 20GB 免費） |
-| 群組（100 名成員） | ✓ | Sender Key O(1) |
+| 群組（1,000 名成員） | ✓ | Sender Key O(1) |
 | 檔案傳輸 | ✓ | 透過 P2P 最大 50MB |
-| 8 種語言 | ✓ | EN + 7 個完整語言環境，自動偵測 |
+| 51 種語言 | ✓ | 英語內置 + 50 個完整語言檔案，自動偵測 |
 | 離線/PWA | ✓ | Service Worker |
 | 推送通知 | ✗ | 需要 VAPID 金鑰 |
 
@@ -215,7 +215,7 @@ Cloudflare 部署上的註冊是**開放**的，除非你自己設定
 | KV 讀取 | 100,000/天 | ~200/天 |
 | KV 寫入 | 1,000/天 | ~350/天（已最佳化） |
 | KV 儲存 | 1 GB | ~10 KB/使用者 |
-| 靜態資產 | 無限 | ~400 KB（單個 HTML） |
+| 靜態資產 | 無限 | ~894 KB（單個 HTML） |
 
 **在免費額度上支援約 3 名同時活躍使用者。**
 

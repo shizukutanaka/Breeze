@@ -37,24 +37,17 @@ Yksityiskohtaiset käyttöohjeet ovat [käyttöoppaassa](MANUAL-fi.md) (muunkiel
 
 Kirjoitamme rehellisesti myös rajoista. Viestien toimittamiseksi palvelimella on lyhytaikaista säilytystä (toimittamattomat kirjekuoret enintään 7 päivää, yhteyssignaalit 5 minuuttia, osoite- ja laitetiedot 90 päivää, ryhmätiedot ja ilmoitustilaukset 30 päivää. Kaikki poistetaan automaattisesti, eikä sisältöä voi lukea). Pilvivarmuuskopiointi on aluksi pois käytöstä. Jos sijoitat Breezen omalle palvelimellesi, myös tämä säilytys on omassa hallinnassasi.
 
-## Rakenne, jossa rikollisuus ei kannata
-
-Breeze on rakennettu niin, että väärinkäyttö maksaa sen tekijälle aikaa ja rahaa. Emme väitä, että se "tekee rikollisuuden mahdottomaksi". Se on suunniteltu "tekemään siitä kannattamatonta".
-
-- **Ei ilmaista alustaa hyväksikäytettäväksi.** Koska keskitettyä ilmaista palvelinta ei ole, myös väärinkäyttäjän on hankittava sijoituspaikka omalla nimellään olevalla tilillä ja omalla kustannuksellaan.
-- **Lähettäminen maksaa.** Jokainen lähetys vaatii pienen laskennan (työn todiste), ja määrälle on yläraja. Massalähetykset ja häirintä eivät kannata.
-- **Ilmoitukset, joita ei voi selittää pois.** Vastaanottaja voi ilmoittaa itse toimituksen todisteena. Lähettäjä ei voi väittää, ettei lähettänyt sitä.
-- **Pysäytysvalta on sijoittajalla.** Sen, mitä omalla palvelimellasi tapahtuu, voit pysäyttää itse. Et tarvitse kenenkään lupaa.
-
 ## Ominaisuudet
 
 - Kahdenkeskiset keskustelut ja ryhmäkeskustelut (enintään 1 000 henkilöä)
-- Ääni- ja videopuhelut
+- Ääni- ja videopuhelut (ryhmäpuhelut enintään 8 henkilölle)
 - Tiedostojen lähetys (kahdenkeskisissä keskusteluissa enintään 50MB. Myös ryhmissä voi lähettää, mutta kokoraja on pienempi)
 - Useiden laitteiden ja useiden tilien käyttö eri tarkoituksiin (esimerkiksi työ ja yksityinen. Sekä laitteiden että tilien määrä on ilmainen ja rajoittamaton)
-- Valitaan automaattisesti 8 kielestä (englanti, japani, korea, kiina (Taiwan), espanja, thai, indonesia, portugali)
+- 51 kieltä (englanti ja 50 kielitiedostoa), valitaan automaattisesti laitteesi kielen mukaan
 - Profiilit kuvalla, tarrat, sijainnin jakaminen
-- Komennot, kuten `/help` (yli 60 tyyppiä)
+- Komennot, kuten `/help` (71 tyyppiä)
+- Virtatilat akun mukaan (automaattinen / normaali / virransäästö / hätätila). Kun akku vähenee, toimitustarkistuksia harvennetaan, jotta akku kestää pidempään. Turva katastrofeihin ja muihin tilanteisiin, joissa lataaminen ei ole mahdollista
+- Helppolukuiset näytöt (huomio värikontrastiin, tekstin kokoon ja käyttöön pelkällä näppäimistöllä)
 
 ## Erot muihin viestisovelluksiin
 

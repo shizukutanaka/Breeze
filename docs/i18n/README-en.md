@@ -37,24 +37,17 @@ For detailed usage, see the [Manual](MANUAL-en.md) (you can choose other languag
 
 We also state the scope honestly. In order to deliver messages, the server holds things briefly (undelivered envelopes for at most 7 days, connection signals for 5 minutes, address and device records for 90 days, group information and notification subscriptions for 30 days. All of these are deleted automatically, and the contents cannot be read). Cloud backup is disabled at first. If you host it on your own server, that holding is under your own control too.
 
-## Designed so that using it for crime is not worth it
-
-Breeze is built so that misuse costs the misusing side money and effort. We do not claim it "makes crime impossible." The design makes it "not worth it."
-
-- **No free-riding foundation.** There is no central free server, so anyone who wants to misuse it, too, has no choice but to prepare a hosting place under an account in their own name, at their own expense.
-- **Sending carries a cost.** Each send requires a small computation (proof of work), and volume caps are set. Sending large amounts of spam is not worth it.
-- **Reports that cannot be argued away.** A recipient can report the very delivery they received as evidence. The sending side cannot argue "I didn't send it."
-- **The power to stop it belongs to the person who hosts it.** Whatever happens on your own server, you can stop it yourself. No one's permission is needed.
-
 ## What it can do
 
 - One-to-one conversations and group conversations (up to 1,000 people)
-- Voice calls and video calls
+- Voice calls and video calls (group calls up to 8 people)
 - File sending (up to 50MB one-to-one. Groups can send files too, but the size limit is smaller)
 - Use across multiple devices and multiple accounts (for example, work and personal. Both the number of devices and the number of accounts are free and unlimited)
-- Automatically selected from 8 languages (English, Japanese, Korean, Chinese (Taiwan), Spanish, Thai, Indonesian, Portuguese)
+- 51 languages (English plus 50 language files), selected automatically to match your device's language
 - Profiles with a photo, stickers, location sharing
-- Command operations such as `/help` (more than 60 kinds)
+- Command operations such as `/help` (71 kinds)
+- Power modes matched to your battery (automatic / normal / power saving / emergency). As the battery runs down, delivery checks are spaced out so the battery lasts longer. A safeguard for disasters and other times when you cannot recharge
+- Readable screens (attention to colour contrast, text size, and operating with the keyboard alone)
 
 ## Differences from other messengers
 

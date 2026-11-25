@@ -37,24 +37,17 @@ Detaljna je uporaba u [uputama](MANUAL-hr.md) (druge jezike možete odabrati na 
 
 Iskreno pišemo i opseg. Radi dostave, na poslužitelju postoji kratkotrajno čuvanje (nedostavljene omotnice najviše 7 dana, signali povezivanja 5 minuta, zapisi adresa i uređaja 90 dana, podaci o grupama i pretplate na obavijesti 30 dana. Sve se automatski briše i sadržaj se ne može pročitati). Sigurnosna kopija u oblak zadano je isključena. Ako postavite na svoj poslužitelj, i to čuvanje možete staviti pod svoju kontrolu.
 
-## Osmišljeno tako da se zloporaba ne isplati
-
-Breeze je napravljen tako da zloporaba bude skupa i naporna za onoga tko je čini. Ne kažemo da «činimo zločin nemogućim». Dizajn je takav da se «ne isplati».
-
-- **Nema osnove za besplatnu vožnju.** Budući da nema središnjeg besplatnog poslužitelja, i oni koji zlorabe moraju osigurati mjesto za postavljanje na svoje ime i o svom trošku.
-- **Slanje opterećuje.** Svako slanje zahtijeva malu računsku operaciju (dokaz o radu) i određena je granica količine. Masovno slanje neželjene pošte ne isplati se.
-- **Moguća je prijava koju nije moguće poreći.** Osoba koja primi može prijaviti samo primljeno slanje kao dokaz. Pošiljatelj se ne može izvući riječima «nisam poslao».
-- **Ovlast za zaustavljanje ima onaj tko je postavio.** Ono što se dogodi na vašem poslužitelju možete sami zaustaviti. Ničije dopuštenje nije potrebno.
-
 ## Mogućnosti
 
 - Razgovori jedan na jedan i grupni razgovori (najviše 1.000 ljudi)
-- Glasovni pozivi i videopozivi
+- Glasovni pozivi i videopozivi (grupni pozivi do 8 ljudi)
 - Slanje datoteka (jedan na jedan najviše 50MB. I u grupama se može slati, ali je granica veličine manja)
 - Korištenje više uređaja i više računa (na primjer, poslovni i privatni. I broj uređaja i broj računa besplatni su i neograničeni)
-- Automatski se bira iz 8 jezika (engleski, japanski, korejski, kineski (Tajvan), španjolski, tajlandski, indonezijski i portugalski)
+- 51 jezik (engleski i 50 jezičnih datoteka), automatski se bira prema jeziku vašeg uređaja
 - Profil s fotografijom, naljepnice, dijeljenje lokacije
-- Naredbene operacije poput `/help` (više od 60 vrsta)
+- Naredbene operacije poput `/help` (71 vrsta)
+- Načini napajanja prilagođeni vašoj bateriji (automatski / normalni / ušteda energije / hitni). Kako se baterija prazni, provjere isporuke razrjeđuju se kako bi baterija dulje trajala. Zaštita za katastrofe i druga vremena kada se ne možete napuniti
+- Čitljivi zasloni (pozornost na kontrast boja, veličinu teksta i upravljanje samo tipkovnicom)
 
 ## Razlike u odnosu na druge messengere
 

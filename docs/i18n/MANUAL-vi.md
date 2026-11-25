@@ -24,16 +24,19 @@ Từ [trang tải xuống](https://github.com/shizukutanaka/Breeze/releases/late
 
 Mỗi tệp đều kèm theo giá trị đối chiếu (SHA256SUMS.txt). Nếu lo lắng, bạn có thể kiểm tra xem giá trị của tệp đã tải xuống có khớp hay không.
 
-> **Về trang dùng thử**: Trang dùng thử từng công bố (breeze.pages.dev) hiện đang dừng hoạt động (khi mở sẽ hiện 404). Cho đến khi được khôi phục, vui lòng dùng bản ứng dụng. Những gì đặt trên máy chủ của riêng bạn sẽ không bị ảnh hưởng bởi việc dừng này.
+> **Về trang mẫu**: Một trang mẫu để kiểm tra cách hoạt động (https://breeze-469.pages.dev/) được cung cấp. Phần mềm đặt ở đó là cùng một phần mềm, nhưng trang mẫu có thể thay đổi hoặc dừng mà không báo trước. Để sử dụng thực tế, vui lòng dùng bản đặt trên máy chủ của riêng bạn. Bản trên máy chủ của riêng bạn sẽ không bị ảnh hưởng nếu trang mẫu dừng hoạt động.
 
 ### Thiết lập lần đầu
 
 1. Mở ứng dụng.
-2. Nhập tên của bạn. Chỉ vậy là xong phần chuẩn bị. Không cần đăng ký, không cần số điện thoại.
+2. Nhập tên của bạn và nhấn "Tạo tài khoản". Chỉ vậy là xong phần chuẩn bị. Không cần đăng ký, không cần số điện thoại.
+
+- Nếu bạn muốn khôi phục lại một danh tính đã tạo trước đây, hãy mở "Khôi phục tài khoản hiện có" và các cách khôi phục (tệp sao lưu, cụm từ khôi phục, v.v.) sẽ hiện ra.
+- Khi tạo xong, một thẻ xuất hiện hướng dẫn bạn bảo vệ khóa bằng cụm mật khẩu (thẻ không biến mất sau một thời gian). Với danh tính quan trọng, hãy làm theo hướng dẫn và thêm lớp bảo vệ.
 
 Lúc này, một "khóa" được tạo ra bên trong thiết bị. Đó chính là danh tính của bạn.
 **Danh sách tài khoản không tồn tại trên máy chủ.** Danh tính chỉ nằm bên trong thiết bị của bạn.
-Điều này trở nên quan trọng trong chương sao lưu (8).
+Điều này trở nên quan trọng trong chương sao lưu (9).
 
 ### Về "danh tính dùng một lần"
 
@@ -45,11 +48,13 @@ Nếu bạn làm mất thiết bị đó, khôi phục cài đặt gốc, hoặc
 
 ## 2. Kết nối với người khác
 
-Có 3 cách để kết nối với người bạn muốn trò chuyện.
+Nhấn nút "Thêm bạn" trên màn hình danh bạ và ba lựa chọn sẽ xuất hiện.
 
-- **Đưa ID**: Cho người kia biết ID của bạn và nhờ họ nhập vào.
-- **Mã QR**: Hiển thị mã QR mời và nhờ người kia quét.
-- **Liên kết mời**: Sao chép tin nhắn mời từ "Mời bạn bè" và gửi bằng phương tiện liên lạc thường dùng của bạn (chẳng hạn e-mail). Khi người kia mở liên kết và nhập tên, họ có thể trò chuyện ngay.
+- **Thêm liên hệ**: Nhập ID của người kia, hoặc quét mã QR.
+- **Mời bạn bè**: Sao chép liên kết mời và gửi bằng phương tiện liên lạc thường dùng của bạn (chẳng hạn e-mail). Khi người kia mở liên kết và nhập tên, hai bạn có thể trò chuyện ngay.
+- **Tạo nhóm**: Chỉ cần nhập tên nhóm để tạo (chương 4).
+
+ID của chính bạn được hiển thị ở dạng đầy đủ khi bạn mở hồ sơ của mình, và bạn có thể sao chép nguyên như vậy. Bạn có thể đưa ID đầy đủ, không chỉ ID rút gọn.
 
 Nếu người kia cũng đang mở ứng dụng, hai bạn có thể kết nối trực tiếp và trò chuyện.
 
@@ -58,14 +63,23 @@ Nếu người kia cũng đang mở ứng dụng, hai bạn có thể kết nố
 ## 3. Trò chuyện
 
 - Chỉ cần nhập tin nhắn và gửi. Ảnh, nhãn dán và thông tin vị trí cũng gửi được.
+- Mở "+" bên cạnh ô nhập và tệp đính kèm, tin nhắn thoại, nhập bằng giọng nói, thông tin vị trí, nhãn dán, cài đặt "không cần trả lời" và nhiều thứ khác sẽ xuất hiện cùng nhau.
 - **Gửi tệp**: Trong trò chuyện 1 đối 1, tối đa 50MB. Trong nhóm thì nhỏ hơn, khoảng 50KB.
 - Các tệp có định dạng nguy hiểm như tệp thực thi sẽ tự động bị chặn.
 - Khi người kia chưa mở ứng dụng, tin nhắn được đặt ở trạng thái đã mã hóa trong "hộp lưu giữ", và sẽ được chuyển đến khi họ mở ứng dụng. Máy chủ vận chuyển hộp lưu giữ không thể đọc nội dung. Thư không đến được sẽ tự động bị xóa sau **tối đa 7 ngày**.
 - Lịch sử trò chuyện có thể xuất ra tệp hoặc nhập vào.
 
+### Đọc màn hình
+
+- **Trạng thái gửi**: Có thể biết qua dấu bên cạnh tin nhắn. ✓ nghĩa là đã gửi, ✓ trong vòng tròn nghĩa là đã gửi vào hộp lưu giữ, ✓✓ nghĩa là đã đến người kia, đã đọc là dấu màu xanh dương, và thất bại là dấu màu đỏ. Chúng được phân biệt bằng hình dạng ngoài màu sắc.
+- **Danh sách liên hệ**: Thời gian trò chuyện gần nhất được hiển thị là giờ đối với hôm nay, "Hôm qua" đối với hôm qua, tháng/ngày đối với năm nay, và năm/tháng/ngày đối với thời gian trước đó. Liên hệ có tin nhắn chưa đọc sẽ được làm nổi bật tên và thời gian.
+- **Thẻ của chính bạn**: Ở đầu danh sách là thẻ hồ sơ của chính bạn; nhấn vào để mở hồ sơ của bạn. Nó cuộn cùng với danh sách.
+- **Tab dưới cùng trên điện thoại**: Ở chiều rộng điện thoại, các tab "Danh bạ" và "Cài đặt" xuất hiện ở cuối màn hình.
+- **Phần đầu cuộc trò chuyện**: Từ biểu tượng tìm kiếm, bạn có thể tìm trong cuộc trò chuyện. Từ menu "⋮", bạn có thể kiểm tra số an toàn, tắt thông báo, ghim, tạo cuộc thăm dò, và nhiều hơn nữa.
+
 ### Lệnh
 
-Khi nhập `/help` vào ô nhập, danh sách các lệnh có thể dùng (hơn 60 loại) sẽ hiện ra.
+Nhập `/` vào ô nhập và gợi ý lệnh sẽ xuất hiện. Nhập `/help` để xem danh sách các lệnh có thể dùng (71 loại).
 Một số thao tác như cài đặt và liên kết thiết bị được thực hiện từ lệnh.
 
 ---
@@ -73,7 +87,7 @@ Một số thao tác như cài đặt và liên kết thiết bị được th�
 ## 4. Nhóm
 
 - Nhóm có thể chứa tối đa **1.000 người**.
-- Cách tạo chỉ là nhập tên nhóm. Việc mời được thực hiện từ "Liên kết mời nhóm". Người nhận được liên kết có thể tham gia bằng cách nhập tên.
+- Cách tạo chỉ là nhập tên nhóm tại "Tạo nhóm" trong "Thêm bạn" (bạn cũng có thể tạo bằng lệnh `/newgroup`). Việc mời được thực hiện từ "Liên kết mời nhóm". Người nhận được liên kết có thể tham gia bằng cách nhập tên.
 - Trong nhóm cũng gửi được tệp, nhưng giới hạn nhỏ, khoảng 50KB. Tin nhắn thoại chưa gửi được trong nhóm.
 - Nếu có thành viên đang dùng ứng dụng phiên bản cũ, phương thức mới an toàn hơn (nhóm v5) sẽ không dùng được trong nhóm đó, và cảnh báo sẽ hiện trên màn hình. Nó sẽ có hiệu lực khi mọi người đều dùng phiên bản mới nhất.
 
@@ -81,7 +95,7 @@ Một số thao tác như cài đặt và liên kết thiết bị được th�
 
 ## 5. Cuộc gọi
 
-- Có thể gọi thoại và gọi video 1 đối 1. Cũng có gọi nhóm.
+- Có thể gọi thoại và gọi video 1 đối 1. Cũng có gọi nhóm (tối đa 8 người).
 - **Mã xác nhận cuộc gọi**: Mã xác nhận được hiển thị trên màn hình cuộc gọi. Hãy đọc cho nhau nghe với người kia và xác nhận xem có khớp trên cả hai màn hình không. Nếu không khớp, có khả năng ai đó đang nghe lén ở giữa. Trong trường hợp đó, hãy kết thúc cuộc gọi.
 - Gọi nhóm có thể không bắt đầu được nếu ứng dụng của mọi người không phải phiên bản mới nhất.
 
@@ -91,11 +105,15 @@ Một số thao tác như cài đặt và liên kết thiết bị được th�
 
 - Để dùng cùng một danh tính trên nhiều thiết bị, hãy liên kết các thiết bị với nhau bằng lệnh `/link`.
 - Tài khoản có thể tạo nhiều và dùng riêng (chẳng hạn công việc và cá nhân). Cả số thiết bị và số tài khoản đều miễn phí và không giới hạn.
-- Ngôn ngữ được tự động chọn từ 8 ngôn ngữ: tiếng Anh, tiếng Nhật, tiếng Hàn, tiếng Trung (Đài Loan), tiếng Tây Ban Nha, tiếng Thái, tiếng Indonesia và tiếng Bồ Đào Nha (Brazil).
+- **Cách tạo tài khoản**: Nhấn nút "+" bên cạnh các tab tài khoản ở trên cùng của danh sách liên hệ. Nhập tên và chọn một emoji biểu tượng, tài khoản mới sẽ được tạo và tự động chuyển sang.
+- **Chuyển tài khoản**: Các tab tài khoản luôn hiển thị ở trên cùng của danh sách liên hệ. Nhấn một tab để chuyển (trên máy tính, bạn cũng có thể chuyển bằng Ctrl+1–9). Nhấn và giữ một tab để đổi tên, đổi biểu tượng hoặc xóa nó.
+- Ngôn ngữ được tự động chọn từ 51 ngôn ngữ, bao gồm tiếng Anh, theo ngôn ngữ của thiết bị của bạn.
 
 ---
 
 ## 7. Cài đặt để giữ an toàn
+
+Cài đặt mở ra thành màn hình riêng. Trên điện thoại, mở từ tab "Cài đặt" ở cuối màn hình; trên máy tính, từ nút bánh răng trên màn hình (bạn cũng có thể mở bằng lệnh `/settings`). Dùng thao tác quay lại để trở về màn hình trước đó.
 
 - **Khóa tự động**: Có cài đặt tự động khóa khi bạn chuyển tab.
 - **Mật khẩu khóa**: Khóa bên trong thiết bị có thể được bảo vệ bằng cách bọc trong một mật khẩu. Bạn sẽ được yêu cầu nhập khi mở ứng dụng.
@@ -103,14 +121,31 @@ Một số thao tác như cài đặt và liên kết thiết bị được th�
 
 ---
 
-## 8. Sao lưu và khôi phục (chương quan trọng nhất)
+## 8. Pin và tình huống khẩn cấp (chế độ nguồn)
+
+Trong cài đặt "Chế độ nguồn", bạn có thể chọn cách sử dụng pin.
+
+- **Tự động (mức pin)**: Tự động chuyển đổi theo lượng pin còn lại.
+- **Bình thường**: Như thường lệ.
+- **Tiết kiệm pin**: Giãn cách việc kiểm tra thư đến tối đa một lần mỗi 60 giây, và dừng tín hiệu hiện diện.
+- **Khẩn cấp (cho thảm họa)**: Giãn cách việc kiểm tra thư đến tối đa một lần mỗi 10 phút. Hãy dùng khi có thảm họa hoặc khi không thể sạc pin.
+
+Điều làm hao pin không phải là lượng liên lạc mà là số lần bộ thu phát thức dậy. Vì vậy phía gửi không bị giãn cách; chỉ phía nghe bị giãn cách. Việc gửi vẫn diễn ra ngay lập tức như thường lệ. Khi bạn bắt đầu sạc, nó tự động lùi một bước về phía nhẹ hơn.
+
+Trên các thiết bị không thể tự động đọc mức pin (như trình duyệt trên iPhone), "Tự động" hoạt động như Bình thường, và lựa chọn thủ công hoạt động đúng như đã chọn.
+
+---
+
+## 9. Sao lưu và khôi phục (chương quan trọng nhất)
 
 Danh tính của Breeze chỉ là khóa bên trong thiết bị của bạn. Danh sách tài khoản không tồn tại trên máy chủ, và người tạo ra cũng không có khóa của bạn.
 **Nếu bạn làm mất thiết bị, danh tính cũng sẽ mất.** Với danh tính quan trọng, hãy nhất định tạo bản sao lưu.
 
+Sao lưu và khôi phục được thực hiện từ mục "Sao lưu và khôi phục" trong cài đặt (có ba nút: "Sao lưu lên đám mây", "Khôi phục" và "Khôi phục từ tệp"). Lần đầu tiên bạn thêm một liên hệ, một thẻ kêu gọi bạn tạo bản sao lưu sẽ xuất hiện đúng một lần.
+
 ### Cách tạo bản sao lưu
 
-1. Chọn "Tạo bản sao lưu".
+1. Từ "Sao lưu và khôi phục" trong cài đặt, chọn tạo bản sao lưu.
 2. Đặt mật khẩu cho bản sao lưu (6 ký tự trở lên).
 3. Chọn nơi lưu.
    - **Lưu vào tệp**: Giữ tệp sao lưu trong tay bạn (khuyến nghị).
@@ -130,7 +165,7 @@ Trên thiết bị mới, khôi phục bằng tệp sao lưu (hoặc bản sao l
 
 ---
 
-## 9. Hộp lưu giữ và cách suy nghĩ về chi phí
+## 10. Hộp lưu giữ và cách suy nghĩ về chi phí
 
 - Thư khi người kia ngoại tuyến được đặt ở trạng thái đã mã hóa trong "hộp lưu giữ" của máy chủ chuyển tiếp (tối đa 7 ngày).
 - Máy chủ chuyển tiếp có giới hạn để ngăn lạm dụng (lượng và tần suất có thể lưu giữ). Khi đạt giới hạn, trong khoảng thời gian đó sẽ không lưu giữ được thư mới, nhưng **thư đã đến sẽ không biến mất**. Màn hình sẽ hiển thị lý do và thời gian chờ.
@@ -147,7 +182,7 @@ Phạm vi bản ghi còn lại phía máy chủ (tất cả đều tự động 
 
 ---
 
-## 10. Cách cập nhật (bản máy tính)
+## 11. Cách cập nhật (bản máy tính)
 
 1. Khi có phiên bản mới, thông báo sẽ hiện trên màn hình.
 2. Khi nhấn "Tải xuống", nó sẽ đi lấy phiên bản mới (không tự động cài đặt).
@@ -157,7 +192,7 @@ Nếu cập nhật thất bại giữa chừng (chẳng hạn giá trị đối 
 
 ---
 
-## 11. Khi gặp sự cố
+## 12. Khi gặp sự cố
 
 | Triệu chứng | Điều cần kiểm tra |
 |---|---|
@@ -167,13 +202,13 @@ Nếu cập nhật thất bại giữa chừng (chẳng hạn giá trị đối 
 | Mã xác nhận cuộc gọi không khớp | Hãy kết thúc cuộc gọi và gọi lại. Đừng tiếp tục trong trạng thái không khớp. |
 | Quên mật khẩu | Không thể khôi phục. Hãy tạo danh tính mới và cho người kia biết lại. |
 | Làm mất thiết bị | Nếu có bản sao lưu, bạn có thể khôi phục trên thiết bị mới. Nếu không có, sẽ thành danh tính mới. |
-| Trang dùng thử không mở được (404) | Hiện đang dừng hoạt động. Vui lòng dùng bản ứng dụng. |
+| Trang mẫu không mở được | Trang mẫu có thể dừng mà không báo trước. Vui lòng dùng bản đặt trên máy chủ của riêng bạn. |
 
 Báo cáo lỗi xin gửi tới [trang Issue](https://github.com/shizukutanaka/Breeze/issues).
 
 ---
 
-## 12. Cam kết của Breeze
+## 13. Cam kết của Breeze
 
 - Chúng tôi không hiển thị quảng cáo. Không trong ứng dụng, không ở bất cứ đâu.
 - Chúng tôi không theo dõi. Không phân tích việc sử dụng, không cơ chế quảng cáo, không bán dữ liệu — tuyệt đối không.
@@ -184,4 +219,4 @@ So sánh chi tiết với các ứng dụng nhắn tin khác được viết ở
 
 ---
 
-*Sách hướng dẫn này là nội dung tại thời điểm Breeze v3.8.0.*
+*Sách hướng dẫn này phản ánh nội dung tính đến ngày 2026-11-25.*

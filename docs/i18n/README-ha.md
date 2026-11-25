@@ -37,24 +37,17 @@ Cikakken bayanin amfani yana cikin [littafin bayani](MANUAL-ha.md) (za ka iya za
 
 Za mu kuma rubuta iyakar da gaskiya. Don isarwa, saba tana ajiye saƙonni na ɗan lokaci (ambulo da ba su isa ba har zuwa kwanaki 7, siginar haɗuwa mintuna 5, bayanan adireshi da na'ura kwanaki 90, bayanan ƙungiya da rajistar sanarwa kwanaki 30. Duk suna gogewa ta atomatik, kuma ba za a iya karanta abin da ke ciki ba). Ajiyar tanadi zuwa gajimare a kashe take a farko. Idan ka sa shi a sabarka, za ka iya sa wannan ajiyar ma a ƙarƙashin kulawarka.
 
-## Tsari da ya sa amfani da shi don laifi ba ya da riba
-
-An gina Breeze ta yadda wanda zai yi amfani da shi ba daidai ba zai ɗauki kuɗi da wahala. Ba mu ce "zai sa laifi ya zama ba zai yiwu ba". Tsari ne da ya sa "ba ya da riba".
-
-- **Babu kafar cin banza.** Da yake babu saba ta tsakiya ta kyauta, wanda zai yi amfani ba daidai ba ma ba shi da zaɓi sai ya samar da wurin ajiya da asusun sunansa da kuɗinsa.
-- **Aika saƙo yana da nauyi.** Duk lokacin da aka aika, ana buƙatar ƙaramin lissafi (hujjar aiki), kuma akwai iyaka ga yawa. Aika saƙonnin tayar da hankali da yawa ba ya da riba.
-- **Ana iya yin rahoto da ba za a iya musantawa ba.** Wanda ya karɓa zai iya yin rahoto yana amfani da saƙon da ya karɓa kansa a matsayin shaida. Wanda ya aiko ba zai iya cewa "ban aiko ba".
-- **Ikon tsayarwa yana hannun wanda ya sa shi.** Abin da ya faru a sabarka, kai za ka iya tsayar da shi. Ba a buƙatar izinin kowa.
-
 ## Abubuwan da yake iya yi
 
 - Tattaunawa ta mutum ɗaya da ɗaya, da tattaunawar ƙungiya (har zuwa mutane 1,000)
-- Kiran murya da kiran bidiyo
+- Kiran murya da kiran bidiyo (kiran ƙungiya har zuwa mutane 8)
 - Aika fayiloli (har zuwa 50MB a tattaunawa ta mutum ɗaya da ɗaya. Ana iya aikawa a ƙungiyoyi ma, amma iyakar girma ƙarama ce)
 - Amfani da na'urori da yawa da asusu da yawa (misali na aiki da na sirri. Adadin na'urori da asusu kyauta ne ba tare da iyaka ba)
-- Ana zaɓa ta atomatik daga harsuna 8 (Turanci, Jafananci, Koriyanci, Sinanci (Taiwan), Sifaniyanci, Thai, Indonesiyanci, Fotugisanci)
+- Harsuna 51 (Turanci da fayilolin harsuna 50), ana zaɓa ta atomatik bisa harshen na'urarka
 - Bayanin martaba mai hoto, sitika, raba wuri
-- Ayyukan umarni kamar `/help` (fiye da nau'ika 60)
+- Ayyukan umarni kamar `/help` (nau'ika 71)
+- Hanyoyin wuta da suka dace da batirinka (ta atomatik / na yau da kullum / tanadin wuta / na gaggawa). Yayin da batir ya ragu, ana faɗaɗa lokutan duba isarwa don batir ya daɗe. Kariya ce ga bala'i da sauran lokutan da ba za ka iya caji ba
+- Alluna masu sauƙin karantawa (kula da bambancin launi, girman rubutu, da aiki da madanni kaɗai)
 
 ## Bambanci da sauran manzonni
 

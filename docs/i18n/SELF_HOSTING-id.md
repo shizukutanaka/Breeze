@@ -197,7 +197,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Selesai.** Semua fitur berfungsi kecuali notifikasi push. Perhatikan
@@ -213,9 +213,9 @@ tertutup-secara-bawaan adalah jalur Docker di atas.
 | Pesan P2P | ✓ | WebRTC DataChannel |
 | Panggilan suara/video | ✓ | WebRTC + STUN gratis |
 | Relay TURN | ✓ | Open Relay (20GB/bulan gratis) |
-| Grup (100 anggota) | ✓ | Sender Key O(1) |
+| Grup (1.000 anggota) | ✓ | Sender Key O(1) |
 | Transfer file | ✓ | Hingga 50MB melalui P2P |
-| 8 bahasa | ✓ | EN + 7 lokal penuh, terdeteksi otomatis |
+| 51 bahasa | ✓ | Bahasa Inggris bawaan + 50 file lokal penuh, terdeteksi otomatis |
 | Offline/PWA | ✓ | Service Worker |
 | Notifikasi push | ✗ | Membutuhkan kunci VAPID |
 
@@ -229,7 +229,7 @@ Penagihan multi-akun (Lite/Plus/Pro) tidak tersedia — lihat bagian "Removed: m
 | Pembacaan KV | 100.000/hari | ~200/hari |
 | Penulisan KV | 1.000/hari | ~350/hari (dioptimalkan) |
 | Penyimpanan KV | 1 GB | ~10 KB/pengguna |
-| Aset statis | Tanpa batas | ~400 KB (HTML tunggal) |
+| Aset statis | Tanpa batas | ~894 KB (HTML tunggal) |
 
 **Mendukung ~3 pengguna aktif bersamaan pada tingkat gratis.**
 

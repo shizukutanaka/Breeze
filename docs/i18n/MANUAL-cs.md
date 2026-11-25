@@ -24,16 +24,19 @@ Na [stránce ke stažení](https://github.com/shizukutanaka/Breeze/releases/late
 
 Ke každému souboru je přiložen kontrolní součet (SHA256SUMS.txt). Pokud máte obavy, můžete ověřit, že součet staženého souboru souhlasí.
 
-> **O zkušební stránce**: Veřejná zkušební stránka (breeze.pages.dev) je v současné době zastavena (při otevření se zobrazí 404). Dokud nebude obnovena, používejte verzi aplikace. Na Breeze umístěný na vašem vlastním serveru zastavení nemá vliv.
+> **O ukázkové stránce**: Ukázka pro ověření, jak to funguje (https://breeze-469.pages.dev/), je k dispozici. To, co tam je umístěno, je stejný software, ale ukázka se může bez upozornění změnit nebo zastavit. Pro skutečné použití používejte verzi umístěnou na vašem vlastním serveru. Na verzi na vašem vlastním serveru zastavení ukázky nemá vliv.
 
 ### První nastavení
 
 1. Otevřete aplikaci.
-2. Zadejte své jméno. Tím jste připraveni. Není potřeba registrace ani telefonní číslo.
+2. Zadejte své jméno a stiskněte "Vytvořit účet". Tím jste připraveni. Není potřeba registrace ani telefonní číslo.
+
+- Pokud chcete obnovit identitu, kterou jste vytvořili dříve, otevřete "Obnovit existující účet" a zobrazí se způsoby obnovy (záložní soubor, obnovovací fráze apod.).
+- Po dokončení vytvoření se zobrazí karta, která vás navede k ochraně klíče přístupovou frází (po čase nezmizí). U důležité identity postupujte podle návodu a ochranu přidejte.
 
 V tu chvíli se uvnitř vašeho zařízení vytvoří "klíč". Ten je vaší samotnou identitou.
 **Na serveru neexistuje seznam účtů.** Vaše identita je pouze uvnitř vašeho zařízení.
-To bude důležité v kapitole o zálohování (8).
+To bude důležité v kapitole o zálohování (9).
 
 ### O "jednorázové identitě"
 
@@ -45,11 +48,13 @@ Zobrazuje se to i na obrazovce. Nevolte ji pro identitu, kterou chcete používa
 
 ## 2. Spojení s druhou osobou
 
-Existují tři způsoby, jak se spojit s osobou, se kterou chcete mluvit.
+Stiskněte tlačítko "Přidat přítele" na obrazovce kontaktů a zobrazí se tři možnosti.
 
-- **Předat své ID**: Sdělte své ID druhé osobě a nechte ji ho zadat.
-- **QR kód**: Zobrazte zvací QR kód a nechte druhou osobu, aby jej naskenovala.
-- **Zvací odkaz**: Zkopírujte zvací zprávu z "Pozvat přítele" a pošlete ji obvyklým způsobem (e-mailem apod.). Když druhá osoba odkaz otevře a zadá své jméno, můžete hned mluvit.
+- **Přidat kontakt**: Zadejte ID druhé osoby nebo naskenujte QR kód.
+- **Pozvat přítele**: Zkopírujte zvací odkaz a pošlete jej obvyklým způsobem (e-mailem apod.). Když druhá osoba odkaz otevře a zadá své jméno, můžete hned mluvit.
+- **Vytvořit skupinu**: Stačí zadat název skupiny a vytvoříte ji (kapitola 4).
+
+Vaše vlastní ID se zobrazí v úplné podobě, když otevřete svůj profil, a můžete jej zkopírovat tak, jak je. Můžete předat úplné ID, nejen krátké ID.
 
 Pokud má i druhá osoba aplikaci otevřenou, můžete se připojit přímo a mluvit.
 
@@ -58,14 +63,23 @@ Pokud má i druhá osoba aplikaci otevřenou, můžete se připojit přímo a ml
 ## 3. Konverzace
 
 - Stačí napsat zprávu a odeslat ji. Můžete posílat i fotografie, samolepky a polohu.
+- Otevřete "+" vedle vstupního pole a společně se zobrazí přílohy souborů, hlasové zprávy, hlasové zadávání, informace o poloze, samolepky, nastavení "odpověď není nutná" a další.
 - **Posílání souborů**: V konverzacích jeden na jednoho až 50 MB. Ve skupinách je to menší, přibližně 50 KB.
 - Nebezpečné formáty souborů, například spustitelné soubory, se automaticky blokují.
 - Pokud druhá osoba nemá aplikaci otevřenou, zpráva se stále zašifrovaná uloží do "schránky" a doručí se, až aplikaci otevře. Server, který schránku přepravuje, nemůže obsah číst. Dopisy, které nejsou nikdy doručeny, se automaticky smažou po **nejvýše 7 dnech**.
 - Historii konverzací lze exportovat do souboru a importovat.
 
+### Čtení obrazovky
+
+- **Stav odeslání**: Poznáte jej podle značky vedle zprávy. ✓ znamená odesláno, ✓ v kroužku znamená, že byla uložena do schránky, ✓✓ znamená, že dorazila druhé osobě, přečteno je modrá značka a selhání je červená značka. Rozlišují se i tvarem, nejen barvou.
+- **Seznam kontaktů**: Čas vaší poslední konverzace se zobrazuje jako čas pro dnešek, "Včera" pro včerejšek, měsíc/den pro tento rok a rok/měsíc/den pro vše dřívější. Kontakty se zprávami, které jste nečetli, mají zvýrazněné jméno a čas.
+- **Vaše vlastní karta**: Na začátku seznamu je vaše vlastní profilová karta; stisknutím ji otevřete svůj profil. Posouvá se spolu se seznamem.
+- **Dolní karty na telefonu**: Při šířce telefonu se v dolní části obrazovky zobrazují karty "Kontakty" a "Nastavení".
+- **Záhlaví konverzace**: Z ikony hledání můžete hledat v konverzaci. Z nabídky "⋮" můžete zkontrolovat bezpečnostní číslo, ztlumit oznámení, připnout, vytvořit anketu a další.
+
 ### Příkazy
 
-Pokud do vstupního pole napíšete `/help`, zobrazí se seznam příkazů, které můžete použít (více než 60 druhů).
+Pokud do vstupního pole napíšete `/`, zobrazí se návrhy příkazů. Napište `/help` pro seznam příkazů, které můžete použít (71 druhů).
 Některé operace, například nastavení a propojení zařízení, se provádějí příkazy.
 
 ---
@@ -73,7 +87,7 @@ Některé operace, například nastavení a propojení zařízení, se provádě
 ## 4. Skupiny
 
 - Skupina může mít až **1 000 lidí**.
-- Vytvoříte ji pouhým zadáním názvu skupiny. Pozvánky probíhají přes "Odkaz pro pozvání do skupiny". Osoba, která odkaz obdrží, se může připojit zadáním svého jména.
+- Vytvoříte ji pouhým zadáním názvu skupiny v části "Vytvořit skupinu" v "Přidat přítele" (můžete ji také vytvořit příkazem `/newgroup`). Pozvánky probíhají přes "Odkaz pro pozvání do skupiny". Osoba, která odkaz obdrží, se může připojit zadáním svého jména.
 - Soubory lze posílat i ve skupinách, ale limit je menší, přibližně 50 KB. Hlasové zprávy zatím ve skupinách posílat nelze.
 - Pokud člen používá starou verzi aplikace, skupina nemůže používat novější, bezpečnější režim (skupina v5) a na obrazovce se zobrazí upozornění. Aktivuje se, až budou mít všichni nejnovější verzi.
 
@@ -81,7 +95,7 @@ Některé operace, například nastavení a propojení zařízení, se provádě
 
 ## 5. Hovory
 
-- Můžete vést hlasové a videohovory jeden na jednoho. Existují i skupinové hovory.
+- Můžete vést hlasové a videohovory jeden na jednoho. Existují i skupinové hovory (až pro 8 lidí).
 - **Potvrzovací kód hovoru**: Na obrazovce hovoru se zobrazí potvrzovací kód. Přečtěte si jej nahlas s druhou osobou a ověřte, že se na obou obrazovkách shoduje. Pokud se neshoduje, je možné, že někdo hovor odposlouchává. V takovém případě zavěste.
 - Skupinové hovory někdy nelze zahájit, pokud aplikace všech nejsou v nejnovější verzi.
 
@@ -91,11 +105,15 @@ Některé operace, například nastavení a propojení zařízení, se provádě
 
 - Chcete-li používat stejnou identitu na více zařízeních, propojíte zařízení příkazem `/link`.
 - Můžete vytvořit více účtů a používat je pro různé účely (například pracovní a soukromé). Počet zařízení i účtů je zdarma a neomezený.
-- Jazyk se automaticky vybírá z 8: angličtina, japonština, korejština, čínština (Tchaj-wan), španělština, thajština, indonéština a portugalština (Brazílie).
+- **Jak vytvořit účet**: Stiskněte tlačítko "+" vedle karet účtů úplně nahoře v seznamu kontaktů. Zadejte jméno a vyberte ikonu emoji a nový účet se vytvoří a automaticky se na něj přepne.
+- **Přepínání účtů**: Karty účtů se vždy zobrazují úplně nahoře v seznamu kontaktů. Stisknutím jedné přepnete (na počítači můžete přepínat i pomocí Ctrl+1–9). Stisknutím a podržením karty ji můžete přejmenovat, změnit její ikonu nebo ji smazat.
+- Jazyk se automaticky vybírá z 51 jazyků včetně angličtiny podle jazyka vašeho zařízení.
 
 ---
 
 ## 7. Nastavení pro zachování bezpečnosti
+
+Nastavení se otevírají jako vlastní obrazovka. Na telefonu je otevřete z karty "Nastavení" v dolní části obrazovky; na počítači tlačítkem ozubeného kola na obrazovce (můžete je otevřít i příkazem `/settings`). Akcí zpět se vrátíte na obrazovku, na které jste byli.
 
 - **Automatický zámek**: Existuje nastavení, které se automaticky uzamkne při přepnutí karty.
 - **Přístupová fráze ke klíči**: Klíč uvnitř zařízení můžete chránit zabalením do přístupové fráze. Při otevření aplikace budete vyzváni k jejímu zadání.
@@ -103,14 +121,31 @@ Některé operace, například nastavení a propojení zařízení, se provádě
 
 ---
 
-## 8. Zálohování a obnova (nejdůležitější kapitola)
+## 8. Baterie a nouzové situace (režimy napájení)
+
+V nastavení "Režim napájení" si můžete zvolit, jak se baterie používá.
+
+- **Automatický (úroveň baterie)**: Přepíná se automaticky podle toho, kolik baterie zbývá.
+- **Normální**: Jako obvykle.
+- **Úsporný**: Rozloží kontroly doručení na nejvýše jednou za 60 sekund a zastaví signál přítomnosti.
+- **Nouzový (pro katastrofy)**: Rozloží kontroly doručení na nejvýše jednou za 10 minut. Použijte jej při katastrofě nebo jindy, když nemůžete nabíjet.
+
+Baterii vybíjí ne množství komunikace, ale počet probuzení rádia. Proto se strana odesílání nerozkládá; pouze strana poslechu. Odesílání stále odchází okamžitě, jako vždy. Když začnete nabíjet, automaticky se posune o krok zpět směrem k lehčí straně.
+
+Na zařízeních, která nemohou úroveň baterie číst automaticky (například prohlížeč na iPhonu), se "Automatický" chová jako Normální a ruční volba funguje tak, jak byla zvolena.
+
+---
+
+## 9. Zálohování a obnova (nejdůležitější kapitola)
 
 Vaše identita Breeze je pouze klíč uvnitř vašeho zařízení. Na serveru není seznam účtů a tvůrce nemá váš klíč také.
 **Pokud zařízení ztratíte, ztratíte i svou identitu.** Pro důležitou identitu si vždy vytvořte zálohu.
 
+Zálohování a obnova se provádějí v části "Zálohování a obnova" v nastavení (jsou tam tři tlačítka: "Zálohovat do cloudu", "Obnovit" a "Obnovit ze souboru"). Když poprvé přidáte kontakt, zobrazí se jen jednou karta, která vás vyzývá k vytvoření zálohy.
+
 ### Vytvoření zálohy
 
-1. Zvolte "Vytvořit zálohu".
+1. V části "Zálohování a obnova" v nastavení zvolte vytvoření zálohy.
 2. Nastavte přístupovou frázi pro zálohu (alespoň 6 znaků).
 3. Vyberte, kam se má uložit.
    - **Uložit do souboru**: Záložní soubor si uchovejte u sebe (doporučeno).
@@ -130,7 +165,7 @@ Na novém zařízení obnovíte pomocí záložního souboru (nebo zálohy na re
 
 ---
 
-## 9. Schránka a úvahy o nákladech
+## 10. Schránka a úvahy o nákladech
 
 - Dopisy pro osobu, která je offline, se ukládají zašifrované do "schránky" relé serveru (nejvýše 7 dní).
 - Relé má limity pro zabránění zneužití (kolik lze zanechat a jak často). Po dosažení limitu nemůžete po dané období zanechávat nové dopisy, ale **již doručené dopisy nikdy nezmizí**. Na obrazovce se zobrazí důvod a doba, po kterou je třeba čekat.
@@ -147,7 +182,7 @@ Rozsah záznamů, které zůstávají na straně serveru (vše se automaticky ma
 
 ---
 
-## 10. Jak aktualizovat (verze pro stolní počítače)
+## 11. Jak aktualizovat (verze pro stolní počítače)
 
 1. Když je k dispozici nová verze, na obrazovce se zobrazí oznámení.
 2. Stisknutím "Stáhnout" získáte novou verzi (neinstaluje se automaticky).
@@ -157,7 +192,7 @@ Pokud během aktualizace dojde k chybě (například nesouhlasí kontrola soubor
 
 ---
 
-## 11. Když se něco nedaří
+## 12. Když se něco nedaří
 
 | Příznak | Co zkontrolovat |
 |---|---|
@@ -167,13 +202,13 @@ Pokud během aktualizace dojde k chybě (například nesouhlasí kontrola soubor
 | Potvrzovací kód hovoru se neshoduje | Zavěste a zavolejte znovu. Nepokračujte, dokud se neshoduje. |
 | Zapomenutá přístupová fráze | Obnova není možná. Vytvořte novou identitu a znovu informujte své kontakty. |
 | Ztracené zařízení | Pokud máte zálohu, můžete obnovit na novém zařízení. Pokud ne, bude to nová identita. |
-| Zkušební stránka se neotevře (404) | V současné době je zastavena. Použijte verzi aplikace. |
+| Ukázková stránka se neotevře | Ukázka se může bez upozornění zastavit. Použijte verzi umístěnou na vašem vlastním serveru. |
 
 Chyby prosím hlaste na [stránce Issues](https://github.com/shizukutanaka/Breeze/issues).
 
 ---
 
-## 12. Sliby Breeze
+## 13. Sliby Breeze
 
 - Žádné reklamy. Ani v aplikaci, ani nikde jinde.
 - Žádné sledování. Žádná analýza používání, žádné reklamní mechanismy, žádný prodej dat — vůbec.
@@ -184,4 +219,4 @@ Podrobné srovnání s jinými messengery je na "srovnávací stránce" v repozi
 
 ---
 
-*Tato příručka popisuje obsah k verzi Breeze v3.8.0.*
+*Tato příručka odráží stav Breeze k 25. 11. 2026.*

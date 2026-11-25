@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **เพียงเท่านี้** ทุกฟังก์ชันทำงานยกเว้นการแจ้งเตือนแบบพุช โปรดทราบ
@@ -215,9 +215,9 @@ wrangler pages deploy . --project-name=breeze
 | การส่งข้อความ P2P | ✓ | WebRTC DataChannel |
 | การโทรด้วยเสียง/วิดีโอ | ✓ | WebRTC + STUN ฟรี |
 | การส่งต่อ TURN | ✓ | Open Relay (ฟรี 20GB/เดือน) |
-| กลุ่ม (สมาชิก 100 คน) | ✓ | Sender Key O(1) |
+| กลุ่ม (สมาชิก 1,000 คน) | ✓ | Sender Key O(1) |
 | การโอนไฟล์ | ✓ | สูงสุด 50MB ผ่าน P2P |
-| 8 ภาษา | ✓ | EN + 7 ภาษาเต็มรูปแบบ ตรวจจับอัตโนมัติ |
+| 51 ภาษา | ✓ | ภาษาอังกฤษในตัว + ไฟล์ภาษาเต็มรูปแบบ 50 ไฟล์ ตรวจจับอัตโนมัติ |
 | ออฟไลน์/PWA | ✓ | Service Worker |
 | การแจ้งเตือนแบบพุช | ✗ | ต้องใช้กุญแจ VAPID |
 
@@ -233,7 +233,7 @@ wrangler pages deploy . --project-name=breeze
 | การอ่าน KV | 100,000/วัน | ~200/วัน |
 | การเขียน KV | 1,000/วัน | ~350/วัน (ปรับให้เหมาะสมแล้ว) |
 | พื้นที่จัดเก็บ KV | 1 GB | ~10 KB/ผู้ใช้ |
-| สินทรัพย์แบบคงที่ | ไม่จำกัด | ~400 KB (HTML เดียว) |
+| สินทรัพย์แบบคงที่ | ไม่จำกัด | ~894 KB (HTML เดียว) |
 
 **รองรับผู้ใช้ที่ใช้งานอยู่พร้อมกัน ~3 คนในระดับฟรี**
 

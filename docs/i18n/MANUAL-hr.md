@@ -24,16 +24,19 @@ Sa [stranice za preuzimanje](https://github.com/shizukutanaka/Breeze/releases/la
 
 Svakoj je datoteci priložen broj za provjeru (SHA256SUMS.txt). Ako želite, možete provjeriti podudara li se broj preuzete datoteke.
 
-> **O probnoj stranici**: Probna stranica koju smo objavili (breeze.pages.dev) trenutačno je zaustavljena (kad je otvorite, prikazuje se 404). Dok se ne obnovi, koristite verziju aplikacije. Ono što ste postavili na svoj poslužitelj ne trpi posljedice ovog zaustavljanja.
+> **O uzornoj stranici**: Uzorak za provjeru kako radi (https://breeze-469.pages.dev/) je osiguran. Tamo je postavljen isti softver, ali uzorak se može promijeniti ili zaustaviti bez najave. Za pravu uporabu koristite kopiju postavljenu na svoj poslužitelj. Kopija postavljena na vaš poslužitelj ne trpi posljedice ako se uzorak zaustavi.
 
 ### Prvo postavljanje
 
 1. Otvorite aplikaciju.
-2. Unesite ime. Time je priprema gotova. Ne treba ni registracija ni broj telefona.
+2. Unesite ime i pritisnite «Napravi račun». Time je priprema gotova. Ne treba ni registracija ni broj telefona.
+
+- Ako želite vratiti identitet koji ste ranije napravili, otvorite «Vrati postojeći račun» i pojavit će se načini oporavka (datoteka sigurnosne kopije, fraza za oporavak itd.).
+- Kad se stvaranje završi, pojavljuje se kartica koja vas vodi da ključ zaštitite lozinkom (ne nestaje nakon nekog vremena). Za važan identitet slijedite uputu i dodajte zaštitu.
 
 Tada se u vašem uređaju stvara «ključ». On je sam vaš identitet.
 **Popis računa ne postoji na poslužitelju.** Identitet postoji samo u vašem uređaju.
-Ova točka postaje važna u poglavlju o sigurnosnoj kopiji (8).
+Ova točka postaje važna u poglavlju o sigurnosnoj kopiji (9).
 
 ### O «jednokratnom identitetu»
 
@@ -45,11 +48,13 @@ To se prikazuje i na zaslonu. Ne birajte ga za identitet koji ćete dugo koristi
 
 ## 2. Povezivanje s drugom stranom
 
-Postoje 3 načina da se povežete s osobom s kojom želite razgovarati.
+Pritisnite gumb «Dodaj prijatelja» na zaslonu kontakata i pojavit će se tri izbora.
 
-- **Davanjem ID-a**: Recite svoj ID drugoj strani i neka ga unese.
-- **QR kod**: Prikažite QR kod pozivnice i neka ga druga strana očita.
-- **Poveznica pozivnice**: Kopirajte poruku pozivnice iz «Pozovi prijatelje» i pošaljite je uobičajenim sredstvom veze (e-pošta itd.). Ako druga strana otvori poveznicu i unese ime, odmah možete razgovarati.
+- **Dodaj kontakt**: Unesite ID druge osobe ili skenirajte QR kod.
+- **Pozovi prijatelja**: Kopirajte poveznicu pozivnice i pošaljite je uobičajenim sredstvom veze (e-pošta itd.). Ako druga strana otvori poveznicu i unese ime, odmah možete razgovarati.
+- **Napravi grupu**: Da biste napravili grupu, samo unesite naziv grupe (poglavlje 4).
+
+Vaš ID prikazuje se u potpunom obliku kad otvorite svoj profil i možete ga kopirati takvog kakav jest. Možete predati potpuni ID, a ne samo kratki ID.
 
 Ako i druga strana otvori aplikaciju, možete se izravno povezati i razgovarati.
 
@@ -58,14 +63,23 @@ Ako i druga strana otvori aplikaciju, možete se izravno povezati i razgovarati.
 ## 3. Razgovor
 
 - Samo unesite poruku i pošaljite je. Mogu se slati i fotografije, naljepnice i lokacija.
+- Otvorite «+» pored polja za unos i zajedno će se pojaviti prilozi datoteka, glasovne poruke, glasovni unos, podaci o lokaciji, naljepnice, postavka «odgovor nije potreban» i još toga.
 - **Slanje datoteka**: U razgovorima jedan na jedan najviše do 50MB. U grupama je manje, oko 50KB.
 - Opasni formati, poput izvršnih datoteka, automatski se blokiraju.
 - Ako druga strana ne otvori aplikaciju, pismo se šifrirano stavlja u «spremnik za čuvanje» i dostavlja se kad je otvori. Poslužitelj koji prenosi spremnik ne može pročitati sadržaj. Pisma koja ne budu dostavljena automatski se brišu **najkasnije za 7 dana**.
 - Povijest razgovora može se izvesti u datoteku ili uvesti iz nje.
 
+### Čitanje zaslona
+
+- **Status slanja**: Možete ga razlikovati po znaku pored poruke. ✓ znači poslano, ✓ u krugu znači da je položeno u spremnik za čuvanje, ✓✓ znači da je stiglo drugoj strani, pročitano je plavi znak, a neuspjeh je crveni znak. Razlikuju se i po obliku, a ne samo po boji.
+- **Popis kontakata**: Vrijeme posljednjeg razgovora prikazuje se kao vrijeme za danas, «Jučer» za jučer, mjesec/dan za ovu godinu i godina/mjesec/dan za ranije. Kontakti s nepročitanim porukama imaju istaknuto ime i vrijeme.
+- **Vaša kartica**: Na vrhu popisa je vaša profilna kartica; pritisnite je da otvorite profil. Pomiče se zajedno s popisom.
+- **Donje kartice na telefonu**: Pri širini telefona, na dnu zaslona pojavljuju se kartice «Kontakti» i «Postavke».
+- **Zaglavlje razgovora**: Od ikone pretraživanja možete pretraživati unutar razgovora. Iz izbornika «⋮» možete provjeriti sigurnosni broj, utišati obavijesti, prikvačiti, napraviti anketu i još toga.
+
 ### Naredbe
 
-Ako u polje za unos unesete `/help`, pojavljuje se popis naredbi koje se mogu koristiti (više od 60 vrsta).
+Unesite `/` u polje za unos i pojavit će se prijedlozi naredbi. Unesite `/help` da vidite popis naredbi koje možete koristiti (71 vrsta).
 Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 
 ---
@@ -73,7 +87,7 @@ Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 ## 4. Grupe
 
 - U grupu može ući najviše **1.000 ljudi**.
-- Da biste je napravili, samo unesite naziv grupe. Pozivanje se vrši putem «poveznice za pozivanje u grupu». Osoba koja primi poveznicu može se pridružiti unosom imena.
+- Da biste je napravili, samo unesite naziv grupe pod «Napravi grupu» u «Dodaj prijatelja» (možete je napraviti i naredbom `/newgroup`). Pozivanje se vrši putem «poveznice za pozivanje u grupu». Osoba koja primi poveznicu može se pridružiti unosom imena.
 - I u grupama se mogu slati datoteke, ali je granica mala, oko 50KB. Glasovne poruke u grupama još se ne mogu slati.
 - Ako postoji član koji koristi staru verziju aplikacije, u toj se grupi ne može koristiti sigurniji novi način (grupa v5) i na zaslonu se pojavljuje upozorenje. Aktivira se kad svi prijeđu na najnoviju verziju.
 
@@ -81,7 +95,7 @@ Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 
 ## 5. Pozivi
 
-- Mogu se obavljati glasovni pozivi i videopozivi jedan na jedan. Postoje i grupni pozivi.
+- Mogu se obavljati glasovni pozivi i videopozivi jedan na jedan. Postoje i grupni pozivi (do 8 ljudi).
 - **Kod za provjeru poziva**: Na zaslonu poziva prikazuje se kod za provjeru. Pročitajte ga jedno drugom s drugom stranom i provjerite podudara li se na oba zaslona. Ako se ne podudara, možda netko prisluškuje usput. U tom slučaju prekinite poziv.
 - Grupni pozivi možda se ne mogu započeti ako aplikacije svih sudionika nisu najnovija verzija.
 
@@ -91,11 +105,15 @@ Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 
 - Da biste isti identitet koristili na više uređaja, povežite uređaje naredbom `/link`.
 - Račune možete napraviti više i koristiti ih odvojeno (na primjer, poslovni i privatni). I broj uređaja i broj računa besplatni su i neograničeni.
-- Jezik se automatski bira iz 8 jezika: engleski, japanski, korejski, kineski (Tajvan), španjolski, tajlandski, indonezijski i portugalski (Brazil).
+- **Kako napraviti račun**: Pritisnite gumb «+» pored kartica računa na samom vrhu popisa kontakata. Unesite ime i odaberite emoji ikonu, i novi će račun biti napravljen i automatski prebačen na njega.
+- **Promjena računa**: Kartice računa uvijek se prikazuju na samom vrhu popisa kontakata. Pritisnite jednu da biste se prebacili (na računalu se možete prebaciti i s Ctrl+1–9). Pritisnite i držite karticu da biste joj promijenili ime, promijenili ikonu ili je obrisali.
+- Jezik se automatski bira iz 51 jezika, uključujući engleski, prema jeziku vašeg uređaja.
 
 ---
 
 ## 7. Postavke koje čuvaju sigurnost
+
+Postavke se otvaraju kao poseban zaslon. Na telefonu ih otvorite s kartice «Postavke» na dnu zaslona; na računalu s gumba zupčanika na zaslonu (možete ih otvoriti i naredbom `/settings`). Da biste se vratili na zaslon na kojem ste bili, koristite radnju natrag.
 
 - **Automatsko zaključavanje**: Postoji postavka za automatsko zaključavanje pri promjeni kartice.
 - **Lozinka za ključ**: Ključ u uređaju možete zaštititi omotavanjem lozinkom. Pri otvaranju aplikacije traži se unos.
@@ -103,14 +121,31 @@ Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 
 ---
 
-## 8. Sigurnosna kopija i oporavak (najvažnije poglavlje)
+## 8. Baterija i hitni slučajevi (načini napajanja)
+
+U postavci «Način napajanja» možete odabrati kako se baterija koristi.
+
+- **Automatski (razina baterije)**: Automatski se prebacuje prema tome koliko je baterije ostalo.
+- **Normalni**: Kao i obično.
+- **Ušteda energije**: Provjere isporuke razrjeđuje na najviše jednom u 60 sekundi i zaustavlja signal prisutnosti.
+- **Hitni (za katastrofe)**: Provjere isporuke razrjeđuje na najviše jednom u 10 minuta. Koristite ga u katastrofi ili drugom vremenu kada se ne možete napuniti.
+
+Bateriju ne troši količina komunikacije, već broj buđenja radija. Zato se strana koja šalje ne razrjeđuje; samo strana koja sluša. Slanje i dalje odlazi odmah, kao i uvijek. Kad počnete puniti, automatski se vraća jedan korak prema lakšoj strani.
+
+Na uređajima koji ne mogu automatski očitati razinu baterije (kao što je preglednik na iPhoneu), «Automatski» se ponaša kao Normalni, a ručni izbor radi kako je odabran.
+
+---
+
+## 9. Sigurnosna kopija i oporavak (najvažnije poglavlje)
 
 Identitet Breezea samo je ključ u vašem uređaju. Na poslužitelju ne postoji popis računa, a ni autor nema vaš ključ.
 **Ako izgubite uređaj, gubite i identitet.** Za važne identitete obavezno napravite sigurnosnu kopiju.
 
+Sigurnosna kopija i oporavak rade se iz odjeljka «Sigurnosna kopija i oporavak» u postavkama (postoje tri gumba: «Sigurnosna kopija u oblak», «Vrati» i «Vrati iz datoteke»). Kad prvi put dodate kontakt, jednom se pojavljuje kartica koja vas potiče da napravite sigurnosnu kopiju.
+
 ### Kako napraviti sigurnosnu kopiju
 
-1. Odaberite «Napravi sigurnosnu kopiju».
+1. Iz «Sigurnosne kopije i oporavka» u postavkama odaberite da napravite sigurnosnu kopiju.
 2. Postavite lozinku za sigurnosnu kopiju (6 znakova ili više).
 3. Odaberite mjesto čuvanja.
    - **Čuvanje u datoteku**: Datoteku sigurnosne kopije čuvajte kod sebe (preporučeno).
@@ -130,7 +165,7 @@ Na novom uređaju oporavite koristeći datoteku sigurnosne kopije (ili sigurnosn
 
 ---
 
-## 9. Spremnik za čuvanje i pristup troškovima
+## 10. Spremnik za čuvanje i pristup troškovima
 
 - Pisma za vrijeme kad je druga strana izvan mreže stavljaju se šifrirana u «spremnik za čuvanje» relejnog poslužitelja (najviše 7 dana).
 - Relej ima granice radi sprječavanja zloporabe (količina koja se može čuvati i učestalost). Kad se granica dosegne, u tom se razdoblju nova pisma ne mogu čuvati, ali **već dostavljena pisma nikada ne nestaju**. Na zaslonu se prikazuju razlog i vrijeme čekanja.
@@ -147,7 +182,7 @@ Opseg zapisa koji ostaju na strani poslužitelja (sve se automatski briše i sad
 
 ---
 
-## 10. Kako ažurirati (verzija za računalo)
+## 11. Kako ažurirati (verzija za računalo)
 
 1. Kad postoji nova verzija, na zaslonu se pojavljuje obavijest.
 2. Kad pritisnete «Preuzmi», nova se verzija donosi (ne instalira se automatski).
@@ -157,7 +192,7 @@ Ako tijekom ažuriranja dođe do pogreške (npr. provjera datoteke se ne podudar
 
 ---
 
-## 11. Kad imate problem
+## 12. Kad imate problem
 
 | Simptom | Što provjeriti |
 |---|---|
@@ -167,13 +202,13 @@ Ako tijekom ažuriranja dođe do pogreške (npr. provjera datoteke se ne podudar
 | Kod za provjeru poziva se ne podudara | Prekinite poziv i nazovite ponovno. Ne nastavljajte dok se ne podudara. |
 | Zaboravili ste lozinku | Oporavak nije moguć. Napravite novi identitet i ponovno obavijestite drugu stranu. |
 | Izgubili ste uređaj | Ako imate sigurnosnu kopiju, možete oporaviti na novom uređaju. Ako je nemate, postaje novi identitet. |
-| Probna stranica se ne otvara (404) | Trenutačno je zaustavljena. Koristite verziju aplikacije. |
+| Uzorna stranica se ne otvara | Uzorak se može zaustaviti bez najave. Koristite kopiju postavljenu na svoj poslužitelj. |
 
 Prijave pogrešaka šaljite na [stranicu Issue](https://github.com/shizukutanaka/Breeze/issues).
 
 ---
 
-## 12. Obećanja Breezea
+## 13. Obećanja Breezea
 
 - Ne prikazujemo oglase. Ni u aplikaciji ni bilo gdje drugdje.
 - Ne pratimo. Nema analitike korištenja, oglasnih mehanizama ni prodaje podataka.
@@ -184,4 +219,4 @@ Detaljna usporedba s drugim messengerima napisana je na «stranici za usporedbu�
 
 ---
 
-*Ovaj je priručnik sadržaj iz vremena Breezea v3.8.0.*
+*Ovaj priručnik odražava stanje Breezea na dan 2026-11-25.*

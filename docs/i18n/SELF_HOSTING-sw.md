@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Hiyo tu.** Vipengele vyote hufanya kazi isipokuwa arifa za push. Kumbuka
@@ -215,9 +215,9 @@ ufungaji wa kufungwa-kama-chaguomsingi ni njia ya Docker hapo juu.
 | Ujumbe wa P2P | ✓ | WebRTC DataChannel |
 | Simu za sauti/video | ✓ | WebRTC + STUN ya bure |
 | Relay ya TURN | ✓ | Open Relay (20GB/mwezi bure) |
-| Vikundi (wanachama 100) | ✓ | Sender Key O(1) |
+| Vikundi (wanachama 1,000) | ✓ | Sender Key O(1) |
 | Uhamishaji wa faili | ✓ | Hadi 50MB kupitia P2P |
-| Lugha 8 | ✓ | EN + maeneo 7 kamili, hugunduliwa kiotomatiki |
+| Lugha 51 | ✓ | Kiingereza kimejengwa ndani + faili 50 kamili za maeneo, hugunduliwa kiotomatiki |
 | Nje ya mtandao/PWA | ✓ | Service Worker |
 | Arifa za push | ✗ | Inahitaji funguo za VAPID |
 
@@ -233,7 +233,7 @@ akaunti ndogo za ndani zisizo na kikomo bure bila lango la mpango.
 | Usomaji wa KV | 100,000/siku | ~200/siku |
 | Uandikaji wa KV | 1,000/siku | ~350/siku (umeboreshwa) |
 | Uhifadhi wa KV | 1 GB | ~10 KB/mtumiaji |
-| Mali tuli | Bila kikomo | ~400 KB (HTML moja) |
+| Mali tuli | Bila kikomo | ~894 KB (HTML moja) |
 
 **Inasaidia watumiaji wapatao 3 wanaofanya kazi kwa wakati mmoja kwenye kiwango cha bure.**
 

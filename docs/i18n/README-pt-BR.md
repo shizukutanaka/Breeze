@@ -37,24 +37,17 @@ Para detalhes de uso, veja o [manual](MANUAL-pt-BR.md) (versões em outros idiom
 
 Escrevemos também o alcance, com honestidade. Para fazer a entrega, o servidor guarda itens por pouco tempo (envelopes não entregues por no máximo 7 dias, sinais de conexão por 5 minutos, registros de endereços e dispositivos por 90 dias, informações de grupos e inscrições de notificações por 30 dias. Tudo é apagado automaticamente, e o conteúdo não pode ser lido). O backup na nuvem vem desativado no início. Se você hospedar no seu próprio servidor, essa guarda também fica sob o seu controle.
 
-## Projetado para que o crime não compense
-
-O Breeze foi feito para custar tempo e dinheiro a quem tentar abusar dele. Não dizemos que ele “torna o crime impossível”. É um projeto para fazer com que “não compense”.
-
-- **Não há base gratuita para pegar carona.** Como não existe um servidor central gratuito, quem quiser abusar também terá de preparar o espaço com uma conta em seu próprio nome e com seus próprios custos.
-- **Enviar tem um custo.** A cada envio, exige-se um pequeno cálculo (prova de trabalho) e há limites de quantidade. Envios abusivos em massa não compensam.
-- **É possível denunciar sem margem para desculpas.** Quem recebe pode denunciar usando como prova a própria transmissão recebida. Quem enviou não pode alegar que “não enviou”.
-- **Quem hospeda tem o poder de interromper.** O que acontece no seu próprio servidor, você pode parar sozinho. Não precisa da permissão de ninguém.
-
 ## O que ele faz
 
 - Conversas individuais e em grupo (até 1.000 pessoas)
-- Chamadas de voz e de vídeo
+- Chamadas de voz e de vídeo (chamadas em grupo com até 8 pessoas)
 - Envio de arquivos (até 50 MB em conversas individuais. Em grupos também é possível, mas o limite de tamanho é menor)
 - Uso em vários dispositivos e com várias contas (por exemplo, trabalho e pessoal. Tanto o número de dispositivos quanto o de contas é gratuito e ilimitado)
-- Selecionado automaticamente entre 8 idiomas (inglês, japonês, coreano, chinês (Taiwan), espanhol, tailandês, indonésio e português)
+- 51 idiomas (inglês mais 50 arquivos de idioma), selecionados automaticamente de acordo com o idioma do seu dispositivo
 - Perfil com foto, figurinhas e compartilhamento de localização
-- Comandos como `/help` (mais de 60 tipos)
+- Comandos como `/help` (71 tipos)
+- Modos de energia de acordo com a sua bateria (automático / normal / economia de energia / emergência). À medida que a bateria diminui, as verificações de entrega são espaçadas para a bateria durar mais. Uma proteção para desastres e outras situações em que você não pode recarregar
+- Telas fáceis de ler (atenção ao contraste das cores, ao tamanho do texto e à operação apenas com o teclado)
 
 ## Diferenças para outros mensageiros
 

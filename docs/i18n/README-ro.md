@@ -37,24 +37,17 @@ Instrucțiunile detaliate de utilizare se află în [manual](MANUAL-ro.md) (vers
 
 Din onestitate, scriem și limitele. Pentru livrare, pe server există o păstrare de scurtă durată (plicurile nelivrate cel mult 7 zile, semnalele de conectare 5 minute, înregistrările de adrese și dispozitive 90 de zile, informațiile despre grupuri și abonările la notificări 30 de zile; toate se șterg automat și conținutul nu poate fi citit). Salvarea de rezervă în cloud este dezactivată la început. Dacă îl instalați pe propriul server, și această păstrare ajunge sub administrarea dumneavoastră.
 
-## Proiectat astfel încât folosirea în scopuri infracționale să nu merite
-
-Breeze este construit astfel încât abuzul să fie costisitor și complicat pentru cel care abuzează. Nu spunem că „face infracțiunea imposibilă”. Este o proiectare care face ca aceasta „să nu merite”.
-
-- **Nu există o bază gratuită de care să profiți.** Nu există un server central gratuit, așa că nici cel care abuzează nu are altă variantă decât să își asigure găzduirea cu un cont pe numele său și pe cheltuiala sa.
-- **Trimiterea implică o sarcină.** La fiecare trimitere se cere un mic calcul (proof of work), iar cantitățile au limite. Trimiterile abuzive în masă nu merită.
-- **Se poate face o raportare care nu poate fi negată.** Persoana care a primit poate raporta însăși trimiterea primită drept dovadă. Partea care a trimis nu poate nega că a trimis.
-- **Dreptul de a opri aparține celui care a instalat.** Ceea ce se întâmplă pe propriul server puteți opri dumneavoastră. Nu este nevoie de permisiunea nimănui.
-
 ## Ce poate face
 
 - Conversații individuale și conversații de grup (până la 1.000 de persoane)
-- Apeluri vocale și apeluri video
+- Apeluri vocale și apeluri video (apeluri de grup cu până la 8 persoane)
 - Trimitere de fișiere (în conversațiile individuale până la 50 MB. Se pot trimite și în grup, dar limita de dimensiune este mai mică.)
 - Utilizarea separată a mai multor dispozitive și a mai multor conturi (de exemplu pentru serviciu și pentru uz personal; atât numărul de dispozitive, cât și numărul de conturi sunt gratuite și nelimitate)
-- Este selectat automat dintre 8 limbi (engleză, japoneză, coreeană, chineză (Taiwan), spaniolă, thailandeză, indoneziană, portugheză)
+- 51 de limbi (engleza plus 50 de fișiere de limbă), selectate automat pentru a se potrivi cu limba dispozitivului dumneavoastră
 - Profil cu fotografie, stickere, partajarea locației
-- Operare prin comenzi, precum `/help` (peste 60 de tipuri)
+- Operare prin comenzi, precum `/help` (71 de tipuri)
+- Moduri de alimentare adaptate bateriei dumneavoastră (automat / normal / economisire a energiei / urgență). Pe măsură ce bateria scade, verificările de livrare sunt spațiate, pentru ca bateria să țină mai mult. O protecție pentru dezastre și alte momente în care nu puteți reîncărca
+- Ecrane ușor de citit (atenție la contrastul culorilor, dimensiunea textului și operarea doar cu tastatura)
 
 ## Diferențe față de alte servicii de mesagerie
 

@@ -195,7 +195,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Hepsi bu.** Push bildirimleri dışında tüm özellikler çalışır. Şunu unutmayın:
@@ -210,9 +210,9 @@ bir Cloudflare kurulumunda kayıt, siz kendiniz `REGISTRATION_ALLOWLIST` ayarlam
 | P2P mesajlaşma | ✓ | WebRTC DataChannel |
 | Sesli/görüntülü aramalar | ✓ | WebRTC + ücretsiz STUN |
 | TURN aktarımı | ✓ | Open Relay (ayda 20 GB ücretsiz) |
-| Gruplar (100 üye) | ✓ | Sender Key O(1) |
+| Gruplar (1.000 üye) | ✓ | Sender Key O(1) |
 | Dosya aktarımı | ✓ | P2P üzerinden 50 MB'a kadar |
-| 8 dil | ✓ | EN + 7 tam locale, otomatik algılanır |
+| 51 dil | ✓ | İngilizce yerleşik + 50 tam locale dosyası, otomatik algılanır |
 | Çevrimdışı/PWA | ✓ | Service Worker |
 | Push bildirimleri | ✗ | VAPID anahtarları gerekir |
 
@@ -228,7 +228,7 @@ plan kapısı olmadan, ücretsiz ve sınırsız yerel alt hesap alır.
 | KV okumaları | 100.000/gün | ~200/gün |
 | KV yazmaları | 1.000/gün | ~350/gün (iyileştirilmiş) |
 | KV depolama | 1 GB | ~10 KB/kullanıcı |
-| Statik dosyalar | Sınırsız | ~400 KB (tek HTML) |
+| Statik dosyalar | Sınırsız | ~894 KB (tek HTML) |
 
 **Ücretsiz katmanda ~3 eşzamanlı aktif kullanıcıyı destekler.**
 

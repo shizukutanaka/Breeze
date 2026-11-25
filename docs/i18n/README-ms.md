@@ -37,24 +37,17 @@ Cara penggunaan yang terperinci ada dalam [manual](MANUAL-ms.md) (bahasa lain bo
 
 Kami juga menulis skopnya dengan jujur. Untuk penghantaran, pelayan menyimpan beberapa perkara untuk masa yang singkat (sampul yang belum dihantar maksimum 7 hari, isyarat sambungan 5 minit, rekod alamat dan peranti 90 hari, maklumat kumpulan dan langganan pemberitahuan 30 hari. Semuanya dipadam secara automatik, dan kandungannya tidak boleh dibaca). Sandaran awan dilumpuhkan pada mulanya. Jika anda meletakkannya pada pelayan anda sendiri, penyimpanan itu pun berada di bawah kawalan anda sendiri.
 
-## Direka supaya tidak berbaloi digunakan untuk jenayah
-
-Breeze dibuat supaya pihak yang menyalahgunakannya menanggung kos dan usaha. Kami tidak mengatakan "menjadikan jenayah mustahil". Ia adalah reka bentuk yang "menjadikannya tidak berbaloi".
-
-- **Tiada tapak untuk menumpang secara percuma.** Oleh kerana tiada pelayan percuma pusat, orang yang ingin menyalahgunakannya pun tiada pilihan selain menyediakan tempat dengan akaun atas nama sendiri dan atas kos sendiri.
-- **Penghantaran mempunyai beban.** Setiap penghantaran memerlukan sedikit pengiraan (bukti kerja), dan had kuantiti juga ditetapkan. Penghantaran spam secara besar-besaran tidak berbaloi.
-- **Laporan yang tidak boleh dinafikan boleh dibuat.** Orang yang menerima boleh melaporkan penghantaran yang diterima itu sendiri sebagai bukti. Pihak yang menghantar tidak boleh menafikan dengan berkata "saya tidak menghantarnya".
-- **Kuasa untuk menghentikan berada pada orang yang meletakkannya.** Apa yang berlaku pada pelayan anda sendiri boleh dihentikan oleh anda sendiri. Tiada kebenaran sesiapa diperlukan.
-
 ## Perkara yang boleh dilakukan
 
 - Perbualan 1 lawan 1 dan perbualan kumpulan (sehingga 1,000 orang)
-- Panggilan suara dan panggilan video
+- Panggilan suara dan panggilan video (panggilan kumpulan sehingga 8 orang)
 - Penghantaran fail (dalam 1 lawan 1, sehingga 50MB. Dalam kumpulan juga boleh dihantar, tetapi had saiznya lebih kecil)
 - Penggunaan berbilang peranti dan berbilang akaun (seperti untuk kerja dan peribadi. Bilangan peranti dan akaun kedua-duanya percuma dan tanpa had)
-- Dipilih secara automatik daripada 8 bahasa (Bahasa Inggeris, Bahasa Jepun, Bahasa Korea, Bahasa Cina (Taiwan), Bahasa Sepanyol, Bahasa Thai, Bahasa Indonesia, Bahasa Portugis)
+- 51 bahasa (Bahasa Inggeris ditambah 50 fail bahasa), dipilih secara automatik mengikut bahasa peranti anda
 - Profil dengan gambar, pelekat, perkongsian lokasi
-- Operasi arahan seperti `/help` (lebih 60 jenis)
+- Operasi arahan seperti `/help` (71 jenis)
+- Mod kuasa mengikut bateri anda (automatik / biasa / penjimatan kuasa / kecemasan). Apabila bateri semakin berkurangan, semakan penghantaran dijarakkan supaya bateri tahan lebih lama. Perlindungan untuk bencana dan ketika anda tidak dapat mengecas
+- Skrin yang mudah dibaca (menitikberatkan kontras warna, saiz teks, dan pengendalian dengan papan kekunci sahaja)
 
 ## Perbezaan dengan pengirim mesej lain
 

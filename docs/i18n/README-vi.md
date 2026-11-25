@@ -37,24 +37,17 @@ Cách sử dụng chi tiết có trong [sách hướng dẫn](MANUAL-vi.md) (có
 
 Chúng tôi cũng viết trung thực về phạm vi. Để chuyển phát, máy chủ lưu giữ một số thứ trong thời gian ngắn (phong bì chưa chuyển phát tối đa 7 ngày, tín hiệu kết nối 5 phút, bản ghi địa chỉ và thiết bị 90 ngày, thông tin nhóm và đăng ký thông báo 30 ngày. Tất cả đều tự động bị xóa, và nội dung không thể đọc được). Sao lưu lên đám mây bị tắt ban đầu. Nếu bạn đặt nó trên máy chủ của mình, việc lưu giữ đó cũng nằm dưới sự quản lý của bạn.
 
-## Được thiết kế để việc dùng vào tội phạm không đáng công
-
-Breeze được làm ra sao cho phía lạm dụng phải chịu chi phí và công sức. Chúng tôi không nói rằng "làm cho tội phạm trở nên không thể". Đây là thiết kế "làm cho nó không đáng công".
-
-- **Không có nền tảng để đi nhờ miễn phí.** Vì không có máy chủ miễn phí trung tâm, người muốn lạm dụng cũng không còn cách nào khác ngoài việc tự chuẩn bị nơi đặt bằng tài khoản mang tên mình và bằng chi phí của mình.
-- **Việc gửi có gánh nặng.** Mỗi lần gửi đều yêu cầu một phép tính nhỏ (bằng chứng công việc), và giới hạn số lượng cũng được đặt ra. Gửi spam hàng loạt không đáng công.
-- **Có thể tố cáo mà không thể chối cãi.** Người nhận có thể tố cáo chính lần gửi đã nhận được đó làm bằng chứng. Phía gửi không thể chối rằng "tôi không gửi".
-- **Quyền dừng lại nằm ở người đặt.** Những gì xảy ra trên máy chủ của bạn, bạn có thể tự dừng. Không cần sự cho phép của bất kỳ ai.
-
 ## Những điều có thể làm
 
 - Trò chuyện 1 đối 1 và trò chuyện nhóm (tối đa 1.000 người)
-- Gọi thoại và gọi video
+- Gọi thoại và gọi video (gọi nhóm tối đa 8 người)
 - Gửi tệp (trong trò chuyện 1 đối 1, tối đa 50MB. Trong nhóm cũng gửi được, nhưng giới hạn kích thước nhỏ hơn)
 - Sử dụng nhiều thiết bị, nhiều tài khoản (chẳng hạn công việc và cá nhân. Cả số thiết bị và số tài khoản đều miễn phí và không giới hạn)
-- Tự động chọn từ 8 ngôn ngữ (tiếng Anh, tiếng Nhật, tiếng Hàn, tiếng Trung (Đài Loan), tiếng Tây Ban Nha, tiếng Thái, tiếng Indonesia, tiếng Bồ Đào Nha)
+- 51 ngôn ngữ (tiếng Anh cộng thêm 50 tệp ngôn ngữ), được chọn tự động theo ngôn ngữ của thiết bị của bạn
 - Hồ sơ có ảnh, nhãn dán, chia sẻ vị trí
-- Thao tác bằng lệnh như `/help` (hơn 60 loại)
+- Thao tác bằng lệnh như `/help` (71 loại)
+- Chế độ nguồn phù hợp với pin của bạn (tự động / bình thường / tiết kiệm pin / khẩn cấp). Khi pin yếu dần, việc kiểm tra thư đến được giãn cách để pin dùng được lâu hơn. Một biện pháp bảo vệ cho thảm họa và những lúc không thể sạc pin
+- Màn hình dễ đọc (chú trọng độ tương phản màu, cỡ chữ và thao tác chỉ bằng bàn phím)
 
 ## Khác biệt với các ứng dụng nhắn tin khác
 

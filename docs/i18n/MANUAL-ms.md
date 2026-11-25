@@ -24,16 +24,19 @@ Dari [halaman muat turun](https://github.com/shizukutanaka/Breeze/releases/lates
 
 Setiap fail disertakan dengan nilai semakan (SHA256SUMS.txt). Jika anda bimbang, anda boleh menyemak sama ada nilai fail yang dimuat turun sepadan.
 
-> **Tentang halaman percubaan**: Halaman percubaan yang pernah diterbitkan (breeze.pages.dev) kini dihentikan (apabila dibuka, ia menjadi 404). Sila gunakan versi aplikasi sehingga ia dipulihkan. Apa yang diletakkan pada pelayan anda sendiri tidak terjejas oleh pemberhentian ini.
+> **Tentang halaman contoh**: Sebuah halaman contoh untuk memeriksa cara ia berfungsi (https://breeze-469.pages.dev/) disediakan. Perisian yang diletakkan di sana adalah sama, tetapi contoh tersebut mungkin berubah atau berhenti tanpa notis. Untuk penggunaan sebenar, sila gunakan salinan yang diletakkan pada pelayan anda sendiri. Salinan pada pelayan anda sendiri tidak terjejas jika contoh tersebut berhenti.
 
 ### Persediaan pertama
 
 1. Buka aplikasi.
-2. Masukkan nama anda. Itu sahaja persediaannya. Tiada pendaftaran, tiada nombor telefon diperlukan.
+2. Masukkan nama anda dan tekan "Buat akaun". Itu sahaja persediaannya. Tiada pendaftaran, tiada nombor telefon diperlukan.
+
+- Jika anda ingin mengembalikan identiti yang pernah anda buat sebelum ini, buka "Pulihkan akaun sedia ada" dan cara pemulihan (fail sandaran, frasa pemulihan, dan sebagainya) akan muncul.
+- Apabila penciptaan selesai, sebuah kad muncul yang memandu anda untuk melindungi kunci anda dengan frasa laluan (ia tidak hilang selepas beberapa ketika). Untuk identiti yang penting, ikuti panduan tersebut dan tambahkan perlindungannya.
 
 Pada masa ini, sebuah "kunci" dicipta di dalam peranti. Itulah identiti anda sendiri.
 **Senarai akaun tidak wujud di pelayan.** Identiti hanya berada di dalam peranti anda.
-Perkara ini menjadi penting dalam bab sandaran (8).
+Perkara ini menjadi penting dalam bab sandaran (9).
 
 ### Tentang "identiti pakai buang"
 
@@ -45,11 +48,13 @@ Perkara itu juga dipaparkan pada skrin. Jangan pilih untuk identiti yang akan di
 
 ## 2. Berhubung dengan pihak lain
 
-Terdapat 3 cara untuk berhubung dengan orang yang ingin anda ajak berbual.
+Tekan butang "Tambah rakan" pada skrin kenalan dan tiga pilihan akan muncul.
 
-- **Serahkan ID**: Beritahu ID anda kepada pihak lain, dan minta mereka memasukkannya.
-- **Kod QR**: Paparkan kod QR jemputan, dan minta pihak lain mengimbasnya.
-- **Pautan jemputan**: Salin mesej jemputan dari "Jemput rakan", dan hantar melalui cara hubungan biasa anda (e-mel dan sebagainya). Apabila pihak lain membuka pautan dan memasukkan nama, mereka boleh terus berbual.
+- **Tambah kenalan**: Masukkan ID pihak lain, atau imbas kod QR.
+- **Jemput rakan**: Salin pautan jemputan dan hantar melalui cara hubungan biasa anda (e-mel dan sebagainya). Apabila pihak lain membuka pautan dan memasukkan nama, anda boleh terus berbual.
+- **Buat kumpulan**: Hanya masukkan nama kumpulan untuk membuatnya (bab 4).
+
+ID anda sendiri dipaparkan dalam bentuk lengkapnya apabila anda membuka profil anda sendiri, dan anda boleh menyalinnya seperti sedia ada. Anda boleh menyerahkan ID lengkap, bukan ID ringkas sahaja.
 
 Jika pihak lain juga membuka aplikasi, anda boleh berhubung secara terus dan berbual.
 
@@ -58,14 +63,23 @@ Jika pihak lain juga membuka aplikasi, anda boleh berhubung secara terus dan ber
 ## 3. Perbualan
 
 - Hanya masukkan mesej dan hantar. Gambar, pelekat dan maklumat lokasi juga boleh dihantar.
+- Buka "+" di sebelah medan input dan lampiran fail, mesej suara, input suara, maklumat lokasi, pelekat, tetapan "tiada balasan diperlukan", dan lain-lain akan muncul bersama.
 - **Penghantaran fail**: Dalam perbualan 1 lawan 1, sehingga maksimum 50MB. Dalam kumpulan, lebih kecil iaitu kira-kira 50KB.
 - Fail dalam format berbahaya seperti fail boleh laksana akan disekat secara automatik.
 - Apabila pihak lain tidak membuka aplikasi, mesej diletakkan dalam keadaan terenkripsi di dalam "peti simpanan", dan akan dihantar apabila mereka membukanya. Pelayan yang membawa peti simpanan tidak boleh membaca kandungannya. Surat yang tidak sampai akan dipadam secara automatik selepas **maksimum 7 hari**.
 - Sejarah perbualan boleh dieksport ke fail atau diimport.
 
+### Membaca skrin
+
+- **Status penghantaran**: Boleh diketahui daripada tanda di sebelah mesej. ✓ bermaksud telah dihantar, ✓ di dalam bulatan bermaksud telah disimpan dalam peti simpanan, ✓✓ bermaksud telah sampai kepada pihak lain, telah dibaca ialah tanda biru, dan gagal ialah tanda merah. Tanda-tanda itu dibezakan melalui bentuk selain warna.
+- **Senarai kenalan**: Masa terakhir anda berbual dipaparkan sebagai masa untuk hari ini, "Semalam" untuk semalam, bulan/hari untuk tahun ini, dan tahun/bulan/hari untuk yang lebih awal. Kenalan yang mempunyai mesej belum dibaca akan ditonjolkan nama dan masanya.
+- **Kad anda sendiri**: Di bahagian atas senarai ialah kad profil anda sendiri; tekan untuk membuka profil anda. Ia menatal bersama senarai.
+- **Tab bawah pada telefon**: Pada lebar telefon, tab "Kenalan" dan "Tetapan" muncul di bahagian bawah skrin.
+- **Pengepala perbualan**: Daripada ikon carian, anda boleh mencari di dalam perbualan. Daripada menu "⋮", anda boleh menyemak nombor keselamatan, menyenyapkan pemberitahuan, menyemat, membuat undian, dan lain-lain.
+
 ### Arahan
 
-Apabila anda memasukkan `/help` dalam medan input, senarai arahan yang boleh digunakan (lebih 60 jenis) akan dipaparkan.
+Menaip `/` dalam medan input akan memaparkan cadangan arahan. Taip `/help` untuk melihat senarai arahan yang boleh digunakan (71 jenis).
 Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 
 ---
@@ -73,7 +87,7 @@ Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 ## 4. Kumpulan
 
 - Kumpulan boleh memuatkan sehingga **1,000 orang**.
-- Cara membuatnya hanyalah memasukkan nama kumpulan. Jemputan dibuat dari "Pautan jemputan kumpulan". Orang yang menerima pautan boleh menyertai dengan memasukkan nama.
+- Cara membuatnya hanyalah memasukkan nama kumpulan pada "Buat kumpulan" dalam "Tambah rakan" (anda juga boleh membuatnya dengan arahan `/newgroup`). Jemputan dibuat dari "Pautan jemputan kumpulan". Orang yang menerima pautan boleh menyertai dengan memasukkan nama.
 - Fail juga boleh dihantar dalam kumpulan, tetapi hadnya kecil iaitu kira-kira 50KB. Mesej suara belum boleh dihantar dalam kumpulan.
 - Jika terdapat ahli yang menggunakan aplikasi versi lama, kaedah baharu yang lebih selamat (kumpulan v5) tidak boleh digunakan dalam kumpulan itu, dan amaran akan dipaparkan pada skrin. Ia menjadi aktif apabila semua orang menggunakan versi terkini.
 
@@ -81,7 +95,7 @@ Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 
 ## 5. Panggilan
 
-- Panggilan suara dan panggilan video 1 lawan 1 boleh dibuat. Panggilan kumpulan juga ada.
+- Panggilan suara dan panggilan video 1 lawan 1 boleh dibuat. Panggilan kumpulan juga ada (sehingga 8 orang).
 - **Kod pengesahan panggilan**: Kod pengesahan dipaparkan pada skrin panggilan. Bacakan sesama anda dengan pihak lain, dan sahkan sama ada ia sepadan pada kedua-dua skrin. Jika tidak sepadan, ada kemungkinan seseorang sedang mencuri dengar di tengah jalan. Dalam kes itu, tamatkan panggilan.
 - Panggilan kumpulan mungkin tidak boleh dimulakan jika aplikasi semua orang bukan versi terkini.
 
@@ -91,11 +105,15 @@ Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 
 - Untuk menggunakan identiti yang sama pada berbilang peranti, pautkan peranti sesama sendiri dengan arahan `/link`.
 - Akaun boleh dibuat berbilang dan digunakan secara berasingan (seperti untuk kerja dan peribadi). Bilangan peranti dan akaun kedua-duanya percuma dan tanpa had.
-- Bahasa dipilih secara automatik daripada 8 bahasa: Bahasa Inggeris, Bahasa Jepun, Bahasa Korea, Bahasa Cina (Taiwan), Bahasa Sepanyol, Bahasa Thai, Bahasa Indonesia dan Bahasa Portugis (Brazil).
+- **Cara membuat akaun**: Tekan butang "+" di sebelah tab akaun di bahagian paling atas senarai kenalan. Masukkan nama dan pilih emoji ikon, maka akaun baharu dibuat dan ditukar secara automatik kepadanya.
+- **Menukar akaun**: Tab akaun sentiasa dipaparkan di bahagian paling atas senarai kenalan. Tekan satu tab untuk menukar (pada komputer, anda juga boleh menukar dengan Ctrl+1–9). Tekan dan tahan tab untuk menamakan semula, menukar ikonnya, atau memadamnya.
+- Bahasa dipilih secara automatik daripada 51 bahasa, termasuk Bahasa Inggeris, mengikut bahasa peranti anda.
 
 ---
 
 ## 7. Tetapan untuk kekal selamat
+
+Tetapan dibuka sebagai skrinnya sendiri. Pada telefon, buka dari tab "Tetapan" di bahagian bawah skrin; pada komputer, dari butang gear pada skrin (anda juga boleh membukanya dengan arahan `/settings`). Gunakan tindakan kembali untuk kembali ke skrin sebelumnya.
 
 - **Kunci automatik**: Terdapat tetapan untuk mengunci secara automatik apabila anda menukar tab.
 - **Frasa laluan kunci**: Kunci di dalam peranti boleh dilindungi dengan membalutnya dalam frasa laluan. Anda akan diminta memasukkannya apabila membuka aplikasi.
@@ -103,14 +121,31 @@ Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 
 ---
 
-## 8. Sandaran dan pemulihan (bab yang paling penting)
+## 8. Bateri dan kecemasan (mod kuasa)
+
+Dalam tetapan "Mod kuasa", anda boleh memilih cara bateri digunakan.
+
+- **Automatik (paras bateri)**: Bertukar secara automatik mengikut baki bateri.
+- **Biasa**: Seperti biasa.
+- **Penjimatan kuasa**: Menjarakkan semakan penghantaran kepada paling kerap sekali setiap 60 saat, dan menghentikan isyarat kehadiran.
+- **Kecemasan (untuk bencana)**: Menjarakkan semakan penghantaran kepada paling kerap sekali setiap 10 minit. Gunakan semasa bencana atau ketika anda tidak dapat mengecas.
+
+Apa yang menghabiskan bateri bukanlah jumlah komunikasi tetapi kekerapan radio bangun. Jadi pihak yang menghantar tidak dijarakkan; hanya pihak yang mendengar. Penghantaran tetap keluar serta-merta, seperti biasa. Apabila anda mula mengecas, ia bergerak kembali satu langkah ke arah yang lebih ringan secara automatik.
+
+Pada peranti yang tidak dapat membaca paras bateri secara automatik (seperti pelayar iPhone), "Automatik" berkelakuan sebagai Biasa, dan pilihan manual berfungsi seperti yang dipilih.
+
+---
+
+## 9. Sandaran dan pemulihan (bab yang paling penting)
 
 Identiti Breeze hanyalah kunci di dalam peranti anda. Senarai akaun tidak wujud di pelayan, dan pencipta pun tidak mempunyai kunci anda.
 **Jika anda kehilangan peranti, identiti juga akan hilang.** Untuk identiti yang penting, pastikan anda membuat sandaran.
 
+Sandaran dan pemulihan dilakukan dari bahagian "Sandaran dan pemulihan" dalam tetapan (terdapat tiga butang: "Sandarkan ke awan", "Pulihkan", dan "Pulihkan dari fail"). Kali pertama anda menambah kenalan, kad yang menggesa anda membuat sandaran muncul sekali sahaja.
+
 ### Cara membuat sandaran
 
-1. Pilih "Buat sandaran".
+1. Dari "Sandaran dan pemulihan" dalam tetapan, pilih untuk membuat sandaran.
 2. Tetapkan frasa laluan untuk sandaran (6 aksara atau lebih).
 3. Pilih destinasi simpanan.
    - **Simpan ke fail**: Simpan fail sandaran di tangan anda sendiri (disyorkan).
@@ -130,7 +165,7 @@ Pada peranti baharu, pulihkan menggunakan fail sandaran (atau sandaran di pelaya
 
 ---
 
-## 9. Peti simpanan dan cara berfikir tentang kos
+## 10. Peti simpanan dan cara berfikir tentang kos
 
 - Surat semasa pihak lain di luar talian diletakkan dalam keadaan terenkripsi di dalam "peti simpanan" pelayan geganti (maksimum 7 hari).
 - Geganti mempunyai had untuk mencegah penyalahgunaan (kuantiti dan kekerapan yang boleh disimpan). Apabila had dicapai, surat baharu tidak boleh disimpan untuk tempoh tersebut, tetapi **surat yang telah sampai tidak akan hilang**. Skrin akan memaparkan sebab dan masa menunggu.
@@ -147,7 +182,7 @@ Skop rekod yang kekal di pihak pelayan (semuanya dipadam secara automatik, dan k
 
 ---
 
-## 10. Cara mengemas kini (versi desktop)
+## 11. Cara mengemas kini (versi desktop)
 
 1. Apabila terdapat versi baharu, notis akan dipaparkan pada skrin.
 2. Apabila anda menekan "Muat turun", ia akan mengambil versi baharu (tidak dipasang secara automatik).
@@ -157,7 +192,7 @@ Jika kemas kini gagal di tengah jalan (seperti nilai semakan fail tidak sepadan)
 
 ---
 
-## 11. Apabila menghadapi masalah
+## 12. Apabila menghadapi masalah
 
 | Gejala | Perkara untuk disemak |
 |---|---|
@@ -167,13 +202,13 @@ Jika kemas kini gagal di tengah jalan (seperti nilai semakan fail tidak sepadan)
 | Kod pengesahan panggilan tidak sepadan | Tamatkan panggilan dan buat panggilan semula. Jangan teruskan dalam keadaan tidak sepadan. |
 | Lupa frasa laluan | Pemulihan tidak boleh dilakukan. Buat identiti baharu dan beritahu semula kepada pihak lain. |
 | Kehilangan peranti | Jika ada sandaran, anda boleh memulihkan pada peranti baharu. Jika tiada, ia menjadi identiti baharu. |
-| Halaman percubaan tidak boleh dibuka (404) | Kini dihentikan. Sila gunakan versi aplikasi. |
+| Halaman contoh tidak boleh dibuka | Contoh mungkin berhenti tanpa notis. Sila gunakan salinan yang diletakkan pada pelayan anda sendiri. |
 
 Laporan pepijat boleh dibuat ke [halaman Issue](https://github.com/shizukutanaka/Breeze/issues).
 
 ---
 
-## 12. Janji Breeze
+## 13. Janji Breeze
 
 - Kami tidak memaparkan iklan. Tidak di dalam aplikasi, tidak di mana-mana.
 - Kami tidak menjejaki anda. Tiada analisis penggunaan, tiada mekanisme pengiklanan, tiada penjualan data langsung.
@@ -184,4 +219,4 @@ Perbandingan terperinci dengan pengirim mesej lain ditulis di "halaman perbandin
 
 ---
 
-*Manual ini ialah kandungan pada masa Breeze v3.8.0.*
+*Manual ini ialah kandungan pada 2026-11-25.*

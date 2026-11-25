@@ -24,16 +24,19 @@ Bu təlimat istifadəyə başlayanlar üçün bələdçidir.
 
 Hər fayla yoxlama rəqəmi (SHA256SUMS.txt) əlavə olunub. İstəsəniz, yüklədiyiniz faylın rəqəminin uyğun gəlib-gəlmədiyini yoxlaya bilərsiniz.
 
-> **Sınaq səhifəsi haqqında**: Yayımladığımız sınaq səhifəsi (breeze.pages.dev) hazırda dayandırılıb (açanda 404 görünür). Bərpa olunana qədər tətbiq versiyasından istifadə edin. Öz serverinizə yerləşdirdiyiniz bu dayanmadan təsirlənmir.
+> **Nümunə səhifəsi haqqında**: Necə işlədiyini yoxlamaq üçün nümunə (https://breeze-469.pages.dev/) təqdim olunur. Orada yerləşdirilən eyni proqramdır, lakin nümunə xəbərdarlıq edilmədən dəyişə və ya dayana bilər. Həqiqi istifadə üçün öz serverinizə yerləşdirdiyiniz nüsxədən istifadə edin. Nümunə dayansa, öz serverinizə yerləşdirdiyiniz təsirlənmir.
 
 ### İlkin quraşdırma
 
 1. Tətbiqi açın.
-2. Adınızı daxil edin. Hazırlıq bununla bitir. Nə qeydiyyat, nə də telefon nömrəsi lazımdır.
+2. Adınızı daxil edin və «Hesab yarat» düyməsini basın. Hazırlıq bununla bitir. Nə qeydiyyat, nə də telefon nömrəsi lazımdır.
+
+- Əvvəllər yaratdığınız şəxsiyyəti geri qaytarmaq istəyirsinizsə, «Mövcud hesabı bərpa et» bölməsini açın və bərpa üsulları (ehtiyat nüsxə faylı, bərpa ifadəsi və s.) görünəcək.
+- Yaratma bitəndə açarınızı parol ifadəsi ilə qorumağa yönəldən kart görünür (bir müddət sonra yox olmur). Vacib şəxsiyyət üçün təlimata əməl edin və qorumanı əlavə edin.
 
 Bu zaman cihazınızın içində «açar» yaradılır. O, sizin şəxsiyyətinizin özüdür.
 **Hesabların siyahısı serverdə yoxdur.** Şəxsiyyət yalnız sizin cihazınızdadır.
-Bu məqam ehtiyat nüsxə fəslində (8) vacib olacaq.
+Bu məqam ehtiyat nüsxə fəslində (9) vacib olacaq.
 
 ### «Birdəfəlik şəxsiyyət» haqqında
 
@@ -45,11 +48,13 @@ Bu, ekranda da göstərilir. Uzun müddət istifadə edəcəyiniz şəxsiyyət �
 
 ## 2. Qarşı tərəflə qoşulmaq
 
-Danışmaq istədiyiniz şəxslə qoşulmağın 3 yolu var.
+Kontaktlar ekranında «Dost əlavə et» düyməsini basın və üç seçim görünəcək.
 
-- **ID vermək**: Öz ID-nizi qarşı tərəfə deyin və ona daxil etdirin.
-- **QR kod**: Dəvət QR kodunu göstərin və qarşı tərəfə oxudun.
-- **Dəvət linki**: «Dostları dəvət et» bölməsindən dəvət mesajını kopyalayıb adi əlaqə vasitənizlə (e-poçt və s.) göndərin. Qarşı tərəf linki açıb adını daxil etsə, dərhal söhbət edə bilərsiniz.
+- **Kontakt əlavə et**: Qarşı tərəfin ID-sini daxil edin və ya QR kodu skan edin.
+- **Dostu dəvət et**: Dəvət linkini kopyalayıb adi əlaqə vasitənizlə (e-poçt və s.) göndərin. Qarşı tərəf linki açıb adını daxil etsə, dərhal söhbət edə bilərsiniz.
+- **Qrup yarat**: Qrup yaratmaq üçün sadəcə qrup adını daxil edin (fəsil 4).
+
+Öz ID-niz öz profilinizi açanda tam formada göstərilir və olduğu kimi kopyalaya bilərsiniz. Yalnız qısa ID-ni deyil, tam ID-ni də verə bilərsiniz.
 
 Qarşı tərəf də tətbiqi açıbsa, birbaşa qoşulub söhbət edə bilərsiniz.
 
@@ -58,14 +63,23 @@ Qarşı tərəf də tətbiqi açıbsa, birbaşa qoşulub söhbət edə bilərsin
 ## 3. Söhbət
 
 - Sadəcə mesaj yazıb göndərin. Şəkil, stiker və məkan da göndərmək olar.
+- Daxiletmə sahəsinin yanındakı «+» işarəsini açın və fayl qoşmaları, səsli mesajlar, səsli daxiletmə, məkan məlumatı, stikerlər, «cavab tələb olunmur» parametri və daha çoxu birlikdə görünəcək.
 - **Fayl göndərmə**: Təkbətək söhbətlərdə ən çox 50MB-a qədər. Qruplarda təxminən 50KB-a qədər, daha kiçikdir.
 - İcra olunan fayllar kimi təhlükəli formatlar avtomatik bloklanır.
 - Qarşı tərəf tətbiqi açmayıbsa, məktub şifrələnmiş halda «saxlama qutusuna» qoyulur və o, tətbiqi açanda çatdırılır. Saxlama qutusunu daşıyan server məzmunu oxuya bilməz. Çatdırıla bilməyən məktublar **ən geci 7 günə** avtomatik silinir.
 - Söhbət tarixçəsini fayla ixrac etmək və ya idxal etmək olar.
 
+### Ekranı oxumaq
+
+- **Göndərmə vəziyyəti**: Mesajın yanındakı işarədən anlaya bilərsiniz. ✓ göndərilib deməkdir, dairə içindəki ✓ saxlama qutusuna qoyulub deməkdir, ✓✓ qarşı tərəfə çatıb deməkdir, oxunub mavi işarədir, uğursuzluq isə qırmızı işarədir. Onlar rənglə yanaşı forma ilə də fərqlənir.
+- **Kontakt siyahısı**: Son danışdığınız vaxt bu gün üçün saat kimi, dünən üçün «Dünən», bu il üçün ay/gün, daha əvvəlkilər üçün il/ay/gün kimi göstərilir. Oxunmamış mesajları olan kontaktların adı və vaxtı vurğulanır.
+- **Öz kartınız**: Siyahının yuxarısında öz profil kartınız var; profilinizi açmaq üçün ona basın. Siyahı ilə birlikdə sürüşür.
+- **Telefonda alt vərəqlər**: Telefon enində ekranın alt hissəsində «Kontaktlar» və «Parametrlər» vərəqləri görünür.
+- **Söhbət başlığı**: Axtarış nişanından söhbət daxilində axtarış edə bilərsiniz. «⋮» menyusundan təhlükəsizlik nömrəsini yoxlaya, bildirişləri susdura, bərkidə, sorğu yarada və daha çoxunu edə bilərsiniz.
+
 ### Əmrlər
 
-Daxiletmə sahəsinə `/help` yazsanız, istifadə oluna bilən əmrlərin siyahısı (60-dan çox növ) görünür.
+Daxiletmə sahəsinə `/` yazın və əmr təklifləri görünəcək. İstifadə edə biləcəyiniz əmrlərin siyahısını görmək üçün `/help` yazın (71 növ).
 Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əmrlərdən yerinə yetirilir.
 
 ---
@@ -73,7 +87,7 @@ Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əm
 ## 4. Qruplar
 
 - Qrupa ən çox **1.000 nəfər** daxil ola bilər.
-- Yaratmaq üçün sadəcə qrup adını daxil edin. Dəvət «qrup dəvət linki»ndən edilir. Linki alan şəxs adını daxil edib qoşula bilər.
+- Yaratmaq üçün «Dost əlavə et» bölməsindəki «Qrup yarat» altında sadəcə qrup adını daxil edin (həmçinin `/newgroup` əmri ilə də yarada bilərsiniz). Dəvət «qrup dəvət linki»ndən edilir. Linki alan şəxs adını daxil edib qoşula bilər.
 - Qruplarda da fayl göndərmək olur, lakin limit təxminən 50KB ilə kiçikdir. Səsli mesajlar qruplarda hələ göndərilə bilmir.
 - Köhnə versiyalı tətbiqdən istifadə edən üzv varsa, həmin qrupda daha təhlükəsiz yeni üsul (qrup v5) istifadə oluna bilmir və ekranda xəbərdarlıq görünür. Hamı ən son versiyaya keçəndə aktivləşir.
 
@@ -81,7 +95,7 @@ Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əm
 
 ## 5. Zənglər
 
-- Təkbətək səsli zənglər və videozənglər etmək olar. Qrup zəngləri də var.
+- Təkbətək səsli zənglər və videozənglər etmək olar. Qrup zəngləri də var (ən çox 8 nəfər).
 - **Zəng yoxlama kodu**: Zəng ekranında yoxlama kodu göstərilir. Qarşı tərəflə birlikdə ucadan oxuyub hər iki ekranda uyğun gəldiyini yoxlayın. Uyğun gəlmirsə, kimsə yolda dinləyir ola bilər. Belə halda zəngi kəsin.
 - Qrup zəngləri bütün iştirakçıların tətbiqi ən son versiyada olmadıqda başlana bilməyə bilər.
 
@@ -91,11 +105,15 @@ Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əm
 
 - Eyni şəxsiyyəti bir neçə cihazda istifadə etmək üçün `/link` əmri ilə cihazları əlaqələndirin.
 - Hesabları bir neçə yaradıb ayrı-ayrı istifadə etmək olar (məsələn, iş və şəxsi). Həm cihaz sayı, həm də hesab sayı pulsuz və limitsizdir.
-- Dil 8 dildən avtomatik seçilir: ingilis, yapon, koreya, Çin (Tayvan), ispan, tay, indoneziya və portuqal (Braziliya).
+- **Hesab necə yaradılır**: Kontakt siyahısının ən yuxarısındakı hesab vərəqlərinin yanındakı «+» düyməsini basın. Ad daxil edib emoji nişanı seçin, yeni hesab yaradılacaq və avtomatik ona keçiləcək.
+- **Hesabları dəyişmək**: Hesab vərəqləri həmişə kontakt siyahısının ən yuxarısında göstərilir. Keçmək üçün birinə basın (kompüterdə Ctrl+1–9 ilə də keçə bilərsiniz). Vərəqi basıb saxlayaraq adını dəyişə, nişanını dəyişə və ya silə bilərsiniz.
+- Dil ingilis dili daxil olmaqla 51 dildən cihazınızın dilinə uyğun avtomatik seçilir.
 
 ---
 
 ## 7. Təhlükəsizliyi qoruyan parametrlər
+
+Parametrlər öz ekranı kimi açılır. Telefonda onları ekranın alt hissəsindəki «Parametrlər» vərəqindən, kompüterdə ekrandakı dişli düyməsindən açın (həmçinin `/settings` əmri ilə də aça bilərsiniz). Olduğunuz ekrana qayıtmaq üçün geri əməliyyatından istifadə edin.
 
 - **Avtomatik kilid**: Vərəqi dəyişəndə avtomatik kilidləyən parametr var.
 - **Açar parol ifadəsi**: Cihazın içindəki açarı parol ifadəsi ilə sarıyıb qorumaq olar. Tətbiqi açanda daxil etməyiniz istənilir.
@@ -103,14 +121,31 @@ Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əm
 
 ---
 
-## 8. Ehtiyat nüsxə və bərpa (ən vacib fəsil)
+## 8. Batareya və fövqəladə hallar (enerji rejimləri)
+
+«Enerji rejimi» parametrində batareyanın necə istifadə olunacağını seçə bilərsiniz.
+
+- **Avtomatik (batareya səviyyəsi)**: Nə qədər batareya qaldığına görə avtomatik dəyişir.
+- **Normal**: Həmişəki kimi.
+- **Enerjiyə qənaət**: Çatdırılma yoxlamalarını ən çox 60 saniyədə bir dəfəyə qədər seyrəldir və mövcudluq siqnalını dayandırır.
+- **Fövqəladə (fəlakətlər üçün)**: Çatdırılma yoxlamalarını ən çox 10 dəqiqədə bir dəfəyə qədər seyrəldir. Fəlakətdə və ya enerji doldura bilmədiyiniz digər vaxtda istifadə edin.
+
+Batareyanı tükədən rabitə miqdarı deyil, radionun oyanma sayıdır. Buna görə göndərən tərəf seyrəldilmir; yalnız dinləyən tərəf seyrəldilir. Göndərmə həmişəki kimi dərhal çıxır. Enerji doldurmağa başlayanda avtomatik bir addım yüngül tərəfə qayıdır.
+
+Batareya səviyyəsini avtomatik oxuya bilməyən cihazlarda (iPhone brauzeri kimi) «Avtomatik» Normal kimi davranır, əl ilə seçim isə seçildiyi kimi işləyir.
+
+---
+
+## 9. Ehtiyat nüsxə və bərpa (ən vacib fəsil)
 
 Breeze şəxsiyyəti yalnız cihazınızdakı açardır. Serverdə hesabların siyahısı yoxdur və yaradanın da sizin açarınız yoxdur.
 **Cihazı itirsəniz, şəxsiyyəti də itirirsiniz.** Vacib şəxsiyyətlər üçün mütləq ehtiyat nüsxə yaradın.
 
+Ehtiyat nüsxə və bərpa parametrlərin «Ehtiyat nüsxə və bərpa» bölməsindən edilir (üç düymə var: «Buluda ehtiyat nüsxə», «Bərpa et» və «Fayldan bərpa et»). Kontaktı ilk dəfə əlavə edəndə ehtiyat nüsxə yaratmağa çağıran kart yalnız bir dəfə görünür.
+
 ### Ehtiyat nüsxə yaratmaq
 
-1. «Ehtiyat nüsxə yarat» seçimini edin.
+1. Parametrlərdəki «Ehtiyat nüsxə və bərpa» bölməsindən ehtiyat nüsxə yaratmağı seçin.
 2. Ehtiyat nüsxə üçün parol ifadəsi təyin edin (6 simvol və ya daha çox).
 3. Saxlama yerini seçin.
    - **Fayla saxlamaq**: Ehtiyat nüsxə faylını özünüzdə saxlayın (tövsiyə olunur).
@@ -130,7 +165,7 @@ Yeni cihazda ehtiyat nüsxə faylından (və ya ötürücü serverdəki ehtiyat 
 
 ---
 
-## 9. Saxlama qutusu və xərc yanaşması
+## 10. Saxlama qutusu və xərc yanaşması
 
 - Qarşı tərəf oflayn olanda məktublar ötürücü serverin «saxlama qutusunda» şifrələnmiş halda saxlanılır (ən çox 7 gün).
 - Ötürücüdə sui-istifadənin qarşısını almaq üçün limitlər var (saxlanıla bilən həcm və tezlik). Limitə çatanda həmin müddət ərzində yeni məktublar saxlanıla bilmir, lakin **artıq çatdırılmış məktublar heç vaxt silinmir**. Ekranda səbəb və gözləmə müddəti göstərilir.
@@ -147,7 +182,7 @@ Server tərəfində qalan qeydlərin əhatəsi (hamısı avtomatik silinir və m
 
 ---
 
-## 10. Yeniləmə qaydası (masaüstü versiya)
+## 11. Yeniləmə qaydası (masaüstü versiya)
 
 1. Yeni versiya olanda ekranda bildiriş görünür.
 2. «Yüklə» düyməsini bassanız, yeni versiya endirilir (avtomatik quraşdırılmır).
@@ -157,7 +192,7 @@ Yeniləmə zamanı xəta baş verərsə (fayl yoxlaması uyğun gəlməzsə və 
 
 ---
 
-## 11. Problem yarananda
+## 12. Problem yarananda
 
 | Əlamət | Yoxlanılacaq şey |
 |---|---|
@@ -167,13 +202,13 @@ Yeniləmə zamanı xəta baş verərsə (fayl yoxlaması uyğun gəlməzsə və 
 | Zəng yoxlama kodu uyğun gəlmir | Zəngi kəsin və yenidən zəng edin. Uyğun gəlmədiyi halda davam etməyin. |
 | Parol ifadəsini unutmusunuz | Bərpa mümkün deyil. Yeni şəxsiyyət yaradın və qarşı tərəfə yenidən bildirin. |
 | Cihazı itirmisiniz | Ehtiyat nüsxəniz varsa, yeni cihazda bərpa edə bilərsiniz. Yoxdursa, yeni şəxsiyyət yaranır. |
-| Sınaq səhifəsi açılmır (404) | Hazırda dayandırılıb. Tətbiq versiyasından istifadə edin. |
+| Nümunə səhifəsi açılmır | Nümunə xəbərdarlıq edilmədən dayana bilər. Zəhmət olmasa öz serverinizə yerləşdirdiyiniz nüsxədən istifadə edin. |
 
 Xəta hesabatlarını [Issue səhifəsinə](https://github.com/shizukutanaka/Breeze/issues) göndərin.
 
 ---
 
-## 12. Breeze-in vədləri
+## 13. Breeze-in vədləri
 
 - Reklam göstərmirik. Nə tətbiqin içində, nə də başqa yerdə.
 - İzləmirik. İstifadə analitikası, reklam mexanizmləri və məlumat satışı qətiyyən yoxdur.
@@ -184,4 +219,4 @@ Digər messencerlərlə ətraflı müqayisə repozitoriyadakı «müqayisə səh
 
 ---
 
-*Bu təlimat Breeze v3.8.0 anındakı məzmundur.*
+*Bu təlimat Breeze-in 2026-11-25 tarixinə olan vəziyyətini əks etdirir.*

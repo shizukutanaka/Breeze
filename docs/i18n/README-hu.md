@@ -37,24 +37,17 @@ A részletes használati leírás a [kézikönyvben](MANUAL-hu.md) található (
 
 Az őszinteség kedvéért a határokat is leírjuk. A kézbesítés érdekében a szerveren rövid ideig tartó tárolás történik (a kézbesítetlen borítékok legfeljebb 7 napig, a kapcsolódási jelek 5 percig, a cím- és eszköznyilvántartás 90 napig, a csoportinformációk és az értesítési feliratkozások 30 napig; mindegyik automatikusan törlődik, és a tartalom nem olvasható). A felhőbe történő biztonsági mentés alapértelmezés szerint ki van kapcsolva. Ha a saját szerverére telepíti, ez a tárolás is az Ön kezelése alá kerül.
 
-## Úgy terveztük, hogy bűncselekményre használni ne érje meg
-
-A Breeze úgy készült, hogy a visszaélés a visszaélő számára költséges és körülményes legyen. Nem állítjuk, hogy „lehetetlenné teszi a bűncselekményt”. A tervezés lényege az, hogy „ne érje meg”.
-
-- **Nincs ingyenes alap, amelyre rá lehetne telepedni.** Nincs központi ingyenes szerver, ezért a visszaélőnek is a saját nevén nyitott fiókkal és a saját költségén kell tárhelyet biztosítania.
-- **A küldés terhet ró a küldőre.** Minden küldéskor egy kis számítási feladat (proof of work) teljesítése szükséges, és mennyiségi korlátok is vannak. A tömeges zaklató küldés nem éri meg.
-- **Letagadhatatlan bejelentés tehető.** A fogadó fél a beérkezett küldeményt magát bizonyítékként jelentheti. A küldő fél nem tagadhatja le, hogy elküldte.
-- **A leállítás joga a telepítőé.** Ami a saját szerverén történik, azt Ön maga állíthatja le. Senki engedélye nem szükséges hozzá.
-
 ## Amire képes
 
 - Egyéni beszélgetések és csoportos beszélgetések (legfeljebb 1 000 fő)
-- Hanghívások és videohívások
+- Hanghívások és videohívások (csoportos hívások legfeljebb 8 főig)
 - Fájlküldés (egyéni beszélgetésben legfeljebb 50 MB. Csoportban is küldhető, de ott kisebb a méretkorlát.)
 - Több eszköz és több fiók külön használata (például munkahelyi és magán; az eszközök és a fiókok száma is ingyenes és korlátlan)
-- Automatikusan választ 8 nyelv közül (angol, japán, koreai, kínai (tajvani), spanyol, thai, indonéz, portugál)
+- 51 nyelv (angol plusz 50 nyelvi fájl), automatikusan kiválasztva az eszköz nyelvéhez igazodva
 - Fotóval ellátott profil, matricák, helymegosztás
-- Parancsok használata, például `/help` (több mint 60 féle)
+- Parancsok használata, például `/help` (71 féle)
+- Az akkumulátorhoz igazodó energiamódok (automatikus / normál / energiatakarékos / vészhelyzeti). Ahogy merül az akkumulátor, a kézbesítési ellenőrzések ritkulnak, hogy az akkumulátor tovább tartson. Védelem katasztrófákra és más olyan helyzetekre, amikor nem tud tölteni
+- Jól olvasható képernyők (figyelem a színkontrasztra, a szövegméretre és a csak billentyűzettel történő kezelésre)
 
 ## Miben különbözik a többi üzenetküldőtől
 

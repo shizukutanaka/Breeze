@@ -196,7 +196,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **ያ ብቻ ነው።** ከግፋ ማሳወቂያዎች በስተቀር ሁሉም ባህሪያት ይሰራሉ። ልብ ይበሉ
@@ -212,9 +212,9 @@ wrangler pages deploy . --project-name=breeze
 | P2P መልእክት | ✓ | WebRTC DataChannel |
 | የድምጽ/ቪዲዮ ጥሪዎች | ✓ | WebRTC + ነፃ STUN |
 | TURN ሪሌይ | ✓ | Open Relay (20GB/ወር ነፃ) |
-| ቡድኖች (100 አባላት) | ✓ | Sender Key O(1) |
+| ቡድኖች (1,000 አባላት) | ✓ | Sender Key O(1) |
 | የፋይል ዝውውር | ✓ | በP2P እስከ 50MB |
-| 8 ቋንቋዎች | ✓ | EN + 7 ሙሉ አካባቢዎች፣ በራሱ ይታወቃል |
+| 51 ቋንቋዎች | ✓ | እንግሊዝኛ አብሮ የተገነባ + 50 ሙሉ የአካባቢ ፋይሎች፣ በራሱ ይታወቃል |
 | ከመስመር ውጭ/PWA | ✓ | Service Worker |
 | የግፋ ማሳወቂያዎች | ✗ | የVAPID ቁልፎች ያስፈልጋሉ |
 
@@ -230,7 +230,7 @@ wrangler pages deploy . --project-name=breeze
 | የKV ንባቦች | 100,000/ቀን | ~200/ቀን |
 | የKV ጽሑፎች | 1,000/ቀን | ~350/ቀን (ተመቻችቷል) |
 | የKV ማስቀመጫ | 1 GB | ~10 KB/ተጠቃሚ |
-| የማይንቀሳቀሱ ንብረቶች | ያልተገደበ | ~400 KB (አንድ HTML) |
+| የማይንቀሳቀሱ ንብረቶች | ያልተገደበ | ~894 KB (አንድ HTML) |
 
 **በነፃ ደረጃ ላይ ~3 በተመሳሳይ ጊዜ ንቁ ተጠቃሚዎችን ይደግፋል።**
 

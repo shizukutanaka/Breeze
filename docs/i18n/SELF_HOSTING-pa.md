@@ -197,7 +197,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **ਬੱਸ ਏਨਾ ਹੀ।** ਪੁਸ਼ ਸੂਚਨਾਵਾਂ ਨੂੰ ਛੱਡ ਕੇ ਸਾਰੀਆਂ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਕੰਮ ਕਰਦੀਆਂ ਹਨ। ਨੋਟ ਕਰੋ
@@ -213,9 +213,9 @@ wrangler pages deploy . --project-name=breeze
 | P2P ਸੁਨੇਹਾ ਭੇਜਣਾ | ✓ | WebRTC DataChannel |
 | ਵੌਇਸ/ਵੀਡੀਓ ਕਾਲਾਂ | ✓ | WebRTC + ਮੁਫ਼ਤ STUN |
 | TURN ਰਿਲੇਅ | ✓ | Open Relay (20GB/ਮਹੀਨਾ ਮੁਫ਼ਤ) |
-| ਸਮੂਹ (100 ਮੈਂਬਰ) | ✓ | Sender Key O(1) |
+| ਸਮੂਹ (1,000 ਮੈਂਬਰ) | ✓ | Sender Key O(1) |
 | ਫ਼ਾਈਲ ਟ੍ਰਾਂਸਫਰ | ✓ | P2P ਰਾਹੀਂ 50MB ਤੱਕ |
-| 8 ਭਾਸ਼ਾਵਾਂ | ✓ | EN + 7 ਪੂਰੇ ਲੋਕੇਲ, ਆਟੋ-ਡਿਟੈਕਟ ਕੀਤੇ |
+| 51 ਭਾਸ਼ਾਵਾਂ | ✓ | ਅੰਗਰੇਜ਼ੀ ਬਿਲਟ-ਇਨ + 50 ਪੂਰੀਆਂ ਲੋਕੇਲ ਫ਼ਾਈਲਾਂ, ਆਟੋ-ਡਿਟੈਕਟ ਕੀਤੀਆਂ |
 | ਆਫ਼ਲਾਈਨ/PWA | ✓ | Service Worker |
 | ਪੁਸ਼ ਸੂਚਨਾਵਾਂ | ✗ | VAPID ਕੁੰਜੀਆਂ ਦੀ ਲੋੜ ਹੈ |
 
@@ -229,7 +229,7 @@ wrangler pages deploy . --project-name=breeze
 | KV ਪੜ੍ਹਨ | 100,000/ਦਿਨ | ~200/ਦਿਨ |
 | KV ਲਿਖਣ | 1,000/ਦਿਨ | ~350/ਦਿਨ (ਅਨੁਕੂਲਿਤ) |
 | KV ਸਟੋਰੇਜ | 1 GB | ~10 KB/ਉਪਭੋਗਤਾ |
-| ਸਥਿਰ ਸੰਪਤੀਆਂ | ਅਸੀਮਤ | ~400 KB (ਇੱਕੋ HTML) |
+| ਸਥਿਰ ਸੰਪਤੀਆਂ | ਅਸੀਮਤ | ~894 KB (ਇੱਕੋ HTML) |
 
 **ਮੁਫ਼ਤ ਟੀਅਰ 'ਤੇ ~3 ਸਮਕਾਲੀ ਸਰਗਰਮ ਉਪਭੋਗਤਾਵਾਂ ਦਾ ਸਮਰਥਨ ਕਰਦਾ ਹੈ।**
 

@@ -37,24 +37,17 @@ Pour l'utilisation détaillée, consultez le [manuel](MANUAL-fr.md) (vous pouvez
 
 Nous écrivons aussi la portée honnêtement. Pour pouvoir livrer les messages, le serveur conserve des choses pendant un court moment (les enveloppes non livrées pendant 7 jours au maximum, les signaux de connexion pendant 5 minutes, les enregistrements d'adresses et d'appareils pendant 90 jours, les informations de groupe et les abonnements aux notifications pendant 30 jours. Tout cela est supprimé automatiquement, et le contenu ne peut pas être lu). La sauvegarde dans le cloud est désactivée au départ. Si vous l'hébergez sur votre propre serveur, cette conservation temporaire est aussi sous votre contrôle.
 
-## Une conception qui fait que l'utiliser pour un crime n'en vaut pas la peine
-
-Breeze est conçu pour que l'usage abusif coûte de l'argent et des efforts à celui qui s'y livre. Nous ne prétendons pas qu'il « rende le crime impossible ». C'est une conception qui fait qu'il « n'en vaut pas la peine ».
-
-- **Aucune base gratuite à exploiter.** Comme il n'y a pas de serveur central gratuit, celui qui veut en abuser n'a lui aussi d'autre choix que de préparer un hébergement avec un compte à son propre nom et à ses propres frais.
-- **L'envoi a un coût.** Chaque envoi exige un petit calcul (preuve de travail), et des limites de volume sont fixées. Envoyer du spam en masse n'en vaut pas la peine.
-- **Des signalements impossibles à nier.** La personne qui reçoit peut signaler la livraison elle-même qu'elle a reçue comme preuve. L'expéditeur ne peut pas prétendre « je ne l'ai pas envoyé ».
-- **Le pouvoir de l'arrêter appartient à celui qui l'héberge.** Ce qui se passe sur votre propre serveur, vous pouvez l'arrêter vous-même. Aucune autorisation de qui que ce soit n'est nécessaire.
-
 ## Ce qu'il peut faire
 
 - Conversations individuelles et conversations de groupe (jusqu'à 1 000 personnes)
-- Appels vocaux et appels vidéo
+- Appels vocaux et appels vidéo (appels de groupe jusqu'à 8 personnes)
 - Envoi de fichiers (jusqu'à 50 Mo en individuel. Les groupes peuvent aussi en envoyer, mais la limite de taille est plus petite)
 - Utilisation sur plusieurs appareils et avec plusieurs comptes (par exemple travail et personnel. Le nombre d'appareils comme le nombre de comptes sont gratuits et illimités)
-- Choix automatique parmi 8 langues (anglais, japonais, coréen, chinois (Taïwan), espagnol, thaï, indonésien, portugais)
+- 51 langues (l'anglais plus 50 fichiers de langue), choisies automatiquement selon la langue de votre appareil
 - Profils avec photo, stickers, partage de position
-- Commandes comme `/help` (plus de 60 types)
+- Commandes comme `/help` (71 types)
+- Modes d'énergie adaptés à votre batterie (automatique / normal / économie d'énergie / urgence). Quand la batterie baisse, les vérifications de réception s'espacent pour que la batterie dure plus longtemps. Une sauvegarde pour les catastrophes et les autres moments où vous ne pouvez pas recharger
+- Des écrans lisibles (attention au contraste des couleurs, à la taille du texte et à l'utilisation au clavier seul)
 
 ## Différences avec les autres messageries
 

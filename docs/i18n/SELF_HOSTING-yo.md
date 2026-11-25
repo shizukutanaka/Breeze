@@ -198,7 +198,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Ìyẹn nìkan ni.** Gbogbo àwọn iṣẹ́ ń ṣiṣẹ́ àyàfi àwọn ìfitónilétí títì (push). Ṣàkíyèsí
@@ -214,9 +214,9 @@ tí ó wà ní títì ní àbáwọlé ni ọ̀nà Docker tí ó wà lókè.
 | Ìránṣẹ́ P2P | ✓ | WebRTC DataChannel |
 | Àwọn ìpè ohùn/fídíò | ✓ | WebRTC + STUN ọ̀fẹ́ |
 | Olùgbé TURN | ✓ | Open Relay (20GB/oṣù ọ̀fẹ́) |
-| Àwọn ẹgbẹ́ (ọmọ ẹgbẹ́ 100) | ✓ | Sender Key O(1) |
+| Àwọn ẹgbẹ́ (ọmọ ẹgbẹ́ 1,000) | ✓ | Sender Key O(1) |
 | Gbígbé fáìlì | ✓ | Títí di 50MB nípasẹ̀ P2P |
-| Àwọn èdè 8 | ✓ | EN + àwọn ààyè gidi 7 kíkún, a ń ṣàwárí fúnra wọn |
+| Àwọn èdè 51 | ✓ | Gẹ̀ẹ́sì tí a kọ́ sínú rẹ̀ + àwọn fáìlì ààyè gidi 50 kíkún, a ń ṣàwárí fúnra wọn |
 | Àìsí ayélujára/PWA | ✓ | Service Worker |
 | Àwọn ìfitónilétí títì | ✗ | Ó nílò àwọn kọ́kọ́rọ́ VAPID |
 
@@ -232,7 +232,7 @@ apá "Removed: multi-account billing" ti [SECURITY.md](../../SECURITY.md). Àká
 | Àwọn kíka KV | 100,000/ọjọ́ | ~200/ọjọ́ |
 | Àwọn kíkọ KV | 1,000/ọjọ́ | ~350/ọjọ́ (a ti mú dára sí i) |
 | Ìpamọ́ KV | 1 GB | ~10 KB/olùlò |
-| Àwọn ohun èlò dídúró | Láìsí ààlà | ~400 KB (HTML kan) |
+| Àwọn ohun èlò dídúró | Láìsí ààlà | ~894 KB (HTML kan) |
 
 **Ó ń ṣàtìlẹ́yìn ~àwọn olùlò aláṣiṣẹ́ 3 ní ìgbà kan náà ní ìwọ̀n ọ̀fẹ́.**
 

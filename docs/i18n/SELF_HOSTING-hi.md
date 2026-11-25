@@ -190,7 +190,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **बस इतना ही।** पुश सूचनाओं को छोड़कर सभी सुविधाएँ काम करती हैं। ध्यान दें
@@ -206,9 +206,9 @@ wrangler pages deploy . --project-name=breeze
 | P2P संदेश | ✓ | WebRTC DataChannel |
 | वॉयस/वीडियो कॉल | ✓ | WebRTC + मुफ़्त STUN |
 | TURN रिले | ✓ | Open Relay (20GB/माह मुफ़्त) |
-| समूह (100 सदस्य) | ✓ | Sender Key O(1) |
+| समूह (1,000 सदस्य) | ✓ | Sender Key O(1) |
 | फ़ाइल स्थानांतरण | ✓ | P2P द्वारा 50MB तक |
-| 8 भाषाएँ | ✓ | EN + 7 पूर्ण लोकेल, स्वचालित पहचान |
+| 51 भाषाएँ | ✓ | अंग्रेज़ी अंतर्निहित + 50 पूर्ण लोकेल फ़ाइलें, स्वचालित पहचान |
 | ऑफ़लाइन/PWA | ✓ | Service Worker |
 | पुश सूचनाएँ | ✗ | VAPID कुंजियाँ चाहिए |
 
@@ -224,7 +224,7 @@ wrangler pages deploy . --project-name=breeze
 | KV पठन | 100,000/दिन | ~200/दिन |
 | KV लेखन | 1,000/दिन | ~350/दिन (अनुकूलित) |
 | KV संग्रहण | 1 GB | ~10 KB/उपयोगकर्ता |
-| स्थिर संपत्तियाँ | असीमित | ~400 KB (एकल HTML) |
+| स्थिर संपत्तियाँ | असीमित | ~894 KB (एकल HTML) |
 
 **मुफ़्त सीमा पर ~3 समवर्ती सक्रिय उपयोगकर्ताओं का समर्थन करता है।**
 

@@ -24,16 +24,19 @@ Velg filen som passer til enheten din på [nedlastingssiden](https://github.com/
 
 Hver fil leveres med en kontrollsum (SHA256SUMS.txt). Hvis du er bekymret, kan du kontrollere at summen for filen du lastet ned, stemmer.
 
-> **Om testsiden**: Testsiden som var offentlig (breeze.pages.dev), er for tiden stoppet (du får 404 hvis du åpner den). Bruk appversjonen til den er gjenopprettet. En Breeze du har plassert på din egen server, påvirkes ikke av stoppet.
+> **Om eksempelsiden**: Et eksempel for å sjekke hvordan det fungerer (https://breeze-469.pages.dev/) er tilgjengelig. Det som ligger der, er den samme programvaren, men eksemplet kan endres eller stoppes uten varsel. Bruk en kopi du har plassert på din egen server til virkelig bruk. En kopi på din egen server påvirkes ikke hvis eksemplet stoppes.
 
 ### Første oppsett
 
 1. Åpne appen.
-2. Skriv inn navnet ditt. Da er du klar. Ingen registrering, intet telefonnummer nødvendig.
+2. Skriv inn navnet ditt og trykk på «Opprett konto». Da er du klar. Ingen registrering, intet telefonnummer nødvendig.
+
+- Hvis du vil hente tilbake en identitet du har opprettet før, åpner du «Gjenopprett en eksisterende konto», og gjenopprettingsmetodene (en sikkerhetskopifil, en gjenopprettingsfrase og så videre) vises.
+- Når opprettingen er ferdig, vises et kort som veileder deg til å beskytte nøkkelen din med en passfrase (det forsvinner ikke etter en stund). Følg veiledningen og legg til beskyttelsen for en viktig identitet.
 
 Da opprettes det en «nøkkel» inne i enheten din. Den er selve identiteten din.
 **Det finnes ingen liste over kontoer på serveren.** Identiteten din finnes bare inne i enheten din.
-Dette blir viktig i kapitlet om sikkerhetskopiering (8).
+Dette blir viktig i kapitlet om sikkerhetskopiering (9).
 
 ### Om «engangsidentitet»
 
@@ -45,11 +48,13 @@ Det vises også på skjermen. Ikke velg det for en identitet du vil bruke lenge.
 
 ## 2. Koble deg til andre
 
-Det finnes tre måter å koble seg til personen du vil snakke med.
+Trykk på knappen «Legg til venn» på kontaktskjermen, så vises tre valg.
 
-- **Gi ID-en din**: Fortell ID-en din til den andre personen og la dem skrive den inn.
-- **QR-kode**: Vis en invitasjons-QR-kode og la den andre personen skanne den.
-- **Invitasjonslenke**: Kopier en invitasjonsmelding fra «Inviter en venn» og send den via dine vanlige kontaktveier (e-post osv.). Når den andre personen åpner lenken og skriver inn navnet sitt, kan dere snakke med en gang.
+- **Legg til en kontakt**: Skriv inn den andre personens ID, eller skann en QR-kode.
+- **Inviter en venn**: Kopier invitasjonslenken og send den via dine vanlige kontaktveier (e-post osv.). Når den andre personen åpner lenken og skriver inn navnet sitt, kan dere snakke med en gang.
+- **Opprett en gruppe**: Skriv bare inn et gruppenavn for å opprette en (kapittel 4).
+
+Din egen ID vises i fullstendig form når du åpner din egen profil, og du kan kopiere den som den er. Gi videre den fullstendige ID-en, ikke bare den korte ID-en.
 
 Hvis den andre personen også har appen åpen, kan dere koble dere direkte sammen og snakke.
 
@@ -58,14 +63,23 @@ Hvis den andre personen også har appen åpen, kan dere koble dere direkte samme
 ## 3. Samtaler
 
 - Bare skriv en melding og send den. Du kan også sende bilder, klistremerker og posisjon.
+- Åpne «+» ved siden av inndatafeltet, så vises filvedlegg, talemeldinger, taleinndata, posisjon, klistremerker, innstillingen «svar ikke nødvendig» og mer sammen.
 - **Sende filer**: Opptil 50 MB i samtaler én-til-én. I grupper er det mindre, omtrent 50 KB.
 - Farlige filformater, som kjørbare filer, blokkeres automatisk.
 - Hvis den andre personen ikke har appen åpen, legges meldingen, fortsatt kryptert, i en «postboks» og leveres når de åpner appen. Serveren som frakter postboksen, kan ikke lese innholdet. Brev som aldri blir levert, slettes automatisk etter **maks 7 dager**.
 - Samtalehistorikk kan eksporteres til en fil og importeres.
 
+### Lese skjermen
+
+- **Sendestatus**: Du ser den på merket ved siden av en melding. ✓ betyr sendt, et ✓ i en sirkel betyr at den er lagt i postboksen, ✓✓ betyr at den nådde den andre personen, lest er et blått merke, og feil er et rødt merke. De skilles både på form og farge.
+- **Kontaktlisten**: Tidspunktet for den siste samtalen vises som klokkeslettet for i dag, «I går» for i går, måned/dag for i år og år/måned/dag for alt tidligere. Kontakter med meldinger du ikke har lest, har navn og tidspunkt fremhevet.
+- **Ditt eget kort**: Øverst i listen er ditt eget profilkort; trykk på det for å åpne profilen din. Det ruller sammen med listen.
+- **Nederste faner på en telefon**: Ved telefonbredde vises fanene «Kontakter» og «Innstillinger» nederst på skjermen.
+- **Samtaleoverskriften**: Fra søkeikonet kan du søke i samtalen. Fra menyen «⋮» kan du sjekke sikkerhetsnummeret, dempe varsler, feste, opprette en avstemning og mer.
+
 ### Kommandoer
 
-Hvis du skriver `/help` i inndatafeltet, vises en liste over kommandoer du kan bruke (mer enn 60 typer).
+Skriv `/` i inndatafeltet, så vises kommandoforslag. Skriv `/help` for å se en liste over kommandoer du kan bruke (71 typer).
 Noen handlinger, som innstillinger og enhetslenking, gjøres via kommandoer.
 
 ---
@@ -73,7 +87,7 @@ Noen handlinger, som innstillinger og enhetslenking, gjøres via kommandoer.
 ## 4. Grupper
 
 - En gruppe kan ha opptil **1 000 personer**.
-- Du oppretter en ved bare å skrive inn et gruppenavn. Invitasjoner skjer via «Gruppeinvitasjonslenke». Den som får lenken, kan bli med ved å skrive inn navnet sitt.
+- Du oppretter en gruppe ved bare å skrive inn et gruppenavn under «Opprett en gruppe» i «Legg til venn» (du kan også opprette en med kommandoen `/newgroup`). Invitasjoner skjer via «Gruppeinvitasjonslenke». Den som får lenken, kan bli med ved å skrive inn navnet sitt.
 - Filer kan også sendes i grupper, men grensen er mindre, omtrent 50 KB. Talemeldinger kan ennå ikke sendes i grupper.
 - Hvis et medlem bruker en gammel versjon av appen, kan gruppen ikke bruke den nyere, sikrere modusen (gruppe v5), og det vises en advarsel på skjermen. Den aktiveres når alle har den nyeste versjonen.
 
@@ -81,7 +95,7 @@ Noen handlinger, som innstillinger og enhetslenking, gjøres via kommandoer.
 
 ## 5. Samtaler (tale og video)
 
-- Du kan ha tale- og videosamtaler én-til-én. Det finnes også gruppesamtaler.
+- Du kan ha tale- og videosamtaler én-til-én. Det finnes også gruppesamtaler (opptil 8 personer).
 - **Bekreftelseskode for samtale**: En bekreftelseskode vises på samtaleskjermen. Les den høyt sammen med den andre personen og kontroller at den stemmer på begge skjermer. Hvis den ikke stemmer, kan det hende at noen avlytter samtalen. Legg på i så fall.
 - Gruppesamtaler kan noen ganger ikke startes hvis ikke alles apper er den nyeste versjonen.
 
@@ -91,11 +105,15 @@ Noen handlinger, som innstillinger og enhetslenking, gjøres via kommandoer.
 
 - For å bruke samme identitet på flere enheter lenker du enhetene med kommandoen `/link`.
 - Du kan opprette flere kontoer og bruke dem til ulike formål (for eksempel jobb og privat). Både antall enheter og antall kontoer er gratis og ubegrenset.
-- Språket velges automatisk blant 8: engelsk, japansk, koreansk, kinesisk (Taiwan), spansk, thai, indonesisk og portugisisk (Brasil).
+- **Slik oppretter du en konto**: Trykk på knappen «+» ved siden av kontofanene helt øverst i kontaktlisten. Skriv inn et navn og velg en ikon-emoji, så opprettes en ny konto og byttes til automatisk.
+- **Bytte kontoer**: Kontofanene vises alltid helt øverst i kontaktlisten. Trykk på en for å bytte (på en datamaskin kan du også bytte med Ctrl+1–9). Trykk og hold på en fane for å endre navn på den, endre ikonet eller slette den.
+- Språket velges automatisk blant 51 språk, inkludert engelsk, tilpasset språket på enheten din.
 
 ---
 
 ## 7. Innstillinger for å holde deg trygg
+
+Innstillinger åpnes som en egen skjerm. Åpne dem på en telefon fra fanen «Innstillinger» nederst på skjermen; på en datamaskin fra tannhjulknappen på skjermen (du kan også åpne dem med kommandoen `/settings`). Bruk tilbakehandlingen for å gå tilbake til skjermen du var på.
 
 - **Automatisk lås**: Det finnes en innstilling som låser automatisk når du bytter fane.
 - **Passfrase for nøkkelen**: Du kan beskytte nøkkelen inne i enheten din ved å pakke den inn i en passfrase. Du blir bedt om å skrive den inn når du åpner appen.
@@ -103,14 +121,31 @@ Noen handlinger, som innstillinger og enhetslenking, gjøres via kommandoer.
 
 ---
 
-## 8. Sikkerhetskopiering og gjenoppretting (det viktigste kapitlet)
+## 8. Batteri og nødsituasjoner (strømmoduser)
+
+I innstillingen «Strømmodus» kan du velge hvordan batteriet brukes.
+
+- **Automatisk (batterinivå)**: Bytter automatisk etter hvor mye batteri som er igjen.
+- **Normal**: Som vanlig.
+- **Strømsparing**: Sprer leveringskontroller ut til høyst én gang hvert 60. sekund og stopper tilstedeværelsessignalet.
+- **Nødmodus (for katastrofer)**: Sprer leveringskontroller ut til høyst én gang hvert 10. minutt. Bruk den ved en katastrofe eller en annen tid da du ikke kan lade.
+
+Det som tapper batteriet, er ikke mengden kommunikasjon, men antall ganger radioen våkner. Derfor spres ikke sendesiden ut; bare lyttesiden. Sending går fortsatt ut med en gang, som alltid. Når du begynner å lade, flyttes den automatisk ett trinn tilbake mot den lettere siden.
+
+På enheter som ikke kan lese batterinivået automatisk (som en iPhone-nettleser), oppfører «Automatisk» seg som Normal, og et manuelt valg fungerer som valgt.
+
+---
+
+## 9. Sikkerhetskopiering og gjenoppretting (det viktigste kapitlet)
 
 Din Breeze-identitet er bare nøkkelen inne i enheten din. Det finnes ingen liste over kontoer på serveren, og skaperen har ikke nøkkelen din heller.
 **Hvis du mister enheten, mister du identiteten din.** Lag alltid en sikkerhetskopi for en viktig identitet.
 
+Sikkerhetskopiering og gjenoppretting gjøres fra avsnittet «Sikkerhetskopiering og gjenoppretting» i innstillingene (det er tre knapper: «Sikkerhetskopier til skyen», «Gjenopprett» og «Gjenopprett fra en fil»). Første gang du legger til en kontakt, vises et kort som oppfordrer deg til å lage en sikkerhetskopi, bare én gang.
+
 ### Lage en sikkerhetskopi
 
-1. Velg «Lag sikkerhetskopi».
+1. Velg å lage en sikkerhetskopi fra «Sikkerhetskopiering og gjenoppretting» i innstillingene.
 2. Angi en passfrase for sikkerhetskopien (minst 6 tegn).
 3. Velg hvor den skal lagres.
    - **Lagre i en fil**: Oppbevar sikkerhetskopifilen hos deg selv (anbefales).
@@ -130,7 +165,7 @@ På en ny enhet gjenoppretter du med sikkerhetskopifilen (eller sikkerhetskopien
 
 ---
 
-## 9. Postboksen og hvordan vi tenker om kostnader
+## 10. Postboksen og hvordan vi tenker om kostnader
 
 - Brev til en person som er frakoblet, legges, kryptert, i reléserverens «postboks» (maks 7 dager).
 - Releet har grenser for å hindre misbruk (hvor mye som kan legges igjen, og hvor ofte). Når en grense nås, kan du ikke legge igjen nye brev i den perioden, men **brev som allerede er levert, forsvinner aldri**. Skjermen viser grunnen og hvor lenge du må vente.
@@ -147,7 +182,7 @@ Omfanget av registre som blir igjen på serversiden (alt slettes automatisk, og 
 
 ---
 
-## 10. Slik oppdaterer du (skrivebordsversjonen)
+## 11. Slik oppdaterer du (skrivebordsversjonen)
 
 1. Når det finnes en ny versjon, vises et varsel på skjermen.
 2. Trykk på «Last ned» for å hente den nye versjonen (den installeres ikke automatisk).
@@ -157,7 +192,7 @@ Hvis noe går galt under oppdateringen (for eksempel at filkontrollen ikke stemm
 
 ---
 
-## 11. Når noe går galt
+## 12. Når noe går galt
 
 | Symptom | Hva du bør kontrollere |
 |---|---|
@@ -167,13 +202,13 @@ Hvis noe går galt under oppdateringen (for eksempel at filkontrollen ikke stemm
 | Bekreftelseskoden for samtalen stemmer ikke | Legg på og ring på nytt. Ikke fortsett mens den ikke stemmer. |
 | Glemt passfrasen | Gjenoppretting er umulig. Opprett en ny identitet og gi kontaktene dine beskjed på nytt. |
 | Mistet enheten | Hvis du har en sikkerhetskopi, kan du gjenopprette på en ny enhet. Hvis ikke, blir det en ny identitet. |
-| Testsiden åpnes ikke (404) | Den er stoppet for tiden. Bruk appversjonen. |
+| Eksempelsiden åpnes ikke | Eksemplet kan stoppes uten varsel. Bruk en kopi du har plassert på din egen server. |
 
 Rapporter feil på [issue-siden](https://github.com/shizukutanaka/Breeze/issues), takk.
 
 ---
 
-## 12. Breezes løfter
+## 13. Breezes løfter
 
 - Ingen reklame. Verken i appen eller noe annet sted.
 - Ingen sporing. Ingen bruksanalyse, ingen reklamemekanismer, intet salg av data — overhodet ikke.
@@ -184,4 +219,4 @@ En detaljert sammenligning med andre meldingstjenester finnes på «sammenlignin
 
 ---
 
-*Denne manualen beskriver innholdet per Breeze v3.8.0.*
+*Denne manualen beskriver innholdet for Breeze per 2026-11-25.*
