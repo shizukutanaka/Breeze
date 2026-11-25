@@ -120,7 +120,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     'distributeSenderKey', 'encryptGroupMsg', 'encryptFor', 'API', 'postAPIRaw',
     '_signingKey', 'signMessage', '_signingPubB64', '_rateLimiter', 'timingDelay',
     'peers', 'waitForBuffer', 'queueOutbox', 'relaySend', '_fanOut', 'renderContacts',
-    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap', '_groupLive',
+    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap', '_groupLive', '_groupAuthor',
     `${sliceBetween('async function sendMessage()', '// File send (v3: binary chunks for P2P, sealed relay fallback)')}
      return sendMessage;`);
   const sendMessage = fn(
@@ -150,6 +150,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     (ts, status) => { calls.status.push({ ts, status }); },
     poolMap,
     { distributeKey: async () => {}, distributeOwnKey: async () => {}, depositCopies: async () => {} },
+    { sign: async () => ({ authorSigV: 1, authorSig: 'test-signature' }) },
   );
   return { sendMessage, calls, input };
 }
@@ -239,7 +240,8 @@ function buildHandleIncoming({ stored = null, decrypt = 'hello text' } = {}) {
     'activeContact', '_shouldAlert', 'playNotif', 'Notification', 'announceToSR',
     'appendMsg', 'showSmartReplies', '_renderContactsThrottled', 'broadcastToTabs',
     't', '_dbg', '_myOtherDevices', '_focusActive', '_attribDevCache', 'MS', '_myAcctRoot',
-    `${sliceBetween('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact =====')}
+    `const _requests = { admit: async () => true }; const contactDisplayName = c => c?.name || '';
+     ${sliceBetween('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact =====')}
      return handleIncoming;`);
   const handleIncoming = fn(
     async (store, key) => {

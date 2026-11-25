@@ -1,3 +1,5 @@
+import { safeName } from './lookalike-names.js';
+
 // Breeze — the /security and /who information panels (moved out of
 // index.html in the stage 5 step 5 line-budget pass; content and
 // wording unchanged). Both panels render only state this device
@@ -74,6 +76,8 @@ export function createInfoPanels(D) {
         D.t('cmdLblKeyExchange') + ': <span class="i-g">' + cs.keyExchange + '</span> ' + (D.hasX25519() ? D.t('secBrowserNative') : D.t('secWebCryptoFallback')),
         D.t('secLblMsgSigning') + ': <span class="i-g">' + cs.signing + '</span>' + (D.hasEd25519() ? ' ' + D.t('secBrowserNative') : ''),
         D.t('secLblSigningKey') + ': ' + (D.signingPubB64() ? '✓ ' + D.signingPubB64().slice(0, 8) + '...' : '✗ ' + D.t('secNotAvail')),
+        await D.deviceAlerts?.security() || '',
+        await D.contactVerify?.security(D.activeContact()) || '',
         D.t('secLblEncryption') + ': <span class="i-g">' + cs.encryption + '</span> ' + D.t('secBrowserNative'),
         D.t('secLblKDF') + ': ' + cs.kdf + ' ' + D.t('secBrowserNative'),
         D.t('secLblRatchet') + ': ' + cs.ratchet + ' ' + D.t('secFwdSecParen'),
@@ -90,7 +94,7 @@ export function createInfoPanels(D) {
         'PQXDH: ' + (sess ? (sess.pq ? '<span class="i-g">✓ ' + D.t('secPqxdhInUse') + '</span>' : D.t('secPqxdhClassical')) : '—'),
         '',
         '<b>' + D.t('cmdSectionSession') + '</b>',
-        D.activeContact() ? D.t('cmdLblPeer') + ': ' + D.activeContact().name : D.t('cmdNoContact'),
+        D.activeContact() ? D.t('cmdLblPeer') + ': ' + D.esc(safeName(D.activeContact().name)) : D.t('cmdNoContact'),
         D.t('cmdLblSession') + ': ' + (sess ? '<span class="i-g">✓ ' + D.t('statusActive') + ' (counter: ' + (sess.sendCounter || 0) + ')</span>' : '✗ ' + D.t('statusNoSession')),
         D.t('secLblFwdSec') + ': ' + (sess ? D.t('cmdCryptoFwdSec') : '—'),
         D.t('secLblReplay') + ': ' + D.replayCacheSize() + '/' + D.config().REPLAY_CACHE_SIZE + ' ' + D.t('secInLruCache'),
@@ -202,7 +206,7 @@ export function createDataPanels(D) {
       d.textContent = D.t('uiNoFiles');
     } else {
       const contactMap = {};
-      for (const c of await D.dbGetAll('contacts')) contactMap[c.id] = c.name;
+      for (const c of await D.dbGetAll('contacts')) contactMap[c.id] = safeName(c.name);
       D.safeSetHTML(d, '<b class="i-g">' + D.t('sharedFiles', files.length) + '</b><br>' +
         files.slice(0, 30).map(f => {
           const date = new Date(f.ts).toLocaleDateString();
@@ -213,40 +217,8 @@ export function createDataPanels(D) {
     box.appendChild(d); box.scrollTop = box.scrollHeight;
   }
 
-  // GDPR data export (Art. 15/20): identity summary, contacts, message
-  // metadata (text truncated to 200 chars, no keys, no file bodies).
-  async function gdprExport() {
-    try {
-      const identity = await D.dbGet('identity', 'keys');
-      const contacts = await D.dbGetAll('contacts');
-      const messages = await D.dbGetAll('messages');
-      const db = D.db();
-      const audit = db.objectStoreNames.contains('audit') ? await D.dbGetAll('audit') : [];
-      const settings = db.objectStoreNames.contains('settings') ? await D.dbGet('settings', 'app') : null;
-      return {
-        exportType: 'GDPR Data Export (Art. 15/20)',
-        exportedAt: new Date().toISOString(),
-        version: D.config().VERSION,
-        identity: identity ? { name: identity.name, alias: identity.alias, pubB64: identity.pubB64, createdAt: identity.createdAt } : null,
-        contacts: contacts.map(c => ({ id: c.id, name: c.name, alias: c.alias, isGroup: c.isGroup, createdAt: c.createdAt, pinned: c.pinned, muted: c.muted, blocked: c.blocked, archived: c.archived, notes: c.notes, labels: c.labels || [] })),
-        messages: messages.map(m => ({ msgId: m.msgId, contactId: m.contactId, text: m.text?.slice(0, 200), mine: m.mine, ts: m.ts, hasFile: !!m.fileData, hasVoice: !!m.voice })),
-        auditLog: audit.slice(-1000),
-        settings,
-        totalMessages: messages.length,
-        totalContacts: contacts.length,
-        totalFiles: messages.filter(m => m.fileData || m.voice).length,
-      };
-    } catch(e) { D.dbg(e, 'gdprExport'); }
-  }
-
-  async function runGdpr() {
-    const data = await gdprExport();
-    if (!data) { D.showToast(D.t('toastServerError'), 'error'); return; }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    D.downloadBlob(blob, `breeze-gdpr-export-${new Date().toISOString().slice(0, 10)}.json`);
-    D.auditLog('settings', 'GDPR data export performed');
-    D.showToast(D.t('toastGdprExport', data.totalMessages, data.totalContacts, data.totalFiles), 'success');
-  }
+  async function gdprExport() { return D.gdprExport(); }
+  async function runGdpr() { return D.runGdpr(); }
 
   return { getFileList, showFiles, gdprExport, runGdpr };
 }

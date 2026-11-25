@@ -105,6 +105,11 @@ export function createBackupTools(D) {
   }
 
   async function backupToFile() {
+    if (D.vault?.enabled()) {
+      try { const data = await D.vault.backup(); downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'breeze-vault-backup.json'); }
+      catch (e) { _dbg(e, 'vault-backup'); showToast(t('vaultFailed'), 'error'); }
+      return;
+    }
     const identity = await dbGet('identity', 'keys');
     const contacts = await dbGetAll('contacts');
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
@@ -135,6 +140,16 @@ export function createBackupTools(D) {
   }
 
   async function restoreBackup(file) {
+    try {
+      const data = JSON.parse(await file.text());
+      if (data.vaultBackupV !== undefined) {
+        if (!D.vault) throw new Error('vault module unavailable');
+        const pass = await showPrompt(t('vaultUnlock'), '', { type: 'password', autocomplete: 'current-password' });
+        if (pass) await D.vault.restore(data, pass);
+        return;
+      }
+    } catch (e) { _dbg(e, 'vault-restore'); showToast(t('toastInvalidBackup'), 'error'); return; }
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return; }
     const pass = await showPrompt(t('backupPassEnter'), '', { type: 'password', okText: t('decrypt'), autocomplete: 'current-password' });
     if (!pass) return;
     // "Not a Breeze backup at all" (unreadable, not JSON, not the {s,i,d}
@@ -280,6 +295,7 @@ export function createBackupTools(D) {
   // belt-and-braces, not a requirement). Disposable ('none') identities
   // are refused below: a kit would silently undo their chosen opt-out.
   async function createRecoveryKit() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return; }
     const seedH = globalThis.__breezeSeed;
     if (!seedH) { showToast(t('toastRecoveryUnavailable'), 'error'); return; }
     const identity = await dbGet('identity', 'keys');
@@ -516,6 +532,7 @@ export function createBackupTools(D) {
   // are refused — a backup is a recovery promise, and 'none' is the
   // promise that none exists (the kit guard's doctrine).
   async function simpleBackupAction() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return; }
     const identity = await dbGet('identity', 'keys');
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return; }
     if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return; }
@@ -531,6 +548,7 @@ export function createBackupTools(D) {
   // locator until its 90-day TTL), and it is confirmed as one rather
   // than happening by typo.
   async function updateSimpleBackup() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return false; }
     const identity = await dbGet('identity', 'keys');
     if (!identity?.recoveryAccount) { showToast(t('simpleNotEnrolled'), 'error'); return; }
     const passphrase = await showPrompt(t('simplePassEnter'), '', { type: 'password', autocomplete: 'current-password' });
@@ -615,6 +633,7 @@ export function createBackupTools(D) {
   // locator, ask the serving relay (a fresh install knows no other),
   // and land the account whole. Failures create NOTHING.
   async function restoreSimpleBackup() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return; }
     if (await dbGet('identity', 'keys')) { showToast(t('toastRecoveryHasIdentity'), 'error'); return; }
     const creds = await _promptSimpleRecoveryRestore();
     if (!creds) return;
@@ -640,6 +659,7 @@ export function createBackupTools(D) {
   // wrong one — it names a different (empty) slot — and is refused
   // before any fetch.
   async function restoreSimpleBackupLive() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return; }
     const identity = await dbGet('identity', 'keys');
     if (!identity?.recoveryAccount) { showToast(t('simpleNotEnrolled'), 'error'); return; }
     const passphrase = await showPrompt(t('simplePassEnter'), '', { type: 'password', autocomplete: 'current-password' });
@@ -698,6 +718,7 @@ export function createBackupTools(D) {
   // surfaced as such, never as a generic failure. Only the user's
   // passphrase can decrypt.
   async function createCloudBackup() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return; }
     // Disposable identities export nothing (the kit guard's doctrine, extended
     // to both backup producers): a backup is a recovery promise by construction.
     const idRec = await dbGet('identity', 'keys');
@@ -750,6 +771,7 @@ export function createBackupTools(D) {
   }
 
   async function restoreCloudBackup() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return; }
     const passphrase = await showPrompt(t('backupPassPrompt'), '', { type: 'password', autocomplete: 'current-password' });
     if (!passphrase) return;
     try {
@@ -882,6 +904,7 @@ export function createBackupTools(D) {
   }
 
   async function _runAutoBackup() {
+    if (D.vault?.enabled()) return;
     if (_autoRunning) return;
     const st = await _loadAutoState();
     if (!st.pending) return;
@@ -971,6 +994,7 @@ export function createBackupTools(D) {
   // verified against the recorded locator first — arming with a wrong
   // one would fork the backup (the _autoUploadSimple guard's reason).
   async function armAutoBackup() {
+    if (D.vault?.enabled()) { showToast(t('vaultBackupOnly'), 'error'); return false; }
     const identity = await dbGet('identity', 'keys').catch(() => null);
     if (!identity) { showToast(t('toastNoIdentityBackup'), 'error'); return false; }
     if (identity.recoveryMode === 'none') { showToast(t('toastRecoveryNoneBackup'), 'error'); return false; }

@@ -1,5 +1,226 @@
 # Security Policy
 
+## Lookalike display names
+
+The deployed `src/app/lookalike-names.js` warns locally when a contact's name,
+distributed profile name or alias resembles another contact or group member.
+It compares NFKC/case/whitespace variants and a compact Latin/Greek/Cyrillic
+confusable skeleton. The mapping subset is adapted from
+https://www.unicode.org/Public/security/16.0.0/confusables.txt (Unicode License
+v3, included in docs/UNICODE-LICENSE.txt), with additional visual heuristics
+(i/l/1, 0/o, rn/m, vv/w and Latin accent folding). It is not a complete UTS #39
+implementation and appearance varies by font. Indexed skeleton/deletion keys
+avoid an all-pairs edit-distance scan on each list render.
+
+One insertion, deletion or substitution is warned for ASCII-letter skeletons
+of 4–12 characters; shorter names, numbers and non-Latin scripts get exact
+skeleton matching only. Japanese Han/kana combinations and Latin mixed with
+Han/kana are not inherently suspicious. Japanese names differing by one kanji
+are not fuzzy-matched. Latin/Greek/Cyrillic mixtures and hidden/control
+characters also warn without a matching contact. Identical IDs/full public
+keys never collide with themselves. Generic Contact/Unknown placeholders are
+excluded from similarity matching; ordinary people sharing a real name may
+still warn. Warnings are advisory: verify full fingerprints over a trusted,
+independent channel; a matching name, alias or short ID proves no identity.
+
+Add via link/alias shows a confirmation naming up to three existing contacts
+and their IDs. Incoming first contacts are never blocked by a confirmation:
+they receive a toast and persistent derived list/header warnings. Group
+headers, /members, mentions and message sender labels use safe names; group
+headers/member and sender labels warn about collisions. Name/profile/alias
+changes and reload recompute warnings from local records, not a relay verdict.
+No acknowledgement or trust override is persisted, no names are sent out for
+analysis, and no wire/signature format or stored original name is rewritten.
+Displayed names strip Unicode Default_Ignorable_Code_Point and C0/C1 controls,
+including bidi overrides/isolation, zero-width characters and variation
+selectors. This can simplify legitimate emoji/joining forms; raw names remain
+available in backups. This protection is not a general sanitizer for message
+bodies, file names, imported HTML or OS push payloads.
+
+Full confusable data, language-specific fuzzy matching, font analysis,
+cross-device trust/override sync and OS push-name handling are deferred.
+
+## Account activity and new-device alerts
+
+The deployed `src/app/device-alerts.js` verifies the existing root-signed device registry,
+persists its own-account high-water revision and device list, and records previously unseen
+linked keys and alerts in one local IndexedDB transaction. Stale own-account registries cannot
+replace that baseline. First discovery of an existing link is labeled **previously unseen**,
+not proof that the device was just created. The signed registry revision supplies the time;
+device names are not authenticated by this protocol and are deliberately not displayed.
+The persistent banner has explicit, local-only acknowledgement and a review/unlink action.
+`/security` retains the device list and acknowledged activity. These public-key/activity
+records live in the account's plaintext `settings` store, contain no private keys or push
+endpoints, and are not tamper-resistant against a compromised browser or local database.
+
+`POST /account/activity` is rate-limited to 30 requests/IP/minute. Upgraded clients sign
+`BreezeAccountActivity/v1:` plus JSON `[userId,pub,ed,kind,id,ts]` using their own Ed25519 key.
+`kind` is `session` or `push`; the installation ID is random, origin-wide and stable across
+reloads; the push ID is SHA-256 of endpoint and p256dh, never the endpoint/auth secret itself.
+The Worker checks the registered owner and a five-minute timestamp window. Each claim has
+an independent KV slot (no shared append race), preserves its first signed timestamp, and
+expires after 90 days without refresh. Session claims refresh on checks; push claims refresh
+when that browser successfully registers its subscription on the serving relay. A read needs
+the owner's signature over `breeze-activity-read:readerId:ts`, or a signed, currently linked
+reader with its own owner proof. Clients independently verify every returned claim against
+their local own/root signing pin, never a key returned with the claim. Own installation and
+locally announced push rotations do not alert that installation. A fresh browser restoring
+the same identity announces a new installation and alerts existing upgraded installations.
+
+Checks run at boot and once/minute while the messenger is running, including follower tabs.
+Background/browser suspension, offline devices and closed apps delay detection until resume
+or next boot; this is not an OS push alert. Unavailable/unsupported/incomplete activity reads
+show an explicit warning rather than a clean bill of health. Reads are bounded at 64 slots;
+truncation is reported as incomplete, not silently accepted as complete. High device churn
+requires review; a complete account-wide historical log and pagination are deferred.
+
+The no-OTP `/prekey/status` now includes the public identity/signing keys (or null). Clients
+compare them against live local keys/pinned root keys, including missing signing keys. Normal
+SPK/OTP/PQ refresh and reload do not change that comparison. **A relay key discrepancy is an
+unverified relay report, visibly labeled separately**, not authenticated evidence that a new
+device obtained private keys. A malicious relay can fabricate this warning, just as it can
+return a bogus prekey bundle; no signature by the old account key exists for an unauthorized
+overwrite. The client never adopts the returned keys or clears a persisted warning on a
+subsequent matching response.
+
+### Remaining suppression and revocation limits
+
+The relay cannot forge a linked-device or installation/push claim without the locally pinned
+signing key. A thief holding that key can sign claims. KV is eventually consistent; responses
+can lag. The relay can withhold new signed registries/events, return only an older valid list,
+lie about completeness, or return matching keys in status while serving other keys to peers.
+The local registry high-water mark detects rollback only after a newer revision was observed;
+it is not global consensus or protection against indefinite omission of a not-yet-seen event.
+An explicit unavailable warning catches errors, not a relay plausibly serving a stale subset.
+There is no independent witness/gossip channel, guaranteed push wakeup, or cross-relay activity
+aggregation. The activity service covers the serving relay; other home relays can be hidden.
+
+Only upgraded, **cooperating** clients announce sessions/restores and push registrations.
+Linked secondaries additionally need a locally pinned root signing key (`account.rootEd`
+or the root contact's `sigPub`). The existing link protocol does not always establish that
+pin: old `/linkto` reads `rootEd` although old registries do not include it. We do not invent
+a signing pin from relay data. Such secondaries show checking-unavailable and cannot verify
+root-account events until they have a trusted local pin. Repairing that bootstrap with an
+out-of-band authenticated signing-key binding is deferred, not papered over with relay TOFU.
+There is no trustworthy browser/session identifier in the old prekey or push protocols.
+An old or malicious client using copied keys can omit the new announcement entirely; its
+normal prekey upload/refresh is intentionally not treated as a new device (that would flag
+ordinary rotation). Likewise, an old relay cannot supply the new activity/status fields.
+This feature is detection with explicit limits, not remote session invalidation or an
+anti-takeover guarantee. The existing root-signed `/unlink` only stops linked-device fan-out;
+it cannot invalidate copied identity keys or a push subscription belonging to another browser.
+The review dialog explains the boundary and recommends moving to a fresh identity and notifying
+contacts after identity theft. Per-session tokens, authenticated key-transition proofs,
+root-signed per-device signing keys and remote push-subscription revocation are deferred.
+
+## Persisted contact verification
+
+`/verify` can record an explicit comparison of the new **both-key** safety number.
+The existing encryption-only number is unchanged; the additional comparison uses
+SHA-256 over a versioned, domain-separated canonical array of both participants'
+full encryption and Ed25519 public pins, sorted lexicographically. Both clients
+must support this display. A missing signing pin cannot be confirmed.
+
+Account-local `identity:verify:<contact id>` records bind the full encryption and
+signing pins with SHA-256 (`BreezeContactVerification`, version 1), timestamp and
+method. They and the one-time `verify:policy` migration marker are vault-protected,
+included in its authenticated inventory/migration/backups. With the vault disabled
+they have the same trusted-local-storage boundary as other unwrapped identity rows.
+Contact names, roster metadata and audit entries remain outside the vault; their
+presence is not evidence of verification. No verification assertion is sent on wire.
+
+Key replacement **or disappearance**, rejected bundle/message/SDP key mismatches,
+and KT rolled/tampered verdicts invalidate verification before normal send gates.
+Invalidation is sticky even if the old keys return, is audited, and renders a
+persistent contact/header warning. Re-confirmation binds the current pins, never
+an incoming candidate key. A comparison opened before an invalidation cannot
+confirm stale state. Group member badges use the same records and require both
+member pins; missing roster pins are not silently recovered from a direct contact.
+An incomplete legacy roster shows unverified without treating absent roster metadata
+as removal of a direct contact's pin. Actual contact writes detect replacement/removal
+even before first verification; establishing the first signing pin remains normal TOFU.
+The verification module is mandatory at boot, and verification-record read/write
+failures reject rather than silently bypassing strict policy.
+
+Strict mode defaults on, but blocks only after a key-change warning, not merely
+because a new contact has never been verified. It gates message encryption, normal
+send actions, file chunks, relay/retry/outbox sends, and groups containing an affected
+strict contact. `/verify` can disable strict mode without clearing the warning.
+Already transmitted data cannot be recalled; there is no claim to revoke previously
+shared group keys. Previously blocked outbox/retry work may resume after confirmation.
+
+Explicit in-person pairing confirmation automatically records verification. **Once
+per upgraded account**, existing local `offlineVerified` confirmations whose stored
+remote pins match the contact are imported. This deliberately trusts the pre-upgrade
+local confirmation baseline, not a new cryptographic proof that a human compared
+numbers. The protected migration marker is written first, so later plaintext imports
+cannot repeat this trust upgrade. A crash midway can leave some old pairings unverified
+and requiring manual confirmation; it cannot silently verify later imported flags.
+
+Verification is device/account local. A wholly new identity/contact ID does not
+inherit it. Cross-device verification sync, duplicate/lookalike-name detection and
+new-device alerts are deferred; this is not an identity-continuity or wire change.
+
+## Origin-wide key vault
+
+`/vault enable` (also `/keywrap`) replaces the old per-slot passphrase wrapping.
+Use a **separate strong passphrase, at least 12 characters**, not the `/lock` UI
+password. `/vault lock` locks all accounts and tabs; `/vault password` authenticates
+and changes that passphrase; `/vault disable` authenticates before removing protection.
+Disable must finish before `/wipe`, account deletion or reset can erase protected keys.
+The `/lock` action uses the vault lock when the vault is enabled.
+
+Protected IndexedDB identity slots: `keys`, `signing`, `pq-priv`, `spk-priv`,
+`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`, `verify:*`. Entire records are encrypted,
+including their public metadata. **History, contacts, drafts and other settings
+remain outside this vault**. Existing message-body encryption is independent: its
+`msgkey` remains unprotected by the vault, so history is readable to someone with
+the origin's files. This is a key/session vault, not full-device encryption.
+
+A random 256-bit data key is AES-256-GCM wrapped under PBKDF2-SHA256 (600,000
+iterations, random 128-bit salt). Only the non-extractable unlocked data key is
+retained by the vault. Each record has a fresh 96-bit IV and authenticated context
+binding format version, vault ID, account database, store and exact record key.
+An explicit tagged codec preserves ArrayBuffers and typed-array byte ranges; unknown
+tags, malformed values, substituted records and plaintext protected rows are rejected.
+An authenticated per-account inventory detects deleted protected records at boot.
+Password change atomically rewraps only the data key in the control database; it
+does not rewrite protected records. No passphrase or unlocked data key is persisted.
+
+Web Locks freeze participating tabs; BroadcastChannel forces quiesce and reload.
+Timers, transport sends and network writes stop, DataChannels/WebSockets/calls close,
+the crypto worker terminates, and a generation guard rejects late crypto results.
+Reload enters a modal **pre-boot** unlock gate before identity/session initialization.
+Locked pages do not decrypt, ACK, send or process quick replies. Web Push is generic
+and has no reply/read actions whenever the vault is enabled, even in unlocked tabs.
+
+Migration first freezes writers and stages encrypted rows in a durable origin journal
+(`breeze-vault`). The phase, account list, restore index and staged-slot inventories
+are authenticated under the data key, preventing journal truncation or phase substitution.
+Each account then commits records plus its authenticated inventory
+in one atomic transaction. Boot remains blocked until *all* accounts finish. Interrupted
+enable/disable/restore resumes after authentication. Old `/keywrap` records are read
+only to migrate them, including unwrapping the out-of-scope history key. No database
+version bump is used: old clients cannot import vault-format identity records and
+must be upgraded. Close older tabs before enabling: known legacy leader tabs block
+migration. Old client code, malicious same-origin code, disk rollback, browser bugs,
+extensions and XSS are **not** a security boundary this vault can enforce against.
+
+Vault file backups contain only encrypted protected rows and the wrapped-key envelope,
+not history/contacts/drafts. Restore requires the vault passphrase and empty account
+databases on a fresh origin/profile; corrupt backups are rejected before writes.
+Disposable identities refuse export. Cloud/automatic/simple/recovery-kit exports and
+in-place legacy backup restore are disabled while enabled, rather than exporting
+decrypted private material. Preserve the existing recovery phrase and a vault backup
+before enabling. If the vault passphrase is lost, use the existing phrase/restore path
+on a fresh installation to recover the identity; **old sessions cannot be recovered**.
+Authentication cannot be bypassed by `/lock reset`.
+
+Deferred: full history/contact encryption, platform keystores/biometrics, automatic
+idle locking, encrypted cloud vault synchronization and in-place backup merging.
+There is no protection against an attacker executing JavaScript while unlocked,
+nor a guarantee that a garbage-collected browser erases every old key copy from RAM.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Breeze, please report it responsibly.
@@ -22,6 +243,16 @@ Instead, please use [GitHub Security Advisories](https://github.com/shizukutanak
 - **Fix:** Within 30 days for critical issues
 
 ## Threat Model & Limitations
+
+### Message requests and stranger quarantine
+
+Unknown direct senders are gated before message decryption, session creation, file/media handling, link rendering, receipts and call ringing. Their ciphertext envelopes live in `settings:requests:v1`, not the message/contact stores. The Requests view survives reloads. Names and ID prefixes are unverified labels, not authentication. Accept atomically creates the contact and then replays the queue through the normal receive checks; interrupted replay resumes on reload with ordinary message deduplication. Explicit contact addition and confirmed offline pairing also authorize queued traffic. Joined-group members and authenticated linked-device fan-out retain their existing authorization checks; a stranger cannot bypass quarantine merely by setting a group or self-sync flag.
+
+Limits per account: 20 senders, 20 envelopes per sender, 100 total envelopes, 2 MiB of serialized envelopes total, 128 KiB per envelope, and seven days from a request's first arrival (`MS.DAY`). Excess input is dropped, not decrypted. Expiry is enforced on subsequent access, including boot, not while the app is closed. Delete forgets the queue but permits a later request. Block persists the full identity key, forgets its queue and silently drops future application messages. Up to 1,000 blocks are retained; at capacity a new block fails visibly rather than evicting an old block. Unblock is explicit. Quarantine is ciphertext, but sender keys/names/timestamps and blocks are local plaintext metadata; this is not the separate key-vault feature. Clearing browser data or restoring an older account backup can erase this local policy. Web Locks are required for serialized acceptance/replay across tabs; unsupported replay fails closed.
+
+Unaccepted contacts have no conversation, so typing, read and application-delivery receipts are not emitted. Relay mailbox consumption/ACKs, prekey publication and sealed-envelope opening remain necessary transport operations; sender metadata inside a sealed envelope is opened to decide admission, but its message payload is not decrypted. A relay can still observe recipient availability, polling and timing. An additive, signed `privatePresence` flag keeps public single/batch presence queries offline while retaining account-clone detection and alias renewal. Legacy clients/relays may still publish presence; a new client's signed private heartbeat is rejected by an old relay rather than downgraded to public. Existing public presence may remain visible until that relay's freshness window expires. No new endpoint is introduced.
+
+Foreground request notifications are generic. Background pushes have no trustworthy sender classification (especially sealed pushes), so **all** push notifications use generic EN/JA text, no relay-supplied title/body/link and no quick-reply/read actions. This intentionally also limits notifications for accepted contacts; a blocked sealed push may still produce a generic wake notification, but its application message is dropped. Retained notification actions from older installations are ignored unless they resolve to an existing, unblocked contact. Browser permission prompts, relay metadata and OS-level notification timing are not hidden. Pushes and request floods can still consume bounded resources; this is consent gating, not proof-of-personhood or global spam prevention.
 
 Being honest about what Breeze's end-to-end encryption does and does not defend against:
 
@@ -371,7 +602,7 @@ Breeze uses the following cryptographic primitives:
 | At-Rest | PBKDF2 ≥600k SHA-256 + AES-256-GCM | App-lock / identity key wrapping (I4) |
 | Protocol (1:1) | Signal Double Ratchet (v4/v5) | Per-message FS; Nr reset on DH step |
 | Protocol (group) | Sender Key chain-ratchet + epoch rotation | Group FS (I2) + PCS/kick (I3) |
-| Group Auth | Peer-bound direct frames + symmetric Sender Keys | Membership/transport checks; no deployed per-message author signature (N2) |
+| Group Auth | Ed25519 `BreezeGroupAuthor/v1` signatures under locally pinned signing keys | Insider sender forgery rejected in negotiated strict groups; unsigned legacy explicitly unverified |
 | Franking | HMAC-SHA256 commitment/opening | Verifiable abuse reporting without escrow (I17) |
 | Sealed Sender v2 | Ephemeral X25519 ECDH + HKDF('breeze-seal-v2') + AES-256-GCM (AAD: to+ts) | Sender anonymity vs the relay, incl. first-contact X3DH header |
 | Anti-Replay | Counter + msgId dedup + TTL-expiring skipped-key cache | Replay + stale-key FS (I7) |
@@ -380,16 +611,43 @@ Breeze uses the following cryptographic primitives:
 | Timing | Constant-time ctEqual() | Commitment + MAC comparisons |
 | Memory | zeroBuffer() | Key material erasure after use |
 
-Group receive checks membership before either Sender-Key or legacy decryption. Direct
-`group_msg` frames must match the connected peer's full public key; explicitly forwarded
-frames do not gain group-author authentication from the forwarder's identity. Group
-attribution uses local contact/member names, not received display names. Relay sender
-and public-key fields must be consistent with the local member record, but are not
-an author proof: another member receives the same Sender-Key material and can forge
-a ciphertext as that sender with consistent fields. Sealed Sender does not remove
-this insider attack. The Ed25519 author signatures in reference `src/crypto/group.js`
-are not deployed by these checks; per-message author signatures need a separately
-negotiated protocol upgrade. Local names likewise do not establish a human identity.
+Group receive checks membership and author signatures before Sender-Key/legacy decryption,
+ratchet advancement, deduplication, persistence or delivery ACK. Direct `group_msg` frames
+also match the connected peer's full encryption key. Explicit forwarding preserves the
+enclosed author's signature: the forwarding contact supplies neither authority nor name.
+The verification key comes from the author's local contact/member pin (`sigPub`), never
+an envelope or relay roster. Own-account root copies use the locally pinned link-time
+`rootEd`; this is not a remotely supplied signing key. Missing pins reject signed traffic.
+
+`group-author-sig-v1` is independent of `group-v5`. The N-party AND floor uses explicit
+capability proofs signed by every member's pinned identity and carried in authenticated
+1:1 Sender-Key distributions. Relay-only caps cannot activate strict mode. Strict is
+persisted monotonically, survives roster changes/restarts, and never falls back; entering
+strict rotates fresh Sender-Key material into a new epoch. Invalid signatures reject in
+every group. Unsigned legacy messages remain permitted ONLY before strict activation,
+with **Legacy — author not verified** shown live and on history reload. Such groups still
+permit symmetric-key insider forgery of unsigned traffic; the label is not an author proof.
+
+The deployed signature is one long-term Ed25519 identity signature, not reference
+`src/crypto/group.js`'s experimental two-layer/AFKS scheme. It covers the exact transported
+ciphertext string plus group, full encryption author, epoch and counter. It does NOT
+authenticate outer timestamps, reply previews, expiration or display metadata. Local names
+do not establish a human identity. Durable replay windows retain 1024 counters per
+group/full author/current epoch; failed decryption or aborted persistence consumes nothing.
+Acceptance, receiver ratchet and replay state share one IDB transaction. Web Locks serialize
+sender allocation and receiver processing across tabs; runtimes without signing/Web Locks
+stay legacy-only. Message-at-rest sealing and backup-dirty notifications are preserved.
+
+**Deferred rollout work:** explicit downgrade/legacy-admission confirmation UI, membership
+consensus, per-message forward-secure signing keys, selective relay ACK redesign, and
+root-signed **device signing-key** bindings. The existing device registry binds device
+encryption keys only. Secondary senders therefore remain unsigned in legacy groups and
+cannot send into a strict group until they have an authenticated local signing-key pin;
+no message-supplied device key is trusted to work around this. Signed root messages still
+reach linked-device mailboxes. A missing author module fails group sends/receives closed.
+Sealed relays already preserve opaque bytes; older plain `/msg` relays that strip the new
+fields must be upgraded for strict delivery (stripping cannot trigger legacy fallback).
+Protocol, vectors and limits: [Group author signatures](docs/GROUP_AUTHOR_SIG.md).
 
 ## Security Headers
 

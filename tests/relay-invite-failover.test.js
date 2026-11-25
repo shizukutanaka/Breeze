@@ -149,7 +149,8 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
     'renderContacts', '_auditKeyTransparency',
     'updateMsgStatus', 'registerBackgroundSync',
     '_updateOutboxBadge', 'setTimeout', '_peerSealV2', '_saveRetryQueue',
-    `let _retryTimer = null;
+    `const _nameTools = null;
+     let _retryTimer = null;
      const _retryQueue = [];
      const _isOffline = false;
      ${sliceBetween('const CAPS_X3DH_V5', 'const CAPS_GROUP_V5')}

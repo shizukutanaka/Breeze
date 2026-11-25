@@ -5,7 +5,7 @@
 // a runtime error during boot, a broken DOM id a script references, or the setup flow
 // silently failing in a real Chromium.
 import { test, expect } from '@playwright/test';
-import { submitSetup, readMessages } from './helpers.mjs';
+import { submitSetup, readMessages, openAddContact } from './helpers.mjs';
 
 test('boots to the setup screen with no console errors', async ({ page }) => {
   const errors = [];
@@ -45,7 +45,7 @@ test('the contact list survives a reload', async ({ browser }) => {
     await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((resolve) => {
-      const req = indexedDB.open('breeze-messenger', 5);
+      const req = indexedDB.open('breeze-messenger');
       req.onsuccess = () => {
         req.result.transaction('identity', 'readonly').objectStore('identity').get('keys')
           .onsuccess = (e) => resolve(e.target.result?.pubB64);
@@ -55,16 +55,16 @@ test('the contact list survives a reload', async ({ browser }) => {
   await idOf(A, 'Keeper');
   const pubB = await idOf(B, 'Kept');
 
-  await A.locator('#b-msg-add').click();
-  const dialog = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(A);
+  const dialog = A.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  await expect(A.locator('#msg-contacts .contact')).toHaveCount(1);
+  await expect(A.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1);
 
   await A.reload();
   await expect(A.locator('#msg-main')).toBeVisible();
-  await expect(A.locator('#msg-contacts .contact')).toHaveCount(1, { timeout: 15_000 });
+  await expect(A.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1, { timeout: 15_000 });
 
   await ctxA.close(); await ctxB.close();
 });
@@ -87,7 +87,7 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
     await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((resolve) => {
-      const req = indexedDB.open('breeze-messenger', 5);
+      const req = indexedDB.open('breeze-messenger');
       req.onsuccess = () => {
         req.result.transaction('identity', 'readonly').objectStore('identity').get('keys')
           .onsuccess = (e) => resolve(e.target.result?.pubB64);
@@ -98,21 +98,22 @@ test('messages still arrive after a reload (boot runs to completion)', async ({ 
   const pubB = await idOf(B, 'Sender');
 
   // A adds B, then RELOADS — simulating simply reopening the app tomorrow.
-  await A.locator('#b-msg-add').click();
-  const dlg = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(A);
+  const dlg = A.locator('dialog[open] .add-form-contact');
   await dlg.locator('.modal-input').fill(pubB);
   await dlg.locator('button.btn-g').click();
   await expect(dlg).toBeHidden();
+  await expect(A.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1);
   await A.reload();
   await expect(A.locator('#msg-main')).toBeVisible();
 
   // B sends. If boot aborted, startPolling() never ran and this never arrives.
-  await B.locator('#b-msg-add').click();
-  const dlgB = B.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(B);
+  const dlgB = B.locator('dialog[open] .add-form-contact');
   await dlgB.locator('.modal-input').fill(pubA);
   await dlgB.locator('button.btn-g').click();
   await expect(dlgB).toBeHidden();
-  await B.locator('#msg-contacts .contact').first().click();
+  await B.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(B.locator('#msg-input-bar')).toBeVisible();
   const probe = 'sent after the other side reloaded ' + Date.now();
   await B.locator('#msg-input').fill(probe);

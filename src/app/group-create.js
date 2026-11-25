@@ -1,3 +1,5 @@
+import { safeName } from './lookalike-names.js';
+
 // Breeze — group creation flows (moved out of index.html in the
 // stage 5 step 4 line-budget pass; behavior unchanged).
 // createGroup: pick members from the contact list by number, enforce
@@ -11,7 +13,7 @@ export function createGroupCreate(D) {
   async function createGroup(name) {
     try {
       const contacts = await D.dbGetAll('contacts');
-      const list = contacts.filter(c => !c.isGroup).map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+      const list = contacts.filter(c => !c.isGroup).map((c, i) => `${i + 1}. ${safeName(c.name)}`).join('\n');
       const sel = await D.showPrompt(D.t('addMembersPrompt') + '\n' + list, '', { placeholder: '1,2,3' });
 
       if (!sel || !sel.trim()) {
@@ -23,11 +25,11 @@ export function createGroupCreate(D) {
       const indices = sel.split(',').map(s => parseInt(s.trim()) - 1).filter(i => !isNaN(i));
       const members = indices.map(i => contacts[i]).filter(Boolean).map(c => ({ id: c.id, pubB64: c.pubB64, name: c.name }));
       if (members.length === 0) { await createGroupInviteLink(name); return; }
-      if (D.groupV5()) {
+      if (D.groupV5() || D.authorCaps?.().length) {
         const capsById = await D.fetchCaps(members.map(m => m.id));
         for (const m of members) m.caps = capsById[m.id] || [];
       }
-      members.push({ id: D.myId(), pubB64: D.myPubB64(), name: D.myName() });
+      members.push({ id: D.myId(), pubB64: D.myPubB64(), name: D.myName(), caps: [...(D.groupV5() ? [D.capsGroupV5()] : []), ...(D.authorCaps?.() || [])] });
 
       // A3: Group member limit
       const maxMembers = D.groupMax();
@@ -58,7 +60,7 @@ export function createGroupCreate(D) {
   async function createGroupInviteLink(name) {
     if (!D.hasApi()) { D.showToast(D.t('toastServerRequired'), 'error'); return; }
     try {
-      const gcaps = D.groupV5() ? [D.capsGroupV5()] : undefined;
+      const gcaps = [...(D.groupV5() ? [D.capsGroupV5()] : []), ...(D.authorCaps?.() || [])];
       const resp = await D.postAPIRaw('/group/create', { name, creatorId: D.myId(), creatorPub: D.myPubB64(), creatorName: D.myName(), caps: gcaps,
         ...(await D.groupCreateAuth(D.myPubB64(), name, D.myName(), gcaps)) });
       if (!resp.ok) { D.showToast(D.t('toastGroupFail'), 'error'); return; }
@@ -125,7 +127,7 @@ export function createGroupCreate(D) {
     if (!D.hasApi()) return;
     try {
       // Join the group on server
-      const joinCaps = D.groupV5() ? [D.capsGroupV5()] : undefined;
+      const joinCaps = [...(D.groupV5() ? [D.capsGroupV5()] : []), ...(D.authorCaps?.() || [])];
       const joinAuth = D.groupJoinAuth ? await D.groupJoinAuth(token, D.myPubB64(), D.myName(), joinCaps) : {};
       const resp = await D.postAPIRaw('/group/join', { token, memberId: D.myId(), memberPub: D.myPubB64(), memberName: D.myName(), caps: joinCaps, ...joinAuth });
       if (!resp.ok) {

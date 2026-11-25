@@ -34,6 +34,7 @@ async function world({ keys, contact, bundles = [], spk, pqSeed, pq = false } = 
   });
   const legacy = vi.fn(async () => null);
   const D = {
+    _requests: { admit: async () => true },
     crypto, CONFIG: { X3DH_V5_ENABLED: true, PQXDH_ENABLED: pq, PREFERRED_CURVE: 'X25519',
       REPLAY_CACHE_SIZE: 2000, MSG_PAD_BOUNDARY: 256, IV_BYTES: 12, SESSION_RESET_THRESHOLD: 3 },
     API: 'https://relay.test/api', _hasX25519: true, _hasEd25519: true,

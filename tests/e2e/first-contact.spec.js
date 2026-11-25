@@ -3,15 +3,15 @@
 // header on a control payload the peer dropped or collided with — after which NO chat
 // message between the two ever decrypted (status stayed "deposited", nothing was shown).
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 
-// The add-contact surface is the in-chat panel (_showAddContactPanel).
+// Add through the real add-contact dialog.
 async function addContact(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const input = page.locator('#msg-messages .modal-input');
+  await openAddContact(page);
+  const input = page.locator('dialog[open] .add-form-contact .modal-input');
   await input.fill(pubB64);
   await input.press('Enter');
-  const contact = page.locator('#msg-contacts .contact');
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)');
   await expect(contact).toBeVisible();
   await contact.click();
 }
@@ -44,12 +44,18 @@ test('both sides add each other: the first message and the reply are delivered',
   await aliceCtx.close(); await bobCtx.close();
 });
 
-test('only the sender added the recipient: the stranger still receives the first message', async ({ browser }) => {
+test('only the sender added the recipient: acceptance releases the first message', async ({ browser }) => {
   const { aliceCtx, bobCtx, alice, bob, bobPub } = await pair(browser, '203.0.113.63', '203.0.113.64');
   await addContact(alice, bobPub);
 
   await say(alice, 'hello stranger');
-  const incoming = bob.locator('#msg-contacts .contact');
+  await expect(bob.locator('#b-msg-requests')).toHaveText('Requests (1)', { timeout: 20_000 });
+  await expect(bob.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(0);
+  await bob.locator('#b-msg-requests').click();
+  await bob.locator('[data-request-action="accept"]').click();
+  await expect(bob.locator('dialog[open]')).toContainText('No message requests');
+  await bob.locator('dialog[open] [value="cancel"]').click();
+  const incoming = bob.locator('#msg-contacts .contact:not(.self-card)');
   await expect(incoming).toBeVisible({ timeout: 20_000 });
   await incoming.click();
   await expect(bob.locator('#msg-messages')).toContainText('hello stranger', { timeout: 20_000 });

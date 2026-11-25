@@ -7,18 +7,18 @@
 // from a real browser exchange and asserts the sender is cryptographically absent — while
 // the messages still deliver.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
 
 async function addAndOpen(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB64);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  const contact = page.locator('#msg-contacts .contact').first();
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)').first();
   await expect(contact).toBeVisible();
   await contact.click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();

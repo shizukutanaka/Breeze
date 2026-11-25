@@ -4,7 +4,7 @@
 // screen, contact click, compose, send). Exercises createGroup/createGroupInviteLink/
 // processJoinToken/startGroupMemberPoll/encryptGroupMsg/distributeSenderKey end to end.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 import { createHash } from 'node:crypto';
 
 // Distinct synthetic CF-Connecting-IP per context — see messaging.spec.js for why: without
@@ -18,9 +18,9 @@ function ctxOpts(ip) {
 // the members prompt empty to route to the invite-link path (createGroupInviteLink), and
 // returns the extracted invite URL.
 async function createGroupWithInviteLink(page, name) {
-  await page.locator('#b-msg-add').click();
-  const groupDialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
-  await groupDialog.locator('.modal-input').fill('group:' + name);
+  await openAddContact(page, 'group');
+  const groupDialog = page.locator('dialog[open] .add-form-group');
+  await groupDialog.locator('.modal-input').fill(name);
   await groupDialog.locator('button.btn-g').click();
 
   const membersDialog = page.locator('dialog[aria-labelledby]');
@@ -43,7 +43,7 @@ async function joinGroup(page, name, joinUrl, groupName) {
 
 async function readGroupFromIdb(page) {
   return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
+    const req = indexedDB.open('breeze-messenger');
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
       const tx = req.result.transaction('contacts', 'readonly');
@@ -74,7 +74,7 @@ test('group invite link: creator and joiner exchange a Sender-Key message', asyn
   // open her group conversation so the poll's renderContacts() update is visible, then wait
   // for it to pick Bob up before she sends (otherwise her local `members` list is still just
   // herself and Bob would never receive the message).
-  const aliceGroup = alice.locator('#msg-contacts .contact');
+  const aliceGroup = alice.locator('#msg-contacts .contact:not(.self-card)');
   await expect(aliceGroup).toBeVisible();
   await aliceGroup.click();
   await waitForMemberCount(alice, 2);
@@ -84,6 +84,23 @@ test('group invite link: creator and joiner exchange a Sender-Key message', asyn
   await alice.locator('#b-msg-send').click();
 
   await expect(bob.locator('#msg-messages')).toContainText(text, { timeout: 15_000 });
+  const reply = 'signed group reply — ' + Date.now();
+  await bob.locator('#msg-input').fill(reply);
+  await bob.locator('#b-msg-send').click();
+  await expect(alice.locator('#msg-messages')).toContainText(reply, { timeout: 15_000 });
+  for (const page of [alice, bob]) {
+    const auth = await page.evaluate(() => new Promise((resolve, reject) => {
+      const req = indexedDB.open('breeze-messenger'); req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const tx = req.result.transaction(['identity', 'messages']);
+        let strict = false, verified = false;
+        tx.objectStore('identity').getAll().onsuccess = e => { strict = e.target.result.some(r => r?.strict === true); };
+        tx.objectStore('messages').getAll().onsuccess = e => { verified = e.target.result.some(r => !r.mine && r.authorVerified === true); };
+        tx.oncomplete = () => resolve({ strict, verified });
+      };
+    }));
+    expect(auth).toEqual({ strict: true, verified: true });
+  }
 
   await aliceCtx.close();
   await bobCtx.close();
@@ -100,7 +117,7 @@ test('group invite link: creator kicks a member via /admin, server-side too', as
   const joinUrl = await createGroupWithInviteLink(alice, 'Kick Group');
   await joinGroup(bob, 'Bob', joinUrl, 'Kick Group');
 
-  const aliceGroup = alice.locator('#msg-contacts .contact');
+  const aliceGroup = alice.locator('#msg-contacts .contact:not(.self-card)');
   await expect(aliceGroup).toBeVisible();
   await aliceGroup.click();
   await waitForMemberCount(alice, 2);
@@ -139,7 +156,7 @@ test('creator promotes then demotes a member via /admin, reflected server-side',
   const joinUrl = await createGroupWithInviteLink(alice, 'Admin Group');
   await joinGroup(bob, 'Bob', joinUrl, 'Admin Group');
 
-  const aliceGroup = alice.locator('#msg-contacts .contact', { hasText: 'Admin Group' });
+  const aliceGroup = alice.locator('#msg-contacts .contact:not(.self-card)', { hasText: 'Admin Group' });
   await expect(aliceGroup).toBeVisible();
   await aliceGroup.click();
   await waitForMemberCount(alice, 2);
@@ -178,14 +195,14 @@ test('deleting a server-backed group as its creator removes it server-side too',
   await createGroupWithInviteLink(alice, 'Delete Group');
   const group = await readGroupFromIdb(alice);
 
-  const aliceGroup = alice.locator('#msg-contacts .contact');
+  const aliceGroup = alice.locator('#msg-contacts .contact:not(.self-card)');
   await expect(aliceGroup).toBeVisible();
   await aliceGroup.click({ button: 'right' });
   await alice.locator('.ctx-menu .ctx-item', { hasText: 'Delete' }).click();
   await alice.locator('dialog[aria-labelledby] [value="ok"]').click();
 
   // Client-side: the group is gone from the local contact list.
-  await expect(alice.locator('#msg-contacts .contact')).toHaveCount(0);
+  await expect(alice.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(0);
 
   // Server-side truth: createGroupInviteLink's delete-context-menu wiring previously never
   // called /api/group/delete at all, leaving every member's id/pub/name in the Worker's KV
@@ -215,12 +232,12 @@ test('a non-creator leaving a group removes only them server-side (group survive
   // Bob is NOT the creator (his local record has no matching createdBy), so deleting the
   // group from his contact list routes to /api/group/leave, not /api/group/delete.
   // processJoinToken also adds Alice as an individual contact, so target the group by name.
-  const bobGroup = bob.locator('#msg-contacts .contact', { hasText: 'Leave Group' });
+  const bobGroup = bob.locator('#msg-contacts .contact:not(.self-card)', { hasText: 'Leave Group' });
   await expect(bobGroup).toBeVisible();
   await bobGroup.click({ button: 'right' });
   await bob.locator('.ctx-menu .ctx-item', { hasText: 'Delete' }).click();
   await bob.locator('dialog[aria-labelledby] [value="ok"]').click();
-  await expect(bob.locator('#msg-contacts .contact', { hasText: 'Leave Group' })).toHaveCount(0);
+  await expect(bob.locator('#msg-contacts .contact:not(.self-card)', { hasText: 'Leave Group' })).toHaveCount(0);
 
   // Server-side truth: the group still EXISTS (Alice the creator didn't delete it) but Bob is
   // gone from its roster — the leave path, distinct from the creator-delete 404 above.
@@ -264,7 +281,7 @@ async function withGroupV5Disabled(context) {
 
 async function readGroupSenderKey(page, groupId) {
   return page.evaluate((gid) => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
+    const req = indexedDB.open('breeze-messenger');
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
       req.result.transaction('identity', 'readonly').objectStore('identity').get('gsk:' + gid).onsuccess = (e) => resolve(e.target.result);
@@ -286,7 +303,7 @@ test('group-v5 negotiation: one legacy member keeps the whole group on the v3 fa
   const joinUrl = await createGroupWithInviteLink(alice, 'Mixed Group');
   await joinGroup(bob, 'Bob', joinUrl, 'Mixed Group');
 
-  const aliceGroup = alice.locator('#msg-contacts .contact');
+  const aliceGroup = alice.locator('#msg-contacts .contact:not(.self-card)');
   await expect(aliceGroup).toBeVisible();
   await aliceGroup.click();
   await waitForMemberCount(alice, 2);
@@ -322,7 +339,7 @@ test('group-v5 negotiation: both members supporting it upgrades the group to the
   const joinUrl = await createGroupWithInviteLink(alice, 'V5 Group');
   await joinGroup(bob, 'Bob', joinUrl, 'V5 Group');
 
-  const aliceGroup = alice.locator('#msg-contacts .contact');
+  const aliceGroup = alice.locator('#msg-contacts .contact:not(.self-card)');
   await expect(aliceGroup).toBeVisible();
   await aliceGroup.click();
   await waitForMemberCount(alice, 2);

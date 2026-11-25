@@ -311,6 +311,7 @@ export default {
         '/api/alias/set': 10,
         '/api/device/set': 5,
         '/api/device/list': 30,
+        '/api/account/activity': 30,
         '/api/alias/get': 30,
         '/api/alias/delete': 5,
         // Group create/join write to KV on every call; cap them like prekey/upload (5) and
@@ -435,6 +436,7 @@ export default {
         case '/api/alias/get': return await handleAliasGet(body, env, request);
         case '/api/device/set': return await handleDeviceSet(body, env, request);
         case '/api/device/list': return await handleDeviceList(body, env, request);
+        case '/api/account/activity': return await handleAccountActivity(body, env, request);
         case '/api/alias/delete': return await handleAliasDelete(body, env, request);
         case '/api/group/create': return await handleGroupCreate(body, env, request);
         case '/api/group/join':   return await handleGroupJoin(body, env, request);
@@ -1640,7 +1642,8 @@ function plainPathDisabled(request) {
 
 async function handleMsgSend(body, ip, env, request) {
   if (env.PLAIN_PATH_DISABLED === 'true') return plainPathDisabled(request);
-  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
+  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub, authorSigV, authorSig } = body;
+  if ((authorSigV !== undefined || authorSig !== undefined) && (authorSigV !== 1 || typeof authorSig !== 'string' || !/^[A-Za-z0-9+/]{86}==$/.test(authorSig))) return json({ error: 'Invalid group author signature', code: 'INVALID_AUTHOR_SIG' }, 400, request);
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
   // v3.3: Input type validation
   if (typeof to !== 'string' || typeof from !== 'string' || typeof payload !== 'string') return json({ error: 'Invalid types', code: 'INVALID_TYPE' }, 400, request);
@@ -1728,6 +1731,7 @@ async function handleMsgSend(body, ip, env, request) {
   if (isVideoCall) msg.isVideoCall = true;
   if (isSenderKey) msg.isSenderKey = true;
   if (isGroupSK) msg.isGroupSK = true;
+  if (authorSigV === 1) { msg.authorSigV = 1; msg.authorSig = sanitizeString(authorSig, 88); }
   if (isGroupKick) msg.isGroupKick = true;
   if (typeof groupId === 'string' && groupId) { msg.groupId = groupId.slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
   if (typeof replyTo === 'string' && replyTo) msg.replyTo = replyTo.slice(0, 128);
@@ -2012,7 +2016,9 @@ async function checkPresenceAuth(body, env, request, fields) {
   const bundle = data ? safeJsonParse(data) : null;
   const edKey = (bundle && typeof bundle.edIdentityKey === 'string' && bundle.edIdentityKey) || null;
   if (!edKey) return json({ error: 'No registered identity key', code: 'NO_IDENTITY_KEY' }, 403, request);
-  const digest = await sha256Short(JSON.stringify([fields.pub || '', fields.name || '', fields.caps ?? null, fields.inst || '']));
+  const fieldsToSign = [fields.pub || '', fields.name || '', fields.caps ?? null, fields.inst || ''];
+  if (body.privatePresence === true) fieldsToSign.push(true);
+  const digest = await sha256Short(JSON.stringify(fieldsToSign));
   const ok = await verifyEd25519(edKey, utf8ToB64(`breeze-presence:${id}:${ts}:${digest}`), sig);
   if (!ok) return json({ error: 'Invalid signature', code: 'SIG_INVALID' }, 403, request);
   return null;
@@ -2049,8 +2055,8 @@ async function handlePresence(body, env, request) {
       const memRaw = memCache ? memCache.get(`presence:${cid}:data`) : null;
       if (memRaw) {
         const p = safeJsonParse(memRaw);
-        online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
-        if (p?.devTs) devTs[cid] = p.devTs;
+        online[cid] = p && !p.privatePresence ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs && !p.privatePresence) devTs[cid] = p.devTs;
       } else {
         misses.push(cid);
       }
@@ -2059,8 +2065,8 @@ async function handlePresence(body, env, request) {
       const data = await presenceStore(env, cid).read();
       if (data) {
         const p = safeJsonParse(data);
-        online[cid] = p ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
-        if (p?.devTs) devTs[cid] = p.devTs;
+        online[cid] = p && !p.privatePresence ? (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH : false;
+        if (p?.devTs && !p.privatePresence) devTs[cid] = p.devTs;
       } else {
         online[cid] = false;
       }
@@ -2084,13 +2090,13 @@ async function handlePresence(body, env, request) {
     if (memData) {
       const p = safeJsonParse(memData);
       if (!p) return json({ online: false }, 200, request);
-      return json({ online: (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
+      return json({ online: !p.privatePresence && (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
     }
     const data = await presenceStore(env, id).read();
     if (!data) return json({ online: false }, 200, request);
     const p = safeJsonParse(data);
     if (!p) return json({ online: false }, 200, request);
-    return json({ online: (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
+    return json({ online: !p.privatePresence && (Date.now() - p.at) < TIMEOUT_MS.PRESENCE_FRESH, caps: p.caps }, 200, request);
   }
 
   // Store presence heartbeat
@@ -2178,10 +2184,12 @@ async function handlePresence(body, env, request) {
     if (prev?.inst && prev.inst !== safeInst && Date.now() - prev.at < 90000) conflict = true;
   }
   const presData = { pub: safePub, name: safeName, at: Date.now() };
+  if (body.privatePresence === true) presData.privatePresence = true;
   if (safeInst) presData.inst = safeInst;
   if (safeInst && rawDevTs) presData.devTs = rawDevTs;
   if (safeCaps) presData.caps = safeCaps;
-  if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE) { // throttle store writes (see PRESENCE STORE: the throttle now bounds DO writes too)
+  const previous = safeJsonParse(globalThis._presenceCache.get(presKey + ':data') || 'null');
+  if (Date.now() - lastWrite > TIMEOUT_MS.PRESENCE_WRITE || previous?.privatePresence !== presData.privatePresence) {
     await presenceStore(env, id).write(JSON.stringify(presData), TTL.MIN * 6); // 6min TTL (covers 5min interval + slack)
     globalThis._presenceCache.set(presKey, Date.now());
   }
@@ -2516,6 +2524,36 @@ async function handleDeviceSet(body, env, request) {
     JSON.stringify({ root, devices, ts, sig }), { expirationTtl: TTL.MONTH * 3 });
   if (!stored) return json({ error: 'Failed to store device list', code: 'STORE_FAILED' }, 500, request);
   return json({ ok: true, count: devices.length }, 200, request);
+}
+
+async function handleAccountActivity(body, env, request) {
+  const { userId, event } = body;
+  if (!validateUserId(userId)) return json({ error: 'invalid userId' }, 400, request);
+  const owner = await readPrekeyOwner(env, userId);
+  if (!owner?.edIdentityKey) return json({ error: 'No owner' }, 404, request);
+  if (event) {
+    if (event.userId !== userId || event.pub !== owner.identityKey || event.ed !== owner.edIdentityKey || !['session', 'push'].includes(event.kind) || typeof event.id !== 'string' || !/^[a-f0-9]{32,64}$/.test(event.id) || !Number.isSafeInteger(event.ts) || Math.abs(Date.now() - event.ts) > TIMEOUT_MS.REQ_TS || typeof event.sig !== 'string' || event.sig.length > 500) return json({ error: 'Invalid activity' }, 400, request);
+    const clean = { userId, pub: sanitizeString(event.pub, 200), ed: sanitizeString(event.ed, 200), kind: event.kind, id: sanitizeString(event.id, 64), ts: event.ts, sig: event.sig };
+    const text = 'BreezeAccountActivity/v1:' + JSON.stringify([clean.userId, clean.pub, clean.ed, clean.kind, clean.id, clean.ts]);
+    if (!await verifyEd25519(owner.edIdentityKey, utf8ToB64(text), clean.sig)) return json({ error: 'Invalid signature' }, 403, request);
+    const key = `activity:${userId}:${clean.kind}:${clean.id}`;
+    const old = await kvGet(env, key, true);
+    if (!await kvPut(env, key, old || JSON.stringify(clean), { expirationTtl: TTL.MONTH * 3 })) return json({ error: 'Activity not saved' }, 503, request);
+    return json({ ok: true }, 200, request);
+  }
+  const { ts, sig } = body, reader = body.reader || userId;
+  if (!validateUserId(reader) || !Number.isSafeInteger(ts) || Math.abs(Date.now() - ts) > TIMEOUT_MS.REQ_TS || typeof sig !== 'string' || sig.length > 500) return json({ error: 'Authentication required' }, 403, request);
+  const readerOwner = reader === userId ? owner : await readPrekeyOwner(env, reader);
+  if (!readerOwner?.edIdentityKey || !await verifyEd25519(readerOwner.edIdentityKey, utf8ToB64(`breeze-activity-read:${reader}:${ts}`), sig)) return json({ error: 'Invalid signature' }, 403, request);
+  if (reader !== userId) {
+    const reg = safeJsonParse(await kvGet(env, `devices:${userId}`));
+    if (reg?.root !== owner.identityKey || !reg.devices?.some(d => d.pub === readerOwner.identityKey)) return json({ error: 'Not a linked device' }, 403, request);
+    const digest = await sha256Short(JSON.stringify(reg.devices.map(d => d.pub)));
+    if (!await verifyEd25519(owner.edIdentityKey, utf8ToB64(`breeze-device-set:${userId}:${reg.ts}:${digest}`), reg.sig)) return json({ error: 'Invalid registry' }, 403, request);
+  }
+  const listed = await env.KV.list({ prefix: `activity:${userId}:`, limit: 64 });
+  const events = await Promise.all(listed.keys.map(async k => safeJsonParse(await kvGet(env, k.name, true))));
+  return json({ events: events.filter(Boolean), complete: listed.list_complete === true }, 200, request);
 }
 
 // Public read: returns the signed record verbatim so the CLIENT can verify the root's
@@ -3717,6 +3755,7 @@ async function handleAccountDelete(body, env, request) {
     kvDel(env, `devices:${userId}`), // device registry: handleDeviceList's touch-on-read refreshes
     // its 90-day TTL on every read, so a registry left behind can outlive the account
     // indefinitely — and peers keep fanning out to phantom devices of a deleted account
+    ...(await kvListNames(env, `activity:${userId}:`)).map(key => kvDel(env, key)),
     kvDel(env, `prekey:${userId}`),
     kvDel(env, `prekey-owner:${userId}`),
     kvDel(env, aliasOwnerKey(userId)), // step-5 alias reverse record
@@ -4391,6 +4430,8 @@ async function handlePreKeyStatus(body, env, request) {
     }
   }
   const result = {
+    identityKey: bundle.identityKey || null,
+    edIdentityKey: bundle.edIdentityKey || null,
     uploadedAt: bundle.uploadedAt,
     otpCount,
     replenishOTP: otpCount <= 5,
@@ -5179,6 +5220,7 @@ export {
   renewAliasForActivity,
   handleDeviceSet,
   handleDeviceList,
+  handleAccountActivity,
   handleAliasDelete,
   validateUserId,
   sanitizeString,

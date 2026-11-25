@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { categoriesFor } from '../tools/plural-categories.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const locales = readdirSync(join(root, 'locales')).filter(f => f.endsWith('.json'));
@@ -62,16 +63,6 @@ describe('every locale file is key-complete against the inline English reference
   const EN = (0, eval)('(' + raw + ')').en;
   const enKeys = Object.keys(EN).sort();
   const placeholders = (s) => [...new Set((String(s).match(/\{(\d+)\}/g) || []))].sort().join(',');
-  // Dense sampling (mirrors tools/i18n-check.mjs): a sparse set misses categories a
-  // language only selects for specific endings (tl selects "other" for numbers ending
-  // in 4/6/9), which would falsely demand dropping a category real counts can select.
-  const categoriesFor = (loc) => {
-    const pr = new Intl.PluralRules(loc);
-    const samples = [];
-    for (let n = 0; n <= 120; n++) samples.push(n);
-    samples.push(201, 1001, 0.5, 1.5);
-    return new Set(samples.map((n) => pr.select(n)));
-  };
 
   for (const file of locales) {
     const loc = file.replace(/\.json$/, '');

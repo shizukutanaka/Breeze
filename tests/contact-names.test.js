@@ -2,8 +2,8 @@
 //
 // What is pinned here:
 //
-//   Behaviour — the REAL resolution/write functions are evaluated
-//   out of index.html (the listTime extraction pattern):
+//   Behaviour — the deployed name-tools factory supplies the real
+//   resolution/write functions extracted from index.html:
 //   1. The primary display name is c.name: the local nickname when
 //      the user renamed the contact (nameLocked), otherwise the
 //      name the contact set for themselves.
@@ -32,15 +32,12 @@
 //      in all 50 locale files.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
+import { createNameTools } from '../src/app/lookalike-names.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const names = readFileSync(new URL('../src/app/lookalike-names.js', import.meta.url), 'utf8');
 
 function loadNameTools(settings, activeContact) {
-  const start = html.indexOf('function contactDisplayName(c) {');
-  const end = html.indexOf('async function renderContacts()', start);
-  expect(start).toBeGreaterThan(-1);
-  expect(end).toBeGreaterThan(start);
-  const src = html.slice(start, end);
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const state = { puts: [], headerHtml: null, renders: 0 };
   const _DOM = { get: () => ({}) };
@@ -48,9 +45,7 @@ function loadNameTools(settings, activeContact) {
   const safeSetHTML = (el, h) => { state.headerHtml = h; };
   const dbPut = async (store, rec) => { state.puts.push([store, rec]); };
   const renderContacts = () => { state.renders++; };
-  const factory = new Function('esc', '_settings', '_DOM', 't', 'safeSetHTML', 'dbPut', 'renderContacts', 'activeContact',
-    src + '\nreturn { contactDisplayName, contactPeerName, contactPeerNameHtml, _setConvName, setContactNickname };');
-  const tools = factory(esc, settings, _DOM, t, safeSetHTML, dbPut, renderContacts, activeContact);
+  const tools = createNameTools({ esc, settings: () => settings, dom: _DOM.get, t, html: safeSetHTML, put: dbPut, render: renderContacts, active: () => activeContact });
   return { tools, state };
 }
 
@@ -147,7 +142,7 @@ describe('wiring — one shared path, no parallel store', () => {
 
   it('the chat header renders through _setConvName at open, profile update, unblock and group rename', () => {
     expect(html).toContain('_setConvName(contact);');
-    expect(html).toContain('if (activeContact?.id === c.id) _setConvName(c);');
+    expect(names).toContain('if (D.active()?.id === c.id) _setConvName(c);');
     expect(html).toContain('_setConvName(activeContact);');
   });
 
@@ -157,7 +152,7 @@ describe('wiring — one shared path, no parallel store', () => {
 
   it('there is no second nickname store on the contact record', () => {
     expect(html).not.toContain('c.nickname');
-    expect(html).toContain('c.nameLocked = true;');
+    expect(names).toContain('c.nameLocked = true;');
   });
 
   it('the Settings toggle exists, defaults on, and re-renders on change', () => {
