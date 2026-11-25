@@ -44,11 +44,17 @@ test('both sides add each other: the first message and the reply are delivered',
   await aliceCtx.close(); await bobCtx.close();
 });
 
-test('only the sender added the recipient: the stranger still receives the first message', async ({ browser }) => {
+test('only the sender added the recipient: acceptance releases the first message', async ({ browser }) => {
   const { aliceCtx, bobCtx, alice, bob, bobPub } = await pair(browser, '203.0.113.63', '203.0.113.64');
   await addContact(alice, bobPub);
 
   await say(alice, 'hello stranger');
+  await expect(bob.locator('#b-msg-requests')).toHaveText('Requests (1)', { timeout: 20_000 });
+  await expect(bob.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(0);
+  await bob.locator('#b-msg-requests').click();
+  await bob.locator('[data-request-action="accept"]').click();
+  await expect(bob.locator('dialog[open]')).toContainText('No message requests');
+  await bob.locator('dialog[open] [value="cancel"]').click();
   const incoming = bob.locator('#msg-contacts .contact:not(.self-card)');
   await expect(incoming).toBeVisible({ timeout: 20_000 });
   await incoming.click();

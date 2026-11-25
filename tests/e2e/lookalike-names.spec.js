@@ -57,7 +57,7 @@ test('confusable adds require confirmation; safe names and persistent header/gro
   await ctx.close();
 });
 
-test('a stranger first message warns without blocking delivery or requiring an add confirmation', async ({ browser }) => {
+test('a stranger lookalike stays quarantined; acceptance warns and delivers without an add confirmation', async ({ browser }) => {
   const receiverCtx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.192' } });
   const senderCtx = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.193' } });
   const receiver = await receiverCtx.newPage(), sender = await senderCtx.newPage();
@@ -70,6 +70,15 @@ test('a stranger first message warns without blocking delivery or requiring an a
   await row(sender, 'Recipient').click();
   await sender.locator('#msg-input').fill('First message from the lookalike');
   await sender.locator('#b-msg-send').click();
+  await expect(receiver.locator('#b-msg-requests')).toHaveText('Requests (1)', { timeout: 20_000 });
+  await expect(receiver.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1);
+  await expect(receiver.locator('#msg-messages')).not.toContainText('First message from the lookalike');
+  await receiver.locator('#b-msg-requests').click();
+  const request = receiver.locator('dialog[open]');
+  await expect(request.locator('.ln-warning')).toContainText(known.slice(0, 12));
+  await request.locator('[data-request-action="accept"]').click();
+  await expect(request).toContainText('No message requests');
+  await request.locator('[value="cancel"]').click();
   const incoming = receiver.locator('#msg-contacts .contact:not(.self-card)').filter({ has: receiver.locator('.name', { hasText: /^Аlice/ }) });
   await expect(incoming.locator('.ln-warning')).toContainText(known.slice(0, 12), { timeout: 20_000 });
   await expect(receiver.locator('dialog[open]')).toHaveCount(0);
