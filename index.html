@@ -1164,11 +1164,12 @@ del.md-del { opacity: .6 }
   <div id="msg-setup" class="hidden setup-page">
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
+    <input type="text" id="msg-name-random" class="setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
+    <button class="btn btn-g setup-cta" id="b-msg-setup-random" data-i18n="setupRandom"></button>
     <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="next">
     <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" autocapitalize="none" enterkeyhint="done" spellcheck="false">
-    <button class="btn btn-g setup-cta" id="b-msg-setup" data-i18n="createFree"></button>
+    <button class="btn btn-o setup-restore" id="b-msg-setup" data-i18n="createFree"></button>
     <button class="btn btn-o setup-restore hidden" id="b-msg-setup-simple" data-i18n="setupSimple"></button>
-    <button class="btn btn-o setup-restore" id="b-msg-setup-none" data-i18n="setupDisposable"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-restore-toggle" data-i18n="setupRestoreToggle" aria-expanded="false" aria-controls="setup-restore-more"></button>
     <div id="setup-restore-more" class="setup-restore-more hidden">
       <button class="btn btn-o setup-restore" id="b-msg-setup-restore" data-i18n="setupRestore"></button>
@@ -1579,21 +1580,22 @@ const _I = {
     heroTitle: 'Private messaging,<br>without the baggage',
     heroDesc: 'No phone number. No email. No app store. Open a link, start chatting. Everything encrypted end-to-end.',
     featEncrypt: 'End-to-end encrypted',
-    featEncryptSub: 'ECDH + AES-256',
+    featEncryptSub: 'No one else can read your messages',
     featNoReg: 'No registration',
-    featNoRegSub: 'Identity = crypto key',
+    featNoRegSub: 'The app creates your ID automatically',
     featWorks: 'Works everywhere',
     featWorksSub: 'Any browser, any OS',
     yourName: 'Your name',
+    yourDisplayName: 'Your name (display name)',
     breezeId: 'Breeze ID (e.g. alice — optional)',
     createFree: 'Create Identity — Free',
     setupRestore: 'Restore from a backup file',
     setupPhrase: 'Recover with a recovery phrase',
-    setupDisposable: 'Disposable identity (no recovery)',
     setupSimple: 'Simple recovery (account + passphrase)',
     setupSimpleRestore: 'Restore with account + passphrase',
     setupRestoreToggle: 'Restore an existing account',
-    noCreditCard: 'No credit card. No email. Just a name.',
+    setupRandom: 'Start with a random ID',
+    noCreditCard: 'No credit card. No email. No sign-up.',
     searchPh: 'Search...',
     searchEmojiPh: 'Search emoji...',
     enterPassword: 'Enter password',
@@ -2134,9 +2136,6 @@ const _I = {
     toastRecoveryKitCreated: 'Recovery kit downloaded. It opens only with your recovery phrase and passphrase — keep them together.',
     toastRecoveryHasIdentity: 'This device already has an identity — phrase restore is only for a fresh start.',
     toastRecoveryMismatch: 'That phrase and passphrase do not belong to this Breeze ID — nothing was restored.',
-    disposableTitle: 'Disposable identity — no recovery',
-    disposableDesc: 'If this device is lost, reset, or this browser data is cleared, this identity is gone forever. There is no recovery phrase and no way to get it back. Your contacts will see a brand-new person when you start over.',
-    disposableOk: 'I understand — no recovery',
     toastRecoveryNoneKit: 'This identity is disposable (no recovery), so a recovery kit cannot be created.',
     simpleTitle: 'Simple recovery',
     simpleDesc: 'Your encrypted backup will be stored on a relay you run or contract — this is never offered on the default relay. On a new device, your account name + passphrase bring the whole account back, with no phrase to write down. It is weaker than the recovery phrase: whoever runs that relay holds the ciphertext and can see that this account has a backup and when it changes, and a guessed passphrase opens it. The relay can never read it — only the passphrase can. Choose a long one.',
@@ -2200,7 +2199,7 @@ const _I = {
     secActiveProtections: 'Active Protections (this device)',
     secAtRestWrapOn: "At-rest key encryption: ✓ ON (PBKDF2-wrapped identity keys)",
     secAtRestWrapOff: "At-rest key encryption: ✗ OFF (identity keys as plaintext JWK — enable via /keywrap)",
-    keywrapSuggestion: 'Tip: your identity key is stored unencrypted on this device. Run /keywrap to protect it with a passphrase.',
+    keywrapSuggestion: 'Your ID is stored on this device without a password. Set a passphrase so only you can open it.',
     secGroupFSOn: "Group forward secrecy: ✓ ON (hash ratchet + epoch revocation)",
     secGroupFSOff: "Group forward secrecy: ✗ OFF (static sender key; 1:1 chats keep full FS)",
     secCallSignalOn: "Call signaling E2E: ✓ ON (encrypted offer/answer/ICE)",
@@ -5417,11 +5416,21 @@ async function initMessenger(dbName) {
     return seedH.deriveIdentityMaterial(entropy, pass);
   }
 
-  // `disposable` is the second of the owner's three recovery modes: the
-  // user explicitly chose NO recovery (behind the setup screen's warning
-  // confirmation), so the seed branch is skipped entirely — no phrase is
-  // minted or shown — and the random identity is labelled 'none' on its
-  // record. The phrase path stays the default (disposable === false).
+  // The `disposable` argument selects the creation mode:
+  //   false (default) — the phrase mode: the seed branch below derives
+  //     the identity from a fresh recovery phrase (shown once).
+  //   'simple' — recovery plan step 4: random keys, no phrase; the mode
+  //     is recorded later by enrollSimpleRecovery, only once the backup
+  //     has actually landed.
+  //   'random' — the first screen's one-tap start: random keys via
+  //     genIdentityKey (the same generation strength), no phrase shown,
+  //     and NO mode recorded — the record stays modeless (legacy-shaped),
+  //     so the identity remains eligible for a backup / recovery kit,
+  //     which the post-setup nudges recommend.
+  // The former disposable mode (disposable === true, labelled 'none') is
+  // no longer offered at creation (removed 2026-11-25): existing 'none'
+  // records keep working — the backup/kit guards and /security still
+  // honour the recorded mode — creation simply never writes it any more.
   async function createIdentity(name, alias, disposable = false) {
     let seedMat;
     try { seedMat = disposable ? undefined : await _seedIdentityMaterial(); }
@@ -5434,19 +5443,20 @@ async function initMessenger(dbName) {
 
     // Recovery plan step 3: a seed-derived identity carries its recovery
     // mode on the record ('phrase' — the first of the three recovery modes
-    // the owner chose between on 2026-11-14). The disposable mode takes
-    // 'none' here (disposable === true). The simple mode (step 4) passes
-    // disposable === 'simple': the seed branch above is skipped (random
-    // keys, no phrase), but NO mode is recorded here — enrollSimpleRecovery
-    // writes 'simple' only after the backup has actually landed on the
-    // user's relay, so a refused upload never leaves a paper-only mode.
+    // the owner chose between on 2026-11-14). The simple mode (step 4)
+    // and the one-tap 'random' mode pass a truthy non-true value: the
+    // seed branch above is skipped (random keys, no phrase), but NO mode
+    // is recorded here — enrollSimpleRecovery writes 'simple' only after
+    // the backup has actually landed on the user's relay, so a refused
+    // upload never leaves a paper-only mode, and a 'random' identity
+    // stays modeless (kit-eligible) by design.
     // Pre-step-3 random identities carry no field (absence == legacy,
     // still kit-eligible — unlike 'none', which is a chosen, permanent
     // opt-out).
     // The record's alias starts EMPTY and is filled in only after the
     // step-5 claim below actually lands (see there) — the record must
     // never name a @handle the relay did not grant.
-    const identityRecord = { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: '', ...(seedMat ? { recoveryMode: 'phrase' } : disposable === true ? { recoveryMode: 'none' } : {}) };
+    const identityRecord = { pub: arr(new Uint8Array(pubRaw)), priv: privJwk, pubB64, name, alias: '', ...(seedMat ? { recoveryMode: 'phrase' } : {}) };
     // The derived signing record is stored BEFORE the initSigning() call
     // below, which loads a stored record rather than minting a random one
     // — that load is what makes the derived Ed25519 key the account's
@@ -7740,8 +7750,12 @@ async function initMessenger(dbName) {
   } // end _boot
 
   async function _runSetupCreate(disposable, simpleCreds = null) {
-    const name = _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
-    const alias = (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
+    // The one-tap random start: the display name is the only optional
+    // input (empty keeps the existing 'Anonymous' default; the name can
+    // be changed later in the profile / settings). No alias is claimed.
+    // Every other mode reads the setup form as before.
+    const name = disposable === 'random' ? _DOM.get('msg-name-random')?.value.trim().slice(0, 64) || 'Anonymous' : _DOM.get('msg-name').value.trim().slice(0, 64) || 'Anonymous';
+    const alias = disposable === 'random' ? '' : (_DOM.get('msg-alias').value.trim() || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 20);
     // Recovery plan step 3: createIdentity returns false when the user
     // cancels at the recovery-phrase step (or derivation failed) — stay on
     // the setup screen with nothing created.
@@ -7793,7 +7807,13 @@ async function initMessenger(dbName) {
     if (joinToken) await processJoinToken(joinToken);
     _openSettingsFromUrl();
   }
-  // The default create path: the phrase mode (recovery plan step 3).
+  // The first screen's primary action: one tap mints a random identity
+  // through createIdentity's existing random generation path and enters
+  // the app — no name, no alias, no phrase step. The record stays
+  // modeless, so backups remain available afterwards (the keywrap card
+  // after setup and the first-contact backup nudge do the recommending).
+  _DOM.get('b-msg-setup-random')?.addEventListener('click', () => { _runSetupCreate('random'); }, { signal: _ac.signal });
+  // The named create path: the phrase mode (recovery plan step 3).
   _DOM.get('b-msg-setup')?.addEventListener('click', () => { _runSetupCreate(false); }, { signal: _ac.signal });
   // First-run simplification: account creation is the one primary action;
   // the restore entries live behind this expander so the first screen is
@@ -7804,11 +7824,6 @@ async function initMessenger(dbName) {
     if (!more) return;
     const open = more.classList.toggle('hidden') === false;
     _DOM.get('b-msg-setup-restore-toggle')?.setAttribute('aria-expanded', open ? 'true' : 'false');
-  }, { signal: _ac.signal });
-  // Disposable mode: the same create flow, reachable ONLY behind the
-  // explicit no-recovery confirmation — declining it creates nothing.
-  _DOM.get('b-msg-setup-none')?.addEventListener('click', async () => {
-    if (await showConfirm(t('disposableTitle'), { desc: t('disposableDesc'), okText: t('disposableOk'), danger: true })) _runSetupCreate(true);
   }, { signal: _ac.signal });
   // Recovery plan step 2 (docs/IDENTITY_RECOVERY_PLAN.md §4): the first-run
   // screen's restore entry. Until now restoreBackup was reachable only from
@@ -7830,7 +7845,7 @@ async function initMessenger(dbName) {
   // features' backupStorage flag) — the mode exists solely on the
   // user's own placement,
   // so on the creator's default relay the choice is not offered at
-  // all. The create path mirrors the disposable gate: the honest
+  // all. The create path is confirm-first like the other modes: the honest
   // comparison first, then the credentials, and only then creation —
   // declining either creates nothing. The length floors are checked
   // here (before an identity exists) and again in enrollSimpleRecovery.
@@ -7844,6 +7859,10 @@ async function initMessenger(dbName) {
     _runSetupCreate('simple', { account, passphrase: creds.passphrase });
   }, { signal: _ac.signal });
   _DOM.get('b-msg-setup-simple-restore')?.addEventListener('click', () => { restoreSimpleBackup(); }, { signal: _ac.signal });
+  // Enter on the random-start name field → start (matches enterkeyhint="done")
+  _DOM.get('msg-name-random')?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); _DOM.get('b-msg-setup-random')?.click(); }
+  });
   // Enter on name field → move focus to alias (matches enterkeyhint="next")
   _DOM.get('msg-name')?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); _DOM.get('msg-alias')?.focus(); }
@@ -13835,7 +13854,10 @@ async function initMessenger(dbName) {
       // Power saving (phase 1): same concatenation discipline.
       const _powerOpts = [['auto', 'powerAuto'], ['normal', 'powerNormal'], ['saver', 'powerSaver'], ['emergency', 'powerEmergency']].map(([v, k]) =>
         '<option value="' + v + '"' + (_settings.powerMode === v ? ' selected' : '') + '>' + esc(t(k)) + '</option>').join('');
-      safeSetHTML(d, `<b class="i-g">${t('settingsPrivacy')}</b><br>
+      safeSetHTML(d, `<b class="i-g">${t('profileTitle')}</b><br>
+        <label class="i-cur">${t('yourDisplayName')} <input type="text" class="settings-name-input" maxlength="64" value="${esc(myName)}"></label>
+        <button class="btn btn-g btn-sm" data-action="save-display-name">${t('profileSave')}</button><br>
+        <br><b class="i-g">${t('settingsPrivacy')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
@@ -13869,6 +13891,19 @@ async function initMessenger(dbName) {
       d.addEventListener('click', (ev) => {
         if (ev.target.closest('[data-action="invite-friend"]')) { haptic.tap(); shareInvite(); return; }
         if (ev.target.closest('[data-action="migrate-apps"]')) { haptic.tap(); showMigratePanel(); }
+      });
+      // Display name: writes through the profile module's own save path
+      // (_profileUI.setDisplayName → the same _saveProfile the /profile
+      // panel's OK button uses) — Settings keeps no name store of its own
+      // and the two editors can never drift apart.
+      d.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-action="save-display-name"]');
+        if (!btn) return;
+        haptic.tap();
+        const input = d.querySelector('.settings-name-input');
+        const name = input?.value.trim() || '';
+        if (!name) { input?.focus(); return; }
+        if (await _profileUI?.setDisplayName(name)) showToast(t('profileSaved'), 'success');
       });
       // Stage-2 step 5: home-relay management. Adding a relay is the
       // step-4 pin ceremony pointed at a second relay (attest, show

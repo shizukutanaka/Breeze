@@ -599,8 +599,12 @@ describe('simple mode — wiring pins', () => {
     expect(html).toContain("if (disposable === 'simple' && simpleCreds) await enrollSimpleRecovery(simpleCreds.account, simpleCreds.passphrase);");
   });
 
-  it("createIdentity's mode record stays binary: only literal true means 'none'", () => {
-    expect(html).toContain("disposable === true ? { recoveryMode: 'none' } : {}");
+  it("createIdentity's mode record stays explicit: creation writes 'phrase' or nothing, never 'none'", () => {
+    // 2026-11-25: the disposable mode was removed, and with it the
+    // 'none' arm of this spread. The spread remains the single place a
+    // recovery mode is written at creation time.
+    expect(html).toContain("seedMat ? { recoveryMode: 'phrase' } : {}");
+    expect(html).not.toContain("recoveryMode: 'none'");
     expect(html).toContain("if (!await createIdentity(name, alias, disposable)) return;");
   });
 
