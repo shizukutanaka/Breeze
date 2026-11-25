@@ -12729,7 +12729,7 @@ async function initMessenger(dbName) {
     } catch(e) { _lastRtt = -1; }
   }
   // Measure on conversation open + periodically
-  _intervals.push(setInterval(measureNetworkQuality, MS.MIN));
+  _intervals.push(setInterval(() => { if (!_powerPresenceOff()) measureNetworkQuality(); }, MS.MIN));
 
   // ===== Share ID (with QR option) =====
   // Drag-drop: import chat history OR send file to active contact

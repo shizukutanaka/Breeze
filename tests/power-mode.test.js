@@ -149,3 +149,55 @@ describe('power mode — presence checks', () => {
     expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
   });
 });
+
+const networkBlock = slice('  // ===== v3.3: Network quality tracking =====', '\n  // ===== Share ID');
+const createNetworkQuality = new Function(
+  'API', '_isOffline', 'fetchT', '_DOM', 'activeContact', 'peers', '_intervals',
+  'setInterval', 'MS', '_powerPresenceOff',
+  networkBlock + '\nreturn measureNetworkQuality;');
+
+function networkHarness(settings) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const fetchT = vi.fn(async () => ({ ok: true }));
+  const timers = [];
+  const measure = createNetworkQuality(
+    'https://api.test',
+    false,
+    fetchT,
+    { get: () => null },
+    null,
+    {},
+    [],
+    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    { MIN: 60000 },
+    power._powerPresenceOff,
+  );
+  return { fetchT, timers, measure };
+}
+
+describe('power mode — network quality probe', () => {
+  it('skips only the periodic /health probe outside normal mode, re-evaluates every tick, and keeps direct calls live', async () => {
+    const settings = { powerMode: 'emergency' };
+    const h = networkHarness(settings);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(60000);
+
+    h.timers[0].fn();
+    await flushMicrotasks();
+    expect(h.fetchT).not.toHaveBeenCalled();
+
+    await h.measure();
+    expect(h.fetchT).toHaveBeenCalledTimes(1);
+    expect(h.fetchT.mock.calls[0][0]).toBe('https://api.test/health');
+
+    settings.powerMode = 'normal';
+    h.timers[0].fn();
+    await flushMicrotasks();
+    expect(h.fetchT).toHaveBeenCalledTimes(2);
+
+    settings.powerMode = 'saver';
+    h.timers[0].fn();
+    await flushMicrotasks();
+    expect(h.fetchT).toHaveBeenCalledTimes(2);
+  });
+});
