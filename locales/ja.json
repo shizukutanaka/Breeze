@@ -909,4 +909,13 @@
  "menuPoll": "投票を作る"
 ,
  "skipToContent": "コンテンツへスキップ"
+,
+ "contactInfo": "連絡先の情報",
+ "peerNameLabel": "相手が設定した名前",
+ "nicknameLabel": "あなたの呼び名",
+ "nicknameLocalNote": "呼び名はこの端末にだけ保存されます。相手や中継サーバーに送られることはありません。",
+ "nicknameClear": "呼び名を消す",
+ "toastNicknameSaved": "呼び名を保存しました",
+ "toastNicknameCleared": "呼び名を消しました",
+ "showPeerNameLabel": "相手が設定した名前も表示する"
 }

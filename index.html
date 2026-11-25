@@ -1898,6 +1898,14 @@ const _I = {
     menuSecurity: 'Check safety number',
     menuMute: 'Mute notifications',
     menuPoll: 'Create a poll',
+    contactInfo: 'Contact info',
+    peerNameLabel: 'Name they set for themselves',
+    nicknameLabel: 'Your nickname for them',
+    nicknameLocalNote: 'Nicknames are stored only on this device. They are never sent to the contact or the relay.',
+    nicknameClear: 'Clear nickname',
+    toastNicknameSaved: 'Nickname saved',
+    toastNicknameCleared: 'Nickname cleared',
+    showPeerNameLabel: 'Also show the name each contact set for themselves',
     skipToContent: 'Skip to content',
     accountNamePh: 'Account name',
     connP2P: 'Direct encrypted connection',
@@ -5142,6 +5150,7 @@ async function initMessenger(dbName) {
     powerMode: 'auto',       // power saving: auto (by battery) | normal | saver | emergency. Throttles LISTENING only — sending is never delayed. See _effectivePowerMode.
     backupNudgeShown: false, // one-time card after the first contact is added, pointing at Settings → Backup. Once shown (or dismissed) it never comes back.
     autoBackup: true,        // automatic cloud backup after data changes (src/app/backup.js). On by default; runs only when a backup passphrase is armed for the session and the relay stores backups.
+    showPeerName: true,      // display: alongside a local nickname, also show the name the contact set for themselves (contact list + chat header). Local-only display choice; nothing is sent anywhere.
   };
   let _settings = { ..._defaultSettings };
 
@@ -8324,6 +8333,48 @@ async function initMessenger(dbName) {
     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.onclick(); } };
   }
 
+  // Contact display names — ONE resolution path for every surface
+  // (contact list, chat header, group sender names via c.name).
+  // c.name is the primary name: it holds the local nickname when the
+  // user renamed the contact (nameLocked — the store the context-menu
+  // rename has always used), and otherwise it tracks the name the
+  // contact set for themselves. c.profileName always holds the
+  // contact's own latest distributed name, so it can ride alongside
+  // the nickname (Settings: showPeerName, default on) in a muted
+  // span. Groups have no peer name — their name is the group's own.
+  function contactDisplayName(c) { return (c && typeof c.name === 'string') ? c.name : ''; }
+  function contactPeerName(c) {
+    if (!c || c.isGroup || !c.nameLocked) return '';
+    const p = typeof c.profileName === 'string' ? c.profileName : '';
+    return p && p !== c.name ? p : '';
+  }
+  function contactPeerNameHtml(c) {
+    if (_settings.showPeerName === false) return '';
+    const p = contactPeerName(c);
+    return p ? ' <span class="i-t3-10">(' + esc(p) + ')</span>' : '';
+  }
+  // The chat header's name element, rendered through the same path
+  // everywhere (open, rename, profile update, unblock).
+  function _setConvName(contact) {
+    const nameEl = _DOM.get('msg-conv-name');
+    if (!nameEl || !contact) return;
+    const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length} ${esc(t('cmdMembersLabel'))}</span>` : '';
+    safeSetHTML(nameEl, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contactDisplayName(contact)) + contactPeerNameHtml(contact) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>'));
+  }
+  // Local nickname write path — writes the SAME fields the
+  // context-menu rename has always written (c.name + nameLocked);
+  // there is no second store. An empty name clears the nickname:
+  // the lock drops and the contact's own name takes over again.
+  // Nicknames never leave this device.
+  async function setContactNickname(c, name) {
+    const clean = (name || '').trim().slice(0, 64);
+    if (clean) { c.name = clean; c.nameLocked = true; }
+    else { c.nameLocked = false; if (c.profileName) c.name = c.profileName; }
+    await dbPut('contacts', c);
+    renderContacts();
+    if (activeContact?.id === c.id) _setConvName(c);
+  }
+
   async function renderContacts() {
     renderSelfCard().catch(e => _dbg(e, 'self-card-render'));
     const contacts = await dbGetAll('contacts');
@@ -8352,7 +8403,7 @@ async function initMessenger(dbName) {
       const words = _contactFilter.split(/\s+/).filter(Boolean);
       filtered = filtered.filter(c => {
         // v3.6: Search includes @alias, notes, and Breeze ID
-        const haystack = [(c.name || ''), (c.alias ? '@' + c.alias : ''), (c.id || ''), (c.notes || ''), (c.lastMsg || ''), (_drafts[c.id] || ''), ...(c.labels || [])].join(' ').toLowerCase();
+        const haystack = [(c.name || ''), (c.profileName || ''), (c.alias ? '@' + c.alias : ''), (c.id || ''), (c.notes || ''), (c.lastMsg || ''), (_drafts[c.id] || ''), ...(c.labels || [])].join(' ').toLowerCase();
         return words.every(w => haystack.includes(w));
       });
     }
@@ -8423,7 +8474,7 @@ async function initMessenger(dbName) {
       else if (draftText) previewText = `<span class="color-r">${t('draftLabel')}:</span> ${esc(draftText.slice(0, 30))}`;
       else if (c.isGroup && c.lastMsgSender && c.lastMsg) previewText = `<span class="color-t2">${esc(c.lastMsgSender)}:</span> ${esc(c.lastMsg)}`;
       else previewText = esc(c.lastMsg || '');
-      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(c.name)}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
+      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
       div.onclick = () => openConversation(c);
       // v3.6: Swipe-left-to-archive on contact (iOS Mail/WhatsApp pattern)
       if (IS_TOUCH) {
@@ -8490,6 +8541,7 @@ async function initMessenger(dbName) {
           { label: t('delete'), action: 'delete', danger: true },
         ] : [
           { label: t('rename'), action: 'rename' },
+          { label: t('contactInfo'), action: 'info' },
           { label: t('safetyNumber'), action: 'safety' },
           { label: t('contactHomeBtn'), action: 'home' },
           { label: pinLabel, action: 'pin' },
@@ -8505,13 +8557,9 @@ async function initMessenger(dbName) {
         const action = await showContextMenu(e.clientX, e.clientY, menuItems);
         if (action === 'rename') {
           const newName = await showPrompt(t('newNamePrompt'), c.name);
-          if (newName && newName.trim()) {
-            c.name = newName.trim().slice(0, 64);
-            c.nameLocked = true; // a local rename outranks distributed profiles (stage 5 step 4)
-            await dbPut('contacts', c);
-            renderContacts();
-            if (activeContact?.id === c.id) _DOM.get('msg-conv-name').textContent = c.name;
-          }
+          if (newName && newName.trim()) await setContactNickname(c, newName);
+        } else if (action === 'info') {
+          showContactInfo(c);
         } else if (action === 'delete') {
           if (!await showConfirm(t('confirmDeleteContact', c.name), { danger: true, okText: t('delete') })) return;
           // Server-backed groups must leave/delete server-side too, or member id/pub/name stay readable in KV for the full 30-day TTL to anyone holding the invite token.
@@ -8697,10 +8745,9 @@ async function initMessenger(dbName) {
     contact.unread = 0;
     await dbPut('contacts', contact);
     _locUI?.renderLiveChip();
-    const nameEl = _DOM.get('msg-conv-name');
-    // v3.6: Show member count for groups in header
-    const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length} ${esc(t('cmdMembersLabel'))}</span>` : '';
-    safeSetHTML(nameEl, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contact.name) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>'));
+    // v3.6: Show member count for groups in header — the header name
+    // renders through the shared display-name path (_setConvName).
+    _setConvName(contact);
     updateConvStatus(contact); // v3.3: Show connection quality + relative time
     contact.blocked ? _DOM.get('msg-input-bar').classList.add('hidden') : _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('b-msg-clear')?.classList.remove('hidden');
@@ -10577,6 +10624,7 @@ async function initMessenger(dbName) {
     const action = await showContextMenu(rect ? rect.right - 180 : ev.clientX, rect ? rect.bottom + 4 : ev.clientY, [
       { label: t('ariaSearchChat'), action: 'search' },
       { label: t('menuSecurity'), action: 'security' },
+      ...(activeContact.isGroup ? [] : [{ label: t('contactInfo'), action: 'info' }]),
       { label: t('menuMute'), action: 'mute' },
       { label: t('pin'), action: 'pin' },
       { label: t('menuPoll'), action: 'poll' },
@@ -10584,6 +10632,7 @@ async function initMessenger(dbName) {
     btn?.setAttribute('aria-expanded', 'false');
     if (action === 'search') openSearchBar();
     else if (action === 'security') _runCommand('/security');
+    else if (action === 'info') showContactInfo(activeContact);
     else if (action === 'mute') _runCommand('/mute');
     else if (action === 'pin') _runCommand('/pin');
     else if (action === 'poll') {
@@ -11381,7 +11430,7 @@ async function initMessenger(dbName) {
           c.avatarImg = prof.img || ''; c.avatarEmoji = prof.emoji || '';
           await dbPut('contacts', c);
           _renderContactsThrottled();
-          if (activeContact?.id === c.id) _DOM.get('msg-conv-name').textContent = c.name;
+          if (activeContact?.id === c.id) _setConvName(c);
         }
       } catch(e) { _dbg(e, 'profile'); }
       return;
@@ -13437,6 +13486,43 @@ async function initMessenger(dbName) {
     } catch(_e) { _dbg(_e, 'showSafetyNumber'); }
   }
 
+  // Contact info panel: who this contact is, and the local nickname
+  // editor. The nickname writes the same c.name + nameLocked store
+  // the context-menu rename uses (setContactNickname) — it lives
+  // only on this device and is never sent to the contact or relay.
+  function showContactInfo(contact) {
+    if (!contact || contact.isGroup) return;
+    const [dlg, titleId] = _makeDialog();
+    const peerName = contactPeerName(contact);
+    safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('contactInfo'))}</div>
+      <div class="fw-700 text-sm mb-2">${esc(contactDisplayName(contact))}</div>
+      ${contact.alias ? '<div class="text-xs color-t3 mb-2">@' + esc(contact.alias) + '</div>' : ''}
+      ${peerName ? '<div class="text-xs color-t3 mb-2">' + esc(t('peerNameLabel')) + ': ' + esc(peerName) + '</div>' : ''}
+      <label class="i-tiny-meta">${esc(t('nicknameLabel'))}</label>
+      <input class="modal-input" type="text" maxlength="64" value="${contact.nameLocked ? esc(contact.name) : ''}" placeholder="${esc(contact.profileName || contact.name || '')}" autocomplete="off">
+      <div class="i-tiny-meta">${esc(t('nicknameLocalNote'))}</div>
+      <div class="modal-actions">
+        <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
+        ${contact.nameLocked ? '<button class="btn btn-o btn-sm" value="clear">' + t('nicknameClear') + '</button>' : ''}
+        <button class="btn btn-g btn-sm" value="ok">${t('profileSave')}</button>
+      </div>`);
+    _showDialog(dlg);
+    const input = dlg.querySelector('.modal-input');
+    input.focus(); input.select();
+    let done = false;
+    const close = () => { if (done) return; done = true; if (dlg.open) dlg.close(); dlg.remove(); };
+    _wireDialogDismiss(dlg, close);
+    dlg.querySelector('[value="ok"]').onclick = async () => {
+      const v = input.value.trim();
+      close();
+      if (v && v !== contact.name) { await setContactNickname(contact, v); showToast(t('toastNicknameSaved'), 'success'); }
+      else if (!v && contact.nameLocked) { await setContactNickname(contact, ''); showToast(t('toastNicknameCleared'), 'success'); }
+    };
+    const clearBtn = dlg.querySelector('[value="clear"]');
+    if (clearBtn) clearBtn.onclick = async () => { close(); await setContactNickname(contact, ''); showToast(t('toastNicknameCleared'), 'success'); };
+    input.addEventListener('keydown', (e) => { if (e.key === 'Enter') dlg.querySelector('[value="ok"]').click(); });
+  }
+
   // v3.6: Group-aware typing indicator (research: show who's typing)
   const _groupTypingState = {};
   const _typingContacts = {}; // v3.6: Track typing state per-contact for sidebar preview
@@ -13922,6 +14008,7 @@ async function initMessenger(dbName) {
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br><label class="i-cur"><input type="checkbox" data-setting="kt-block" ${_settings.ktBlockOnTamper ? 'checked' : ''}> ${t('ktBlockLabel')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="show-peer-name" ${_settings.showPeerName !== false ? 'checked' : ''}> ${t('showPeerNameLabel')}</label><br>
         <br><b class="i-g">${t('settingsSound')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
@@ -13993,6 +14080,7 @@ async function initMessenger(dbName) {
         // One sensible default each — a menu of durations was a requirement nobody asked for.
         // `/focus N` still exists for anyone who wants an exact number of minutes.
         if (s === 'auto-backup') { _settings.autoBackup = cb.checked; saveSettings(); return; }
+        if (s === 'show-peer-name') { _settings.showPeerName = cb.checked; saveSettings(); renderContacts(); if (activeContact) _setConvName(activeContact); return; }
         if (s === 'rr-delay') { _settings.readReceiptDelay = cb.checked ? 120 : 0; saveSettings(); return; }
         if (s === 'fanout') { const n = parseInt(cb.value, 10); _settings.fanout = [1, 2, 3].includes(n) ? n : 2; saveSettings(); return; }
         if (s === 'power-mode') { _settings.powerMode = ['auto', 'normal', 'saver', 'emergency'].includes(cb.value) ? cb.value : 'auto'; saveSettings(); return; }
@@ -14148,7 +14236,7 @@ async function initMessenger(dbName) {
         if (newName && newName.length <= 50) {
           activeContact.name = newName;
           await dbPut('contacts', activeContact);
-          _DOM.get('msg-conv-name').textContent = newName;
+          _setConvName(activeContact);
           if (API && activeContact.joinToken) {
             try {
               const renTs = Date.now();
@@ -14952,7 +15040,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       activeContact.blocked = false;
       await dbPut('contacts', activeContact);
       auditLog('contact', 'Unblocked ' + activeContact.name);
-      _DOM.get('msg-conv-name').textContent = activeContact.name;
+      _setConvName(activeContact);
       _DOM.get('msg-input-bar').classList.remove('hidden');
       showToast(t('toastUnblockedName', activeContact.name), 'success');
       renderContacts();
