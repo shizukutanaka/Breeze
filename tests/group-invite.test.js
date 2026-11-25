@@ -116,7 +116,7 @@ describe('group invite id namespace', () => {
       // first-contact backup nudge. The world has 2 contacts by the time
       // it runs, so the nudge correctly stays silent here.
       '_settings', 'dbGetAll', 'saveSettings', '_showBackupNudgeCard',
-      `const _requests = null; ${slice('async function addContact(pubB64, name, homeHint) {', '// Stage-2 step 6: the contact-settings carrier')} return addContact;`,
+      `const _nameTools = null, _requests = null; ${slice("async function addContact(pubB64, name, homeHint, alias = '') {", '// Stage-2 step 6: the contact-settings carrier')} return addContact;`,
     )(dbGet, dbPut, () => [], null, () => {}, async () => {}, (e) => { throw e; },
       { backupNudgeShown: false }, async () => [...contacts.values()], () => {}, () => {});
     const invite = (groupId) => onInvite({

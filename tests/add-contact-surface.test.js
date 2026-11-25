@@ -95,7 +95,7 @@ describe('add-contact surface wiring (deployed inline)', () => {
     const body = html.slice(start, start + 3600);
     expect(body).toContain("postAPIRaw('/alias/get'");
     expect(body).toContain('_auditKeyTransparency');
-    expect(body).toContain('await addContact(pubB64, name, homeHint)');
+    expect(body).toContain('await addContact(pubB64, name, homeHint, alias)');
   });
 
   it('the new strings exist in English and Japanese', () => {

@@ -13,7 +13,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.
-  '/src/crypto/seed.js', '/src/crypto/wordlist.js', '/src/app/message-requests.js',
+  '/src/crypto/seed.js', '/src/crypto/wordlist.js', '/src/app/message-requests.js', '/src/app/lookalike-names.js',
   // Modularization: the app-logic subsystems extracted from index.html
   // (calls, backup/restore, QR, import parsers, notification sound) —
   // precached so a first offline boot keeps those features instead of
