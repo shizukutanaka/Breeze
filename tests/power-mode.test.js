@@ -211,3 +211,65 @@ describe('power mode — network quality probe', () => {
     expect(h.fetchT).toHaveBeenCalledTimes(2);
   });
 });
+
+function lineContaining(needle) {
+  const at = html.indexOf(needle);
+  if (at < 0) throw Error('device-alerts registration moved');
+  const start = html.lastIndexOf('\n', at) + 1;
+  const end = html.indexOf('\n', at);
+  return html.slice(start, end < 0 ? undefined : end).trim();
+}
+
+// The device-alerts check is periodic network work, so its one-minute timer must
+// honour the same power gate as the network-quality probe. Extract the deployed
+// registration line verbatim and drive its ticks with the real power-mode helpers.
+const deviceAlertsRegistration = lineContaining('_deviceAlerts?.check(); _intervals.push(setInterval(');
+const runDeviceAlertsRegistration = new Function(
+  '_deviceAlerts', '_intervals', 'setInterval', 'MS', '_powerPresenceOff',
+  deviceAlertsRegistration + '\nreturn true;');
+
+function deviceAlertsHarness(settings) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const check = vi.fn();
+  const timers = [];
+  runDeviceAlertsRegistration(
+    { check },
+    [],
+    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    { MIN: 60000 },
+    power._powerPresenceOff,
+  );
+  return { check, timers };
+}
+
+describe('power mode — device alerts check', () => {
+  it('skips only the periodic tick outside normal mode and re-evaluates every tick', () => {
+    const settings = { powerMode: 'emergency' };
+    const h = deviceAlertsHarness(settings);
+    expect(h.check).toHaveBeenCalledTimes(1);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(60000);
+
+    h.timers[0].fn();
+    expect(h.check).toHaveBeenCalledTimes(1);
+
+    settings.powerMode = 'normal';
+    h.timers[0].fn();
+    expect(h.check).toHaveBeenCalledTimes(2);
+
+    settings.powerMode = 'saver';
+    h.timers[0].fn();
+    expect(h.check).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the immediate session-start call direct, ungated, and ahead of the timer', () => {
+    const directCall = deviceAlertsRegistration.indexOf('_deviceAlerts?.check();');
+    const timer = deviceAlertsRegistration.indexOf('setInterval(');
+    expect(directCall).toBe(0);
+    expect(timer).toBeGreaterThan(directCall);
+    expect(deviceAlertsRegistration.slice(0, timer)).not.toContain('_powerPresenceOff');
+
+    const h = deviceAlertsHarness({ powerMode: 'emergency' });
+    expect(h.check).toHaveBeenCalledTimes(1);
+  });
+});
