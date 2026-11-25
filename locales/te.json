@@ -320,8 +320,6 @@
  "keyWrapMin": "పాస్‌ఫ్రేజ్ కనీసం 8 అక్షరాలు ఉండాలి",
  "keyWrapMismatch": "పాస్‌ఫ్రేజ్‌లు సరిపోలలేదు",
  "keyWrapDisableConfirm": "విశ్రాంతిలో కీ చుట్టడాన్ని నిలిపివేయాలా?",
- "avatarEmojiPrompt": "అవతార్ ఎమోజీ:",
- "bioPrompt": "బయో:",
  "deleteAllConfirm": "అన్నీ తొలగించు",
  "groupNamePrompt": "సమూహం పేరు:",
  "groupNamePh": "నా సమూహం",
@@ -893,4 +891,15 @@
  "powerEmergency": "అత్యవసరం (విపత్తు)",
  "profileIdLabel": "మీ ID",
  "settingsBackup": "బ్యాకప్ & పునరుద్ధరణ"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

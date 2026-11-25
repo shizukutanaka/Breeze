@@ -320,8 +320,6 @@
  "keyWrapMin": "Maxfiy ibora kamida 8 belgidan iborat bo'lishi kerak",
  "keyWrapMismatch": "Maxfiy iboralar mos kelmaydi",
  "keyWrapDisableConfirm": "Dam olish holatidagi kalit o'rash o'chirilsinmi?",
- "avatarEmojiPrompt": "Avatar emojisi:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Hammasini o'chirish",
  "groupNamePrompt": "Guruh nomi:",
  "groupNamePh": "Mening guruhim",
@@ -893,4 +891,15 @@
  "powerEmergency": "Favqulodda (falokat)",
  "settingsBackup": "Zaxira nusxa va tiklash",
  "profileIdLabel": "Sizning ID"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

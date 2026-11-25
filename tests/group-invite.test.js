@@ -111,8 +111,14 @@ describe('group invite id namespace', () => {
     )(dbGet, dbPut, async (payload) => payload, { GROUP_MAX: 8 }, () => true, () => {}, () => {}, (e) => { throw e; });
     const addContact = new Function(
       'dbGet', 'dbPut', 'sanitizeHomeList', '_profileUI', 'auditLog', 'renderContacts', '_dbg',
+      // Batch-2 fix (d): addContact now also consults _settings /
+      // dbGetAll / saveSettings / _showBackupNudgeCard for the one-time
+      // first-contact backup nudge. The world has 2 contacts by the time
+      // it runs, so the nudge correctly stays silent here.
+      '_settings', 'dbGetAll', 'saveSettings', '_showBackupNudgeCard',
       `${slice('async function addContact(pubB64, name, homeHint) {', '// Stage-2 step 6: the contact-settings carrier')} return addContact;`,
-    )(dbGet, dbPut, () => [], null, () => {}, async () => {}, (e) => { throw e; });
+    )(dbGet, dbPut, () => [], null, () => {}, async () => {}, (e) => { throw e; },
+      { backupNudgeShown: false }, async () => [...contacts.values()], () => {}, () => {});
     const invite = (groupId) => onInvite({
       isGroupInvite: true, from: mallory.id,
       payload: JSON.stringify({ type: 'group_invite', groupId, name: 'Target', members: [{ id: mallory.id, pubB64: MALLORY_PUB, name: 'Mallory' }] }),

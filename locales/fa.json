@@ -320,8 +320,6 @@
  "keyWrapMin": "گذرواژه باید دست‌کم ۸ نویسه باشد",
  "keyWrapMismatch": "گذرواژه‌ها مطابقت ندارند",
  "keyWrapDisableConfirm": "پیچش کلید در حالت سکون غیرفعال شود؟",
- "avatarEmojiPrompt": "ایموجی آواتار:",
- "bioPrompt": "درباره من:",
  "deleteAllConfirm": "حذف همه",
  "groupNamePrompt": "نام گروه:",
  "groupNamePh": "گروه من",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "شناسه شما",
  "settingsBackup": "پشتیبان‌گیری و بازیابی"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

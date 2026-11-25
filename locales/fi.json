@@ -320,8 +320,6 @@
  "keyWrapMin": "Tunnuslauseen on oltava vähintään 8 merkkiä",
  "keyWrapMismatch": "Tunnuslauseet eivät täsmää",
  "keyWrapDisableConfirm": "Poistetaanko avainten suojaus levossa käytöstä?",
- "avatarEmojiPrompt": "Avatar-emoji:",
- "bioPrompt": "Esittely:",
  "deleteAllConfirm": "Poista kaikki",
  "groupNamePrompt": "Ryhmän nimi:",
  "groupNamePh": "Oma ryhmäni",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "Tunnuksesi",
  "settingsBackup": "Varmuuskopiointi & palautus"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

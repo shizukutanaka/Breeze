@@ -322,8 +322,6 @@
  "keyWrapMin": "Lozinka-fraza mora imati najmanje 8 znakova",
  "keyWrapMismatch": "Lozinke-fraze se ne poklapaju",
  "keyWrapDisableConfirm": "Onemogućiti obmotavanje ključa u mirovanju?",
- "avatarEmojiPrompt": "Emotikon avatara:",
- "bioPrompt": "Biografija:",
  "deleteAllConfirm": "Izbriši sve",
  "groupNamePrompt": "Naziv grupe:",
  "groupNamePh": "Moja grupa",
@@ -900,4 +898,15 @@
  "powerEmergency": "Hitno (katastrofa)",
  "settingsBackup": "Rezervna kopija i vraćanje",
  "profileIdLabel": "Vaš ID"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

@@ -320,8 +320,6 @@
  "keyWrapMin": "A jelmondatnak legalább 8 karakterből kell állnia",
  "keyWrapMismatch": "A jelmondatok nem egyeznek",
  "keyWrapDisableConfirm": "Letiltod a nyugalmi kulcsburkolást?",
- "avatarEmojiPrompt": "Avatar emoji:",
- "bioPrompt": "Bemutatkozás:",
  "deleteAllConfirm": "Összes törlése",
  "groupNamePrompt": "Csoportnév:",
  "groupNamePh": "Saját csoportom",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "Az azonosítód",
  "settingsBackup": "Biztonsági mentés & visszaállítás"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

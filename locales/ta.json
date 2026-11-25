@@ -320,8 +320,6 @@
  "keyWrapMin": "கடவுச்சொற்றொடர் குறைந்தது 8 எழுத்துகள் இருக்க வேண்டும்",
  "keyWrapMismatch": "கடவுச்சொற்றொடர்கள் பொருந்தவில்லை",
  "keyWrapDisableConfirm": "ஓய்வில் விசைச் சுற்றுதலை முடக்கவா?",
- "avatarEmojiPrompt": "அவதார் எமோஜி:",
- "bioPrompt": "பயோ:",
  "deleteAllConfirm": "அனைத்தையும் நீக்கு",
  "groupNamePrompt": "குழுப் பெயர்:",
  "groupNamePh": "என் குழு",
@@ -893,4 +891,15 @@
  "powerEmergency": "அவசரநிலை (பேரழிவு)",
  "profileIdLabel": "உங்கள் ID",
  "settingsBackup": "காப்புப்பிரதி & மீட்டமை"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

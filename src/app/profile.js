@@ -180,6 +180,10 @@ export function createProfileUI(D) {
               D.domGet('msg-my-name').textContent = clean.name;
             }
             _distributeProfile().catch(e => D.dbg(e, 'profile-dist'));
+            // The self card in the contact list renders from this same
+            // record — refresh it now or it shows the pre-edit profile
+            // until the next unrelated list render.
+            if (D.refreshSelfCard) D.refreshSelfCard();
             D.showToast(D.t('profileSaved'), 'success');
           }
           close(true);

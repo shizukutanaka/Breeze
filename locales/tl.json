@@ -320,8 +320,6 @@
  "keyWrapMin": "Dapat ay hindi bababa sa 8 character ang passphrase",
  "keyWrapMismatch": "Hindi magkatugma ang mga passphrase",
  "keyWrapDisableConfirm": "Huwag paganahin ang at-rest key wrapping?",
- "avatarEmojiPrompt": "Emoji ng avatar:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Burahin Lahat",
  "groupNamePrompt": "Pangalan ng grupo:",
  "groupNamePh": "Aking Grupo",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (sakuna)",
  "settingsBackup": "Pag-backup at pag-restore",
  "profileIdLabel": "Ang iyong ID"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

@@ -320,8 +320,6 @@
  "keyWrapMin": "पासफ़्रेज़ कम से कम 8 अक्षरों का होना चाहिए",
  "keyWrapMismatch": "पासफ़्रेज़ मेल नहीं खाते",
  "keyWrapDisableConfirm": "आराम पर कुंजी रैपिंग बंद करें?",
- "avatarEmojiPrompt": "अवतार इमोजी:",
- "bioPrompt": "परिचय:",
  "deleteAllConfirm": "सब हटाएँ",
  "groupNamePrompt": "समूह का नाम:",
  "groupNamePh": "मेरा समूह",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "आपकी ID",
  "settingsBackup": "बैकअप और पुनर्स्थापना"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

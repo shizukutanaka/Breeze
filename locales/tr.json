@@ -320,8 +320,6 @@
  "keyWrapMin": "Parola en az 8 karakter olmalıdır",
  "keyWrapMismatch": "Parolalar eşleşmiyor",
  "keyWrapDisableConfirm": "Kullanılmayan anahtar sarma devre dışı bırakılsın mı?",
- "avatarEmojiPrompt": "Avatar emojisi:",
- "bioPrompt": "Biyografi:",
  "deleteAllConfirm": "Tümünü Sil",
  "groupNamePrompt": "Grup adı:",
  "groupNamePh": "Grubum",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "Kimliğiniz",
  "settingsBackup": "Yedekleme & geri yükleme"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

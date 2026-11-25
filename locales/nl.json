@@ -320,8 +320,6 @@
  "keyWrapMin": "Wachtwoordzin moet minimaal 8 tekens zijn",
  "keyWrapMismatch": "Wachtwoordzinnen komen niet overeen",
  "keyWrapDisableConfirm": "Sleutelverpakking in rust uitschakelen?",
- "avatarEmojiPrompt": "Avatar-emoji:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Alles verwijderen",
  "groupNamePrompt": "Groepsnaam:",
  "groupNamePh": "Mijn groep",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "Uw ID",
  "settingsBackup": "Back-up & herstel"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

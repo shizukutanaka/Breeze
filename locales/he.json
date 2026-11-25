@@ -322,8 +322,6 @@
  "keyWrapMin": "ביטוי הסיסמה חייב להיות באורך 8 תווים לפחות",
  "keyWrapMismatch": "ביטויי הסיסמה אינם תואמים",
  "keyWrapDisableConfirm": "להשבית את עטיפת המפתח במנוחה?",
- "avatarEmojiPrompt": "אימוג׳י אווטאר:",
- "bioPrompt": "ביו:",
  "deleteAllConfirm": "מחיקת הכול",
  "groupNamePrompt": "שם קבוצה:",
  "groupNamePh": "הקבוצה שלי",
@@ -900,4 +898,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "המזהה שלך",
  "settingsBackup": "גיבוי ושחזור"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

@@ -318,8 +318,6 @@
  "keyWrapMin": "口令至少需要8个字符",
  "keyWrapMismatch": "两次口令不一致",
  "keyWrapDisableConfirm": "禁用静态密钥包装？",
- "avatarEmojiPrompt": "头像表情：",
- "bioPrompt": "个人简介：",
  "deleteAllConfirm": "全部删除",
  "groupNamePrompt": "群组名称：",
  "groupNamePh": "我的群组",
@@ -886,4 +884,15 @@
  "powerEmergency": "紧急（灾害）",
  "profileIdLabel": "你的 ID",
  "settingsBackup": "备份与恢复"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

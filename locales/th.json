@@ -321,8 +321,6 @@
  "keyWrapMin": "วลีรหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร",
  "keyWrapMismatch": "วลีรหัสผ่านไม่ตรงกัน",
  "keyWrapDisableConfirm": "ปิดการเข้ารหัสกุญแจขณะจัดเก็บหรือไม่?",
- "avatarEmojiPrompt": "อิโมจิอวาตาร์:",
- "bioPrompt": "แนะนำตัว:",
  "deleteAllConfirm": "ลบทั้งหมด",
  "groupNamePrompt": "ชื่อกลุ่ม:",
  "groupNamePh": "กลุ่มของฉัน",
@@ -886,4 +884,15 @@
  "powerEmergency": "ฉุกเฉิน (ภัยพิบัติ)",
  "profileIdLabel": "ID ของคุณ",
  "settingsBackup": "สำรองและกู้คืน"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

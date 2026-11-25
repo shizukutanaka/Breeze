@@ -25,8 +25,12 @@ describe('add-contact surface wiring (deployed inline)', () => {
   });
 
   it('the panel offers typing and QR scan into the same dispatch', () => {
+    // The surface is a dialog now (batch-2 fix e) with three choices, so
+    // the window covers the whole function instead of its first 1200
+    // chars; the claim — typing and QR scan funnel into the same
+    // dispatch — is unchanged.
     const start = html.indexOf('function _showAddContactPanel(');
-    const body = html.slice(start, start + 1200);
+    const body = html.slice(start, html.indexOf('async function resolveAndAdd(', start));
     expect(body).toContain("t('addContactPh')");
     expect(body).toContain("_deviceScanButton('scanQR'");
     expect(body).toContain('_dispatchAddInput(v)');

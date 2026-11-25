@@ -318,8 +318,6 @@
  "keyWrapMin": "လျှို့ဝှက်စကားစုသည် အနည်းဆုံး စာလုံး 8 လုံး ရှိရပါမည်",
  "keyWrapMismatch": "လျှို့ဝှက်စကားစုများ မကိုက်ညီပါ",
  "keyWrapDisableConfirm": "သိမ်းထားစဉ် သော့ပတ်ခြင်းကို ပိတ်မလား?",
- "avatarEmojiPrompt": "ကိုယ်ပွားပုံ အီမိုဂျီ:",
- "bioPrompt": "ကိုယ်ရေးအကျဉ်း:",
  "deleteAllConfirm": "အားလုံး ဖျက်ရန်",
  "groupNamePrompt": "အုပ်စုအမည်:",
  "groupNamePh": "ကျွန်ုပ်၏ အုပ်စု",
@@ -886,4 +884,15 @@
  "powerEmergency": "အရေးပေါ် (ဘေးအန္တရာယ်)",
  "profileIdLabel": "သင်၏ ID",
  "settingsBackup": "အရန်သိမ်းခြင်းနှင့် ပြန်လည်ရယူခြင်း"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

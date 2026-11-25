@@ -320,8 +320,6 @@
  "keyWrapMin": "Kishazi cha siri lazima kiwe na angalau herufi 8",
  "keyWrapMismatch": "Vishazi vya siri havilingani",
  "keyWrapDisableConfirm": "Zima kufunga ufunguo uliopo?",
- "avatarEmojiPrompt": "Emoji ya avatar:",
- "bioPrompt": "Wasifu mfupi:",
  "deleteAllConfirm": "Futa Vyote",
  "groupNamePrompt": "Jina la kikundi:",
  "groupNamePh": "Kikundi Changu",
@@ -893,4 +891,15 @@
  "powerEmergency": "Dharura (janga)",
  "settingsBackup": "Hifadhi nakala & rejesha",
  "profileIdLabel": "Kitambulisho chako"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

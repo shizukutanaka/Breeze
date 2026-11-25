@@ -321,8 +321,6 @@
  "keyWrapMin": "密語至少需要 8 個字元",
  "keyWrapMismatch": "兩次輸入的密語不一致",
  "keyWrapDisableConfirm": "要停用靜態金鑰加密嗎？",
- "avatarEmojiPrompt": "頭像表情符號：",
- "bioPrompt": "簡介：",
  "deleteAllConfirm": "全部刪除",
  "groupNamePrompt": "群組名稱：",
  "groupNamePh": "我的群組",
@@ -886,4 +884,15 @@
  "powerEmergency": "非常時（災害）",
  "profileIdLabel": "你的 ID",
  "settingsBackup": "備份與還原"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

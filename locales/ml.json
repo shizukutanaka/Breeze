@@ -320,8 +320,6 @@
  "keyWrapMin": "പാസ്‌ഫ്രേസ് കുറഞ്ഞത് 8 അക്ഷരങ്ങൾ ഉണ്ടായിരിക്കണം",
  "keyWrapMismatch": "പാസ്‌ഫ്രേസുകൾ പൊരുത്തപ്പെടുന്നില്ല",
  "keyWrapDisableConfirm": "അറ്റ്-റെസ്റ്റ് കീ റാപ്പിംഗ് പ്രവർത്തനരഹിതമാക്കണോ?",
- "avatarEmojiPrompt": "അവതാർ ഇമോജി:",
- "bioPrompt": "ബയോ:",
  "deleteAllConfirm": "എല്ലാം ഇല്ലാതാക്കുക",
  "groupNamePrompt": "ഗ്രൂപ്പിന്റെ പേര്:",
  "groupNamePh": "എന്റെ ഗ്രൂപ്പ്",
@@ -893,4 +891,15 @@
  "powerEmergency": "അടിയന്തരാവസ്ഥ (ദുരന്തം)",
  "profileIdLabel": "നിങ്ങളുടെ ID",
  "settingsBackup": "ബാക്കപ്പും പുനഃസ്ഥാപിക്കലും"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }
