@@ -1711,6 +1711,20 @@ const _I = {
     use1to1: 'Use in a 1:1 chat',
     backupBtn: 'Create Backup',
     restoreBtn: 'Restore Backup',
+    autoBackupLabel: 'Automatic backup',
+    autoBackupLast: 'Last automatic backup: {0}',
+    autoBackupNever: 'No automatic backup yet',
+    autoBackupOff: 'Automatic backup is off',
+    autoBackupNoServer: 'Your relay does not store backups, so automatic backup cannot run',
+    autoBackupNeedPass: 'Enter your backup passphrase once on this device to start automatic backup',
+    autoBackupPending: 'There are changes waiting to be backed up',
+    autoBackupError: 'The last automatic backup failed',
+    autoBackupArmBtn: 'Enter passphrase',
+    autoRestoreFoundTitle: 'Backup found',
+    autoRestoreFoundDesc: 'A backup of this account was found on your relay. Restore it now? The data on this device will be replaced by the backup.',
+    migrateDeviceBtn: 'Move to a new device',
+    migrateGuideTitle: 'Moving to a new device',
+    migrateGuideDesc: '1. On this device, keep a backup on your relay (automatic backup above, or Create Backup). 2. On the new device, choose a restore option on the first screen and enter your recovery phrase — or your account name and passphrase. 3. When your identity is back, a backup on your relay is found automatically and offered for restore. No cables or files are needed.',
     backupNote: 'E2E encrypted. A relay only ever stores ciphertext — and only if its operator enabled backup storage. Remember your passphrase.',
     compactOn: 'Compact mode ON',
     compactOff: 'Normal mode',
@@ -4860,16 +4874,29 @@ async function initMessenger(dbName) {
         if (_atRestIsWrapped(val) && (val.priv || val.seed)) throw new Error('keywrap: mixed plaintext record');
         const saved = await _keywrapCommit(before, { [key]: val });
         if (saved && seed) _pqSeedUnlocked = _atRestIsWrapped(val) ? seed : null;
+        if (saved) _notifyBackupDirty(store);
         return saved;
       } catch(e) { _dbg(e, 'keywrap-write'); return false; }
     }
-    return new Promise(r => { try { const tx = db.transaction(store, 'readwrite', { durability: 'relaxed' }); const req = key !== undefined ? tx.objectStore(store).put(val, key) : tx.objectStore(store).put(val); req.onsuccess = () => r(true); req.onerror = (e) => {
+    return new Promise(r => { try { const tx = db.transaction(store, 'readwrite', { durability: 'relaxed' }); const req = key !== undefined ? tx.objectStore(store).put(val, key) : tx.objectStore(store).put(val); req.onsuccess = () => { _notifyBackupDirty(store); r(true); }; req.onerror = (e) => {
       // v3.1: Handle QuotaExceededError — auto-cleanup old messages
       if (e.target?.error?.name === 'QuotaExceededError') {
         _dbg(null, 'IDB quota exceeded — cleaning old messages');
         cleanupOldMessages().then(() => r(false)).catch(() => r(false));
       } else { _dbg(e.target?.error, 'db-put'); r(false); }
     }; } catch(e) { _dbg(e, 'db-put'); r(false); } });
+  }
+  // Automatic-backup change hook: dbPut is the one write path for the
+  // stores a backup carries (identity / contacts / messages), so a
+  // successful write to any of them is the "data changed" signal. The
+  // backup module registers its scheduler here once it is built (it is
+  // instantiated later in this closure); until then — and in sliced
+  // test builds of this region — this is a no-op.
+  let _autoBackupNotify = null;
+  function _notifyBackupDirty(store) {
+    if (!_autoBackupNotify) return;
+    if (store !== 'messages' && store !== 'contacts' && store !== 'identity') return;
+    try { _autoBackupNotify(); } catch(e) { _dbg(e, 'autobackup-notify'); }
   }
   const _keywrapSlots = ['keys', 'signing', 'pq-priv', 'msgkey'];
   let _keywrapWriter = null;
@@ -5114,6 +5141,7 @@ async function initMessenger(dbName) {
     ktBlockOnTamper: false,  // D05: opt-in — refuse to start a session when the KT chain verdict is tampered or the pinned chain head vanished (default: warn only)
     powerMode: 'auto',       // power saving: auto (by battery) | normal | saver | emergency. Throttles LISTENING only — sending is never delayed. See _effectivePowerMode.
     backupNudgeShown: false, // one-time card after the first contact is added, pointing at Settings → Backup. Once shown (or dismissed) it never comes back.
+    autoBackup: true,        // automatic cloud backup after data changes (src/app/backup.js). On by default; runs only when a backup passphrase is armed for the session and the relay stores backups.
   };
   let _settings = { ..._defaultSettings };
 
@@ -7735,6 +7763,11 @@ async function initMessenger(dbName) {
     // manifest.json advertised this shortcut with nothing on the boot path ever reading the
     // param, so long-pressing the installed app icon → Settings silently did nothing.
     _openSettingsFromUrl();
+    // Automatic backup: offer the cloud backup a just-recovered identity
+    // left on its relay (one-shot marker, confirmed before any write),
+    // and flush a backup that was left pending by an offline period.
+    checkAutoRestore();
+    flushAutoBackup();
   } else {
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
@@ -12707,6 +12740,8 @@ async function initMessenger(dbName) {
   const _backupTools = globalThis.__breezeBackup?.createBackupTools({
     db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage, renderContacts, auditLog,
     myId: () => myId,
+    autoBackupEnabled: () => _settings.autoBackup !== false,
+    backupServerReady: () => !!window._serverFeatures?.backupStorage,
     adoptRestoredSigning: (m) => { _signingKey = m.signingKeyPair; _signingPubB64 = m.signingRecord.pubB64; myId = m.identityPubB64.slice(0, 12); },
   });
   const backupToFile = _backupTools?.backupToFile || (async () => {});
@@ -12723,6 +12758,16 @@ async function initMessenger(dbName) {
   const restoreSimpleBackup = _backupTools?.restoreSimpleBackup || (async () => {});
   const restoreBackupSmart = _backupTools?.restoreBackupSmart || (async () => {});
   const eraseSimpleBackup = _backupTools?.eraseSimpleBackup || (async () => {});
+  const flushAutoBackup = _backupTools?.flushAutoBackup || (() => {});
+  const armAutoBackup = _backupTools?.armAutoBackup || (async () => false);
+  const getAutoBackupStatus = _backupTools?.getAutoBackupStatus || (async () => null);
+  const checkAutoRestore = _backupTools?.checkAutoRestore || (async () => false);
+  const showMigrationGuide = _backupTools?.showMigrationGuide || (async () => {});
+  // Automatic backup: hand the module the dbPut change hook (declared
+  // beside dbPut) and flush any pending upload when connectivity
+  // returns. The boot path calls flushAutoBackup + checkAutoRestore.
+  if (_backupTools?.notifyBackupDataChanged) _autoBackupNotify = () => _backupTools.notifyBackupDataChanged();
+  window.addEventListener('online', () => flushAutoBackup(), { signal: _ac.signal });
 
   // REMOVED: click listeners for #b-msg-panic and #contact-sort. Both elements were deleted
   // from the markup at some point; the registrations survived, silently attached to nothing.
@@ -13835,6 +13880,21 @@ async function initMessenger(dbName) {
   // command, the mobile Settings tab, the sidebar-head button, the
   // ?settings shortcut — funnels through openSettingsView().
   let _settingsViewOpen = false;
+  // Automatic-backup status line: the module owns the state machine
+  // (src/app/backup.js getAutoBackupStatus); Settings only words it.
+  function _autoBackupStatusText(st) {
+    if (!st) return '';
+    switch (st.state) {
+      case 'off': return t('autoBackupOff');
+      case 'ineligible': return t('toastRecoveryNoneBackup');
+      case 'noserver': return t('autoBackupNoServer');
+      case 'needpass': return t('autoBackupNeedPass');
+      case 'error': return t('autoBackupError');
+      case 'pending': return t('autoBackupPending');
+      case 'ok': return t('autoBackupLast', new Date(st.lastOkAt).toLocaleString());
+      default: return t('autoBackupNever');
+    }
+  }
   function _renderSettingsPanel(d) {
       const _sendSoundEnabled = localStorage.getItem('brz-send-sound') !== '0';
       const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
@@ -13878,6 +13938,9 @@ async function initMessenger(dbName) {
         <button class="btn btn-g btn-sm" data-action="backup">${t('backupBtn')}</button>
         <button class="btn btn-o btn-sm" data-action="restore">${t('restoreBtn')}</button>
         <button class="btn btn-o btn-sm" data-action="restore-file">${t('restoreFileBtn')}</button><br>
+        <label class="i-cur"><input type="checkbox" data-setting="auto-backup" ${_settings.autoBackup !== false ? 'checked' : ''}> ${t('autoBackupLabel')}</label><br>
+        <span class="i-t3-10" data-autobackup-status>…</span> <button class="btn btn-o btn-sm hidden" data-action="autobackup-arm">${t('autoBackupArmBtn')}</button><br>
+        <button class="btn btn-o btn-sm" data-action="migrate-device">${t('migrateDeviceBtn')}</button><br>
         <br><b class="i-g">${t('settingsRelays')}</b><br>
         ${_relayRows}
         <button class="btn btn-o btn-sm" data-action="add-relay">${t('relayAddBtn')}</button><br>
@@ -13929,6 +13992,7 @@ async function initMessenger(dbName) {
         haptic.tap();
         // One sensible default each — a menu of durations was a requirement nobody asked for.
         // `/focus N` still exists for anyone who wants an exact number of minutes.
+        if (s === 'auto-backup') { _settings.autoBackup = cb.checked; saveSettings(); return; }
         if (s === 'rr-delay') { _settings.readReceiptDelay = cb.checked ? 120 : 0; saveSettings(); return; }
         if (s === 'fanout') { const n = parseInt(cb.value, 10); _settings.fanout = [1, 2, 3].includes(n) ? n : 2; saveSettings(); return; }
         if (s === 'power-mode') { _settings.powerMode = ['auto', 'normal', 'saver', 'emergency'].includes(cb.value) ? cb.value : 'auto'; saveSettings(); return; }
@@ -13957,6 +14021,22 @@ async function initMessenger(dbName) {
           if (el) el.textContent = fp;
         }).catch(e => _dbg(e, 'relay-fp'));
       }
+      // Automatic-backup status fills in async (the state record lives
+      // in the settings store). The arm button appears only in the two
+      // states a passphrase entry can fix.
+      const fillAutoBackupStatus = () => {
+        getAutoBackupStatus().then(st => {
+          const el = d.querySelector('[data-autobackup-status]');
+          if (el) el.textContent = _autoBackupStatusText(st);
+          const arm = d.querySelector('[data-action="autobackup-arm"]');
+          if (arm) arm.classList.toggle('hidden', !(st && (st.state === 'needpass' || st.state === 'error')));
+        }).catch(e => _dbg(e, 'autobackup-status'));
+      };
+      fillAutoBackupStatus();
+      d.addEventListener('click', async (ev) => {
+        if (ev.target.closest('[data-action="migrate-device"]')) { haptic.tap(); showMigrationGuide(); return; }
+        if (ev.target.closest('[data-action="autobackup-arm"]')) { haptic.tap(); if (await armAutoBackup()) fillAutoBackupStatus(); }
+      });
       }
   function openSettingsView() {
     const view = _DOM.get('settings-view');
