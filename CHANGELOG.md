@@ -4,6 +4,8 @@
 
 ### Security
 
+- **Authenticated device-key linking, first slice.** Opt-in `/link keys` offers and root-signed both-key certificates transfer the root signing pin directly between devices; outstanding challenges, protected persistence, no raw-key downgrade and independently verified registry metadata. Persistent binding/removal alerts reuse device review and `/security`. Legacy raw-key linking remains unchanged. Peer revocation epochs, linked-device strict signed-group sends and unlink-triggered Sender Key rotation are explicitly not enabled yet. EN/JA, English fallback locales, SW/CSP and adversarial/app tests included.
+
 - **Message requests and stranger quarantine.** Unknown senders remain outside chats until accepted, with bounded persistent ciphertext queues, persisted block/delete actions and suppressed message/attachment/call/receipt processing. Explicit adds, pairing, joined groups and authenticated linked-device fan-out retain their trust paths. Generic background push without content/actions and signed private presence prevent pre-consent notification/presence disclosure. EN/JA and English fallback locales included; see SECURITY.md for limits.
 
 - **Lookalike-name warnings.** Compact Unicode confusable detection, conservative short Latin-name typo checks, hidden/control and mixed-script warnings, and safe displayed contact/member names. Link/alias adds ask before continuing; incoming contacts, list/header and group-member/sender displays warn locally and recommend fingerprint comparison. Original identity data and wire formats are unchanged; see SECURITY.md for limits and the Unicode data licence.
