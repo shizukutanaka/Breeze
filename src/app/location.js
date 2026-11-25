@@ -279,11 +279,11 @@ export function createLocationShare(D) {
       D.safeSetHTML(dlg, `
         <h3 id="${titleId}" class="i-m-0-12">${D.esc(D.t('locTitle'))}</h3>
         <div class="dlg-btns">
-          <button class="btn btn-p btn-sm loc-once">${D.esc(D.t('locSendOnce'))}</button>
+          <button class="btn btn-g btn-sm loc-once">${D.esc(D.t('locSendOnce'))}</button>
           <button class="btn btn-g btn-sm loc-live-15">${D.esc(D.t('locLive15'))}</button>
           <button class="btn btn-g btn-sm loc-live-60">${D.esc(D.t('locLive60'))}</button>
           <button class="btn btn-g btn-sm loc-live-480">${D.esc(D.t('locLive480'))}</button>
-          <button class="btn btn-g btn-sm" value="cancel">${D.esc(D.t('cancel'))}</button>
+          <button class="btn btn-o btn-sm" value="cancel">${D.esc(D.t('cancel'))}</button>
         </div>`);
       D.showDialog(dlg);
       const close = () => { dlg.close(); dlg.remove(); };

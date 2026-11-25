@@ -245,7 +245,7 @@ export function createStickersUI(D) {
       </div>
       <input type="file" class="stk-files hidden" accept="image/*" multiple>
       <input type="file" class="stk-packfile hidden" accept="application/json,.json">
-      <div class="dlg-btns"><button class="btn btn-p btn-sm" value="cancel">${D.esc(D.t('ok'))}</button></div>`);
+      <div class="dlg-btns"><button class="btn btn-g btn-sm" value="cancel">${D.esc(D.t('ok'))}</button></div>`);
     D.showDialog(dlg);
     const close = () => { dlg.close(); dlg.remove(); };
     dlg.querySelector('[value="cancel"]').onclick = close;
