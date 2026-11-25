@@ -226,35 +226,37 @@ export function createLocationShare(D) {
       const card = document.querySelector(`[data-msgid="${rec.msgId}"] .msg-loc`);
       if (card) D.safeSetHTML(card, _locCardInner(rec));
     }
-    async function _applyLocation(contactId, senderId, p, ts, senderName) {
+    async function _applyLocation(contactId, senderId, p, ts, senderName, author) {
       if (!L || !p) return;
+      const save = rec => author ? author.commit({ ...rec, authorVerified: author.verified }) : D.dbPut('messages', rec);
+      const authMeta = author ? { authorVerified: author.verified } : {};
       if (p.live) {
         const msgId = liveRecordId(senderId, p.live);
         const existing = await D.dbGet('messages', msgId).catch(() => null);
         if (p.stopped) {
-          if (existing && !existing.liveEnded) { existing.liveEnded = true; await D.dbPut('messages', existing); _rerenderLocBubble(existing); }
+          if (existing && !existing.liveEnded) { existing.liveEnded = true; await save(existing); _rerenderLocBubble(existing); }
+          else if (author) await author.commit(null);
           return;
         }
-        if (existing?.liveEnded) return; // a stopped share stays stopped
-        if (existing && p.seq < (existing.liveSeq || 0)) return; // out-of-order update
+        if (existing?.liveEnded || (existing && p.seq < (existing.liveSeq || 0))) { if (author) await author.commit(null); return; }
         const rec = { msgId, contactId, text: locLabel(p.loc), mine: false, ts, loc: p.loc, liveUntil: p.until, liveSeq: p.seq, ...(senderName ? { senderName } : {}) };
-        await D.dbPut('messages', rec);
+        await save(rec);
         if (!existing) {
           const contact = await D.dbGet('contacts', contactId).catch(() => null);
           if (contact) await _touchContact(contact, rec.text, ts, rec.text);
-          if (D.activeId() === contactId) D.appendMsg(rec.text, false, ts, null, null, { msgId, loc: p.loc, liveUntil: p.until, ...(senderName ? { senderName } : {}) });
+          if (D.activeId() === contactId) D.appendMsg(rec.text, false, ts, null, null, { msgId, loc: p.loc, liveUntil: p.until, ...authMeta, ...(senderName ? { senderName } : {}) });
         } else _rerenderLocBubble(rec);
         return;
       }
       const msgId = senderId + ':' + ts;
-      if (D.replayCache().has(msgId)) return;
-      D.replayCache().add(msgId);
+      if (!author && D.replayCache().has(msgId)) return;
+      if (!author) D.replayCache().add(msgId);
       if (await D.dbGet('messages', msgId)) return;
       const label = locLabel(p.loc);
-      await D.dbPut('messages', { msgId, contactId, text: label, mine: false, ts, loc: p.loc, ...(senderName ? { senderName } : {}) });
+      await save({ msgId, contactId, text: label, mine: false, ts, loc: p.loc, ...(senderName ? { senderName } : {}) });
       const contact = await D.dbGet('contacts', contactId).catch(() => null);
       if (contact) await _touchContact(contact, label, ts, label);
-      if (D.activeId() === contactId) D.appendMsg(label, false, ts, null, null, { msgId, loc: p.loc, ...(senderName ? { senderName } : {}) });
+      if (D.activeId() === contactId) D.appendMsg(label, false, ts, null, null, { msgId, loc: p.loc, ...authMeta, ...(senderName ? { senderName } : {}) });
     }
     function _renderLiveChip() {
       document.querySelector('#live-chip')?.remove();

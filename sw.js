@@ -1,6 +1,7 @@
 const VERSION = '3.8.0';
 const CACHE = 'breeze-v' + VERSION + '-lookalike-names';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
+  '/src/app/device-alerts.js',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
   // at runtime (INTEGRATION.md §0(A)) — precached so a first offline boot
   // still mints PQ key material instead of degrading to classical bundles.
@@ -8,6 +9,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // (pqxdh.js → pq.js → mlkem.js/bytes.js, already listed).
   '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js',
   '/src/crypto/pqxdh.js', '/src/crypto/pq.js',
+  '/src/app/group-author.js', '/src/app/vault.js', '/src/app/contact-verify.js',
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.
@@ -16,7 +18,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // (calls, backup/restore, QR, import parsers, notification sound) —
   // precached so a first offline boot keeps those features instead of
   // degrading to their inert fallbacks.
-  '/src/app/call.js', '/src/app/backup.js', '/src/app/qr.js',
+  '/src/app/call.js', '/src/app/backup.js', '/src/app/history-tools.js', '/src/app/qr.js',
   '/src/app/import-parsers.js', '/src/app/sound.js', '/src/app/share.js',
   '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js', '/src/app/offline-pairing.js', '/src/app/quota.js', '/src/app/history-sync.js', '/src/app/group-call.js', '/src/app/profile.js', '/src/app/group-create.js', '/src/app/device-link.js', '/src/app/stickers.js', '/src/app/info-panels.js', '/src/app/location.js', '/src/app/address.js', '/src/app/turn.js', '/src/app/data-lifecycle.js', '/src/app/group-file.js', '/src/app/group-live.js', '/src/app/voice-input.js', '/src/app/emoji-picker.js', '/src/app/install-banner.js', '/src/app/context-menu.js', '/src/app/lightbox.js', '/src/app/smart-replies.js', '/src/app/chat-search.js', '/src/app/call-history.js', '/src/app/settings-help.js', '/src/app/cloudflare.js', '/src/crypto/msgstore.js',
   // D17 modal-a11y bridge (wave-6 R01): index.html statically imports it
@@ -137,9 +139,26 @@ function cachePut(request, response) {
 }
 
 // Web Push
+function vaultPushGeneric() {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(false);
+  return new Promise(resolve => {
+    const req = indexedDB.open('breeze-vault');
+    req.onupgradeneeded = () => { req.transaction.abort(); resolve(false); };
+    req.onerror = () => resolve(true);
+    req.onsuccess = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('meta')) { db.close(); resolve(true); return; }
+      const read = db.transaction('meta').objectStore('meta').get('state');
+      read.onsuccess = () => { db.close(); resolve(!!read.result); };
+      read.onerror = () => { db.close(); resolve(true); };
+    };
+  });
+}
 self.addEventListener('push', (e) => {
   let data = {};
   try { data = e.data.json() || {}; } catch {}
+  e.waitUntil(vaultPushGeneric().then(generic => {
+  if (generic) data = {};
   // The payload is relay-supplied and cannot be trusted — the worker caps title at 50
   // chars, but a self-hosted/compromised relay is under no such obligation, and a
   // non-string field can make showNotification throw (silently swallowing the push).
@@ -153,8 +172,7 @@ self.addEventListener('push', (e) => {
   // length class as the worker's validateUserId, so a hostile payload can't smuggle a
   // value the client would mistake for a different shape of identifier.
   const contactId = /^[A-Za-z0-9+/=_-]{8,128}$/.test(data.contactId || '') ? data.contactId : undefined;
-  e.waitUntil(
-    self.registration.showNotification(title, {
+  return self.registration.showNotification(title, {
       body,
       tag,
       icon: '/icon-192.png',
@@ -163,15 +181,15 @@ self.addEventListener('push', (e) => {
       data: { url: url || '/', contactId },
       renotify: true,
       // v3.6: Notification action buttons (Chrome 48+, Firefox 44+)
-      actions: (navigator.language || '').startsWith('ja') ? [
+      actions: generic ? [] : (navigator.language || '').startsWith('ja') ? [
         { action: 'reply', title: '返信', type: 'text' },
         { action: 'mark-read', title: '既読にする' },
       ] : [
         { action: 'reply', title: 'Reply', type: 'text' },
         { action: 'mark-read', title: 'Mark Read' },
       ],
-    })
-  );
+    });
+  }));
 });
 
 // Resolve a notification's target URL against our OWN origin and refuse anything that

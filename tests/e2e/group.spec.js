@@ -84,6 +84,23 @@ test('group invite link: creator and joiner exchange a Sender-Key message', asyn
   await alice.locator('#b-msg-send').click();
 
   await expect(bob.locator('#msg-messages')).toContainText(text, { timeout: 15_000 });
+  const reply = 'signed group reply — ' + Date.now();
+  await bob.locator('#msg-input').fill(reply);
+  await bob.locator('#b-msg-send').click();
+  await expect(alice.locator('#msg-messages')).toContainText(reply, { timeout: 15_000 });
+  for (const page of [alice, bob]) {
+    const auth = await page.evaluate(() => new Promise((resolve, reject) => {
+      const req = indexedDB.open('breeze-messenger'); req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const tx = req.result.transaction(['identity', 'messages']);
+        let strict = false, verified = false;
+        tx.objectStore('identity').getAll().onsuccess = e => { strict = e.target.result.some(r => r?.strict === true); };
+        tx.objectStore('messages').getAll().onsuccess = e => { verified = e.target.result.some(r => !r.mine && r.authorVerified === true); };
+        tx.oncomplete = () => resolve({ strict, verified });
+      };
+    }));
+    expect(auth).toEqual({ strict: true, verified: true });
+  }
 
   await aliceCtx.close();
   await bobCtx.close();

@@ -182,6 +182,7 @@ export function createOfflinePairing(D) {
     if (contact.offlinePairing.manualOnly) D.blockPeer(id);
     await put('identity', { exp: remote.exp }, 'offline-seen:' + remote.nonce);
     await put('contacts', contact);
+    await D.verified?.(contact);
     if (!hasSession) timers.set(id, setTimeout(() => cancel(contact).catch(D.log), pair.exp - now()));
     D.changed(contact);
     return contact;

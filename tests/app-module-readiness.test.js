@@ -34,7 +34,7 @@ describe('app-module readiness', () => {
     const wait = init.indexOf('await _appModulesReady;');
     expect(wait).toBeGreaterThan(0);
     expect(wait).toBeLessThan(init.indexOf("_perf.mark('initMessenger')"));
-    for (const bridge of ['DirectAck', 'P2pStats', 'Call', 'Backup', 'Share']) {
+    for (const bridge of ['DirectAck', 'P2pStats', 'Call', 'Backup', 'HistoryTools', 'Share']) {
       expect(wait).toBeLessThan(init.indexOf('globalThis.__breeze' + bridge));
     }
   });

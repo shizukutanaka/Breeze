@@ -238,7 +238,7 @@ describe('deployed rendezvous wiring and relay preservation', () => {
     expect(relay).toContain('contact.sigPub !== wrapper.sigPub');
     expect(relay).toContain('verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub)');
     const untouched = html.slice(end, html.indexOf('  // ===== Presence heartbeat', end)) + '  // ===== Presence heartbeat (v3.3: adaptive — slower in background) =====\n';
-    expect(createHash('sha256').update(untouched).digest('hex')).toBe('bbf2b988032cefa2c3a7edf5363bc198f9ccfe0c8cf59cbbe48e19e03b2b6c29'); // re-pinned for D12: the region's only delta is the sigPoll isActive argument
+    expect(createHash('sha256').update(untouched).digest('hex')).toBe('8279ea88d86baf102a2fca4595bfe9fd092ea4f0859d38bce1a3dfdba0fa55c2'); // Includes persisted verification invalidation on a rejected SDP signing pin.
   });
   it('runs actual connectPeer setup with no API and never trickles / starts polling in manual mode', async () => {
     vi.useFakeTimers();

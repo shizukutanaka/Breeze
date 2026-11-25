@@ -7,7 +7,7 @@ function slice(start, end) {
   if (a < 0 || b < 0) throw Error('typing/read markers moved');
   return html.slice(a, b);
 }
-const read = slice('    if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; }', '\n  }\n\n  // MESSAGE RENDERER');
+const read = slice('    if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; }\n    if (!contact.isGroup', '\n  }\n\n  // MESSAGE RENDERER');
 const typing = slice("  _DOM.get('msg-input')?.addEventListener('input', () => {", '\n  // Show typing indicator when received');
 function setup(kind, overrides = {}) {
   const dc = { readyState: 'open', send: vi.fn() };

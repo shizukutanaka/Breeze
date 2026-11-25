@@ -120,7 +120,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     'distributeSenderKey', 'encryptGroupMsg', 'encryptFor', 'API', 'postAPIRaw',
     '_signingKey', 'signMessage', '_signingPubB64', '_rateLimiter', 'timingDelay',
     'peers', 'waitForBuffer', 'queueOutbox', 'relaySend', '_fanOut', 'renderContacts',
-    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap', '_groupLive',
+    'CONFIG', '_directAck', '_p2pDirectStat', 'updateMsgStatus', '_poolMap', '_groupLive', '_groupAuthor',
     `${sliceBetween('async function sendMessage()', '// File send (v3: binary chunks for P2P, sealed relay fallback)')}
      return sendMessage;`);
   const sendMessage = fn(
@@ -150,6 +150,7 @@ function buildSendMessage({ peers = {}, waiter = null, activeContact, auxiliaryP
     (ts, status) => { calls.status.push({ ts, status }); },
     poolMap,
     { distributeKey: async () => {}, distributeOwnKey: async () => {}, depositCopies: async () => {} },
+    { sign: async () => ({ authorSigV: 1, authorSig: 'test-signature' }) },
   );
   return { sendMessage, calls, input };
 }

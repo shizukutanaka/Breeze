@@ -87,7 +87,7 @@ function buildRestore(db, promptResult = PASS) {
   const timers = [];
   let reloads = 0;
   const src = [
-    'let _pqSeedUnlocked = null;',
+    'let _pqSeedUnlocked = null; const D = {};',
     slice('function arr(u8a)', 'function uid()'),
     slice('async function deriveKey', '// v3.6 Phase 2c'),
     slice('function _atRestIsWrapped', '// Loads the private JWK'),

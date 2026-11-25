@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const deviceAlerts = readFileSync(new URL('../src/app/device-alerts.js', import.meta.url), 'utf8');
 const infoPanels = readFileSync(new URL('../src/app/info-panels.js', import.meta.url), 'utf8');
 const callJs = readFileSync(new URL('../src/app/call.js', import.meta.url), 'utf8');
 const LOCALES = ['es', 'id', 'ja', 'ko', 'pt-BR', 'th', 'zh-TW'];
@@ -41,8 +42,9 @@ describe('D14 — device-list caches expire fast and yield to presence-pushed re
   });
 
   it('the registry fetch returns the signed revision ts and tracks our own', () => {
-    expect(html).toContain('return { list: rec.devices.map(d => d.pub), ts: rec.ts || 0 };');
-    expect(html).toContain('if (accountId === myId && rec.ts) _ownRegistryTs = rec.ts;');
+    expect(deviceAlerts).toContain('{ list: rec.devices.map(d => d.pub), ts: rec.ts }');
+    expect(deviceAlerts).toContain('if (accountId === D.myId()) D.ownTs(result.ts);');
+    expect(html).toContain('ownTs: ts => { _ownRegistryTs = ts; }');
   });
 
   it('the presence beat advertises our registry revision', () => {

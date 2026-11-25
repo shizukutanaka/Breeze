@@ -155,6 +155,10 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .mb-3 { margin-bottom: 12px }
 
 /* ─── Messenger layout ─── */
+.device-alert { flex: none; max-height: 30dvh; overflow: auto; background: var(--s1); border: 2px solid var(--r); border-radius: var(--rad); color: var(--t1); padding: 12px; font-size: 14px; line-height: 1.5 }
+.device-alert > b { color: var(--r) }
+#msg-main:has(> .device-alert):not(.hidden) { display: flex; flex-direction: column; height: calc(100dvh - 100px) }
+#msg-main:has(> .device-alert) .msg-layout { flex: 1; min-height: 0; height: auto }
 .msg-layout {
   display: flex; gap: 0;
   height: calc(100vh - 100px); height: calc(100dvh - 100px);
@@ -1346,6 +1350,10 @@ import { createSeedHelper } from './src/crypto/seed.js';
 window.__breezeSeed = createSeedHelper();
 </script>
 <script type="module">
+import { getVault, vaultGate } from './src/app/vault.js'; window.__breezeVault = { getVault, vaultGate };
+import { createContactVerify } from './src/app/contact-verify.js'; window.__breezeContactVerify = { createContactVerify };
+</script>
+<script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
 // below (index.html carries a hard line budget — validate.sh). The bridges
 // are read opportunistically, so boot survives without them — but these are
@@ -1364,6 +1372,7 @@ window.__breezeProfileUI = { createProfileUI };
 import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
 import { createNameTools, safeName } from './src/app/lookalike-names.js'; window.__breezeNames = { createNameTools, safeName };
+import { createDeviceAlerts, activityHash } from './src/app/device-alerts.js'; window.__breezeDeviceAlerts = { createDeviceAlerts, activityHash };
 import { createDeviceLink } from './src/app/device-link.js';
 window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel, createStickersUI } from './src/app/stickers.js';
@@ -1379,8 +1388,11 @@ window.__breezeLocation = { sanitizeLoc, buildLocationPayload, parseLocationPayl
 window.__breezeLocationUI = { createLocationShare };
 import { sanitizeGroupFile, groupTextForFile, parseGroupFileText, sendGroupFile, GROUP_FILE_RAW_MAX, GROUP_FILE_DATA_MAX, GROUP_FILE_TEXT_MAX } from './src/app/group-file.js'; window.__breezeGroupFile = { sanitizeGroupFile, groupTextForFile, parseGroupFileText, sendGroupFile, GROUP_FILE_RAW_MAX, GROUP_FILE_DATA_MAX, GROUP_FILE_TEXT_MAX };
 import { planLiveTargets, createGroupLive } from './src/app/group-live.js'; window.__breezeGroupLive = { planLiveTargets, createGroupLive };
+import { createGroupAuthor, commitGroupAcceptance, readGroupAuthorRecord, forwardedGroupFields } from './src/app/group-author.js'; window.__breezeGroupAuthor = { createGroupAuthor, commitGroupAcceptance, readGroupAuthorRecord, forwardedGroupFields };
 import { createBackupTools } from './src/app/backup.js';
 window.__breezeBackup = { createBackupTools };
+import { createHistoryTools } from './src/app/history-tools.js';
+window.__breezeHistoryTools = { createHistoryTools };
 import { createQRHelper } from './src/app/qr.js';
 window.__breezeQR = createQRHelper();
 import * as importParsers from './src/app/import-parsers.js';
@@ -1576,6 +1588,7 @@ const _scrollBehavior = () => _prefersReducedMotion() ? 'auto' : 'smooth';
 const _I = {
   en: {
     lnSimilar: "“{0}” resembles existing contact “{1}” ({2}). Compare fingerprints before trusting this name.", lnUnsafe: "“{0}” contains hidden/control characters or a risky mixture of scripts. Compare fingerprints before trusting this name.", lnContinue: "Add anyway",
+    daTitle: "Account security alert",     daLinked: "Previously unseen linked device (root signature verified)",     daSession: "Another installation used this identity (signature verified)",     daPush: "Another installation announced a push subscription (signature verified)",     daRelayKeys: "Relay reports different or missing account keys — unverified discrepancy",     daAck: "Acknowledge",     daReview: "Review devices",     daRevoke: "Unlink",     daUnavailable: "Account activity checking is unavailable or incomplete. The relay may be withholding activity. This is not proof of a new device.",     daLimit: "Only signed, observed activity can be verified. The relay can withhold records. Session and push reports require upgraded, cooperating clients.",     daRecovery: "Unlinking revokes linked-device fan-out only. A copied identity or push subscription cannot be remotely revoked here: recover onto a fresh identity, notify contacts and stop using the compromised identity.",
     opTitle: "Offline contact pairing", opScope: "Exchange these identity invites BOTH ways in person. They expire in 30 minutes. Compare the fingerprint on both devices and confirm only if it matches. Keep this app open until /rendezvous finishes; reloading cancels pending pairing. No alias lookup or relay verification.", opImport: "Import peer invite", opMatches: "I compared both devices: the fingerprint matches", opConfirm: "Verify and add contact", opCompare: "Compare this fingerprint on both devices. It binds both encryption keys, signing keys and invite nonces.", opConfirmed: "Contact verified. Open their chat and exchange /rendezvous codes. Messaging unlocks after encrypted key confirmation.", opInvalid: "Offline pairing failed: invalid, expired, used or mismatched code/key, or unsupported cryptography. Cancel pending pairing and exchange fresh invites.", opPending: "Finish offline pairing with /rendezvous before sending. Use /offlinepair cancel to cancel.", opCancelled: "Pending offline pairing cancelled. Exchange fresh invites on both devices to retry.", opOutput: "Your offline identity invite", opInput: "Peer offline identity invite",
     rvTitle: 'Manual connection', rvScope: 'Requires an existing encrypted session or confirmed /offlinepair invitation. Exchange connection codes privately by QR or copy/paste; they expire in 10 minutes.',
     rvQRTooLarge: 'This code is too large for one QR. Use copy/paste instead.', rvScanUnavailable: 'Camera QR scanning is unavailable in this browser. Use copy/paste instead.',
@@ -1936,6 +1949,32 @@ const _I = {
     read: 'Read',
     typing: 'typing...',
     newMessages: 'New Messages',
+    groupAuthorLegacy: 'Legacy — author not verified',
+    cvTitle: "Contact verification",
+    cvVerified: "✓ Verified",
+    cvChanged: "⚠ Keys changed",
+    cvUnverified: "Not verified",
+    cvReverify: "Compare safety numbers and verify again",
+    cvCompare: "Compare this number on both devices. It includes both encryption and signing keys:",
+    cvMissingPin: "A pinned signing key is required. Exchange an authenticated message first.",
+    cvMark: "I compared both-key safety numbers",
+    cvStrict: "Block sending after a key change until re-verified",
+    cvFailed: "Verification failed or keys changed during comparison. Reopen and compare again.",
+    cvBlocked: "Sending blocked: a contact’s keys changed. Compare safety numbers and re-verify, or turn off strict mode in /verify.",
+    cvAuditChanged: "Contact verification invalidated:",
+    cvAuditVerified: "Contact verified:",
+    vaultTitle: 'Key vault locked',
+    vaultUnlock: 'Enter the separate vault passphrase',
+    vaultNew: 'New vault passphrase (at least 12 characters; not your /lock password)',
+    vaultConfirm: 'Repeat the new vault passphrase',
+    vaultLegacy: 'Existing /keywrap passphrase, or leave blank if none',
+    vaultScope: 'Protect private keys and sessions for all accounts? History, contacts and drafts remain outside the vault. Save your recovery phrase and a vault file backup first. /vault lock locks every tab; /vault password changes the passphrase.',
+    vaultDisable: 'Disable the key vault for every account? Authentication is required. Private keys and sessions will be stored in plaintext.',
+    vaultMismatch: 'The vault passphrases do not match.',
+    vaultFailed: 'Vault operation failed. Check the passphrase and storage; no plaintext fallback is allowed.',
+    vaultRecovery: 'This is not the /lock password. If forgotten, recover your identity using your recovery phrase on a fresh install. Existing vault sessions cannot be recovered without this passphrase.',
+    vaultOldTabs: 'Close older Breeze tabs before changing the vault.',
+    vaultBackupOnly: 'While the vault is enabled, use the vault file backup. Cloud, automatic and recovery-kit exports are disabled.',
     draftLabel: 'Draft',
     dropUsage: 'Usage: /drop <secret message>',
     dropTooLong: 'Secret too long (max 50,000 characters)',
@@ -3610,6 +3649,7 @@ function getCryptoWorker() {
 }
 // Encrypt/decrypt via worker (returns ArrayBuffer), falls back to main thread
 function workerCrypto(op, keyRaw, iv, data) {
+  if (typeof initMessenger !== 'undefined') initMessenger._vault?.assert();
   const w = getCryptoWorker();
   if (!w) return null; // Caller should fallback
   return new Promise((resolve, reject) => {
@@ -4064,6 +4104,7 @@ function renderAccountTabs() {
         const choice = await showPrompt(t('chooseAvatar'), acc.avatar || '👤', { placeholder: t('avatarPlaceholder') });
         if (choice) { acc.avatar = choice.slice(0, 2); saveAccounts(accs); renderAccountTabs(); }
       } else if (action === 'delete' && accs.length > 1) {
+        if (initMessenger._vault?.enabled()) { await initMessenger._vault.command('/vault disable'); return; }
         if (!await showConfirm(t('deleteAccount'), { danger: true, okText: t('delete') })) return;
         const i = accs.indexOf(acc);
         accs.splice(i, 1);
@@ -4120,6 +4161,16 @@ async function initMessenger(dbName) {
   // Still locked from before this page load (reload, reopened tab): lock before anything renders.
   try { if (localStorage.getItem('brz-locked')) showLockScreen(); } catch(e) { _dbg(e, 'lock-restore'); }
   try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // last bridge of the block unset ⇒ the block aborted: /security, calls, backup… would otherwise do nothing, silently
+  if (!globalThis.__breezeVault) throw new Error(t('vaultFailed')); if (!globalThis.__breezeContactVerify) throw new Error(t('toastModulesFailed'));
+  let _contactVerify = null;
+  const _vault = globalThis.__breezeVault.getVault({ t, dbg: _dbg, accounts: getAccounts, restoreAccounts: saveAccounts, reload: () => location.reload(),
+    prompt: text => showPrompt(text, '', { type: 'password', autocomplete: 'current-password' }), confirm: text => showConfirm(text), toast: text => showToast(text, 'error'),
+    gate: unlock => globalThis.__breezeVault.vaultGate({ t }, unlock),
+    quiesce: () => { try { _messengerCleanup?.(); } finally { _cryptoWorker?.terminate(); _cryptoWorker = null; for (const p of Object.values(_cwPending)) p.reject(new Error(t('vaultFailed'))); _cwPending = {}; } },
+  });
+  initMessenger._vault = _vault;
+  if (!initMessenger._vaultGuards) { _vault.installGuards(); initMessenger._vaultGuards = true; }
+  await _vault.boot();
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
   dbName = dbName || 'breeze-messenger';
@@ -4726,7 +4777,7 @@ async function initMessenger(dbName) {
   }
 
   // ===== IndexedDB =====
-  const db = await new Promise((resolve, reject) => {
+  const db = await _vault.database(await new Promise((resolve, reject) => {
     const req = indexedDB.open(dbName, DB_VER);
     req.onerror = (e) => {
       _dbg(e.target.error, 'idb-open-error');
@@ -4781,7 +4832,7 @@ async function initMessenger(dbName) {
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);
-  });
+  }));
   _currentAccountDb = db;
   const _intervals = []; // Track intervals for cleanup on account switch
 
@@ -4879,11 +4930,15 @@ async function initMessenger(dbName) {
   await acquireLeaderLock();
 
   async function dbGet(store, key) {
-    const rec = await new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => r(null); } catch(e) { _dbg(e, 'db-get'); r(null); } });
+    const rec = await new Promise((r, reject) => { const fail = e => { if (store === 'identity' && (String(key).startsWith('verify:') || typeof _vault !== 'undefined' && _vault.enabled())) reject(e); else r(null); }; try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => fail(req.error); } catch(e) { _dbg(e, 'db-get'); fail(e); } });
     return store === 'messages' && rec ? _msgOpenRecord(rec) : rec;
   }
   async function dbPut(store, val, key) {
+    if (store === 'settings' && key === 'device-alerts:v1') return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => resolve(true); tx.onabort = tx.onerror = () => reject(tx.error || new Error('activity persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
+    if (store === 'contacts' && typeof _contactVerify !== 'undefined') await _contactVerify?.observe(val);
     if (store === 'messages') val = await _msgSealRecord(val);
+    if (typeof _vault !== 'undefined' && _vault.enabled()) { const saved = await _vault.put(db, store, val, key); if (saved) _notifyBackupDirty(store); return saved; }
+    if (store === 'identity' && String(key).startsWith('verify:')) return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => { _notifyBackupDirty(store); resolve(true); }; tx.onabort = tx.onerror = () => reject(tx.error || new Error('verification persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
     if (store === 'identity' && _keywrapSlots.includes(key)) {
       try {
         const seed = key === 'pq-priv' ? val.seed : null;
@@ -5014,9 +5069,9 @@ async function initMessenger(dbName) {
   const _msgMigrate = (rec) => { dbPut('messages', rec).catch(e => _dbg(e, 'msg-migrate')); };
   async function dbGetAll(store) {
     try {
-      const all = await new Promise(r => { const tx = db.transaction(store); const req = tx.objectStore(store).getAll(); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); });
+      const all = await new Promise((r, reject) => { const tx = db.transaction(store); const req = tx.objectStore(store).getAll(); req.onsuccess = () => r(req.result || []); req.onerror = () => reject(req.error); });
       return store === 'messages' ? _msgOpenAll(all, _msgMigrate) : all;
-    } catch(_e) { _dbg(_e, 'dbGetAll'); }
+    } catch(_e) { _dbg(_e, 'dbGetAll'); if (store === 'identity' && typeof _vault !== 'undefined' && _vault.enabled()) throw _e; }
   }
   async function dbGetByIndex(store, idx, key) {
     const rows = await new Promise(r => { try { const tx = db.transaction(store); const req = tx.objectStore(store).index(idx).getAll(key); req.onsuccess = () => r(req.result || []); req.onerror = () => r([]); } catch(e) { _dbg(e, 'db-idx'); r([]); } });
@@ -5410,12 +5465,15 @@ async function initMessenger(dbName) {
         }
       } catch(e) { _dbg(e, 'pqkey-mint'); }
     }
-    if (pqRecord && !await dbPut('identity', pqRecord, 'pq-priv')) { _dbg(null, 'keywrap: prekey rotation skipped'); throw new Error('keywrap: PQ persistence failed'); }
-    await dbPut('identity', { priv: spk.priv }, 'spk-priv');
-    await dbPut('identity', { keys: otpPrivs }, 'otp-priv');
+    if (typeof _vault !== 'undefined' && _vault.enabled()) await _vault.prekeys(db, spk.priv, otpPrivs, pqRecord);
+    else {
+      if (pqRecord && !await dbPut('identity', pqRecord, 'pq-priv')) { _dbg(null, 'keywrap: prekey rotation skipped'); throw new Error('keywrap: PQ persistence failed'); }
+      if (!await dbPut('identity', { priv: spk.priv }, 'spk-priv') || !await dbPut('identity', { keys: otpPrivs }, 'otp-priv')) throw new Error('prekey persistence failed');
+    }
     const caps = [];
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
+    if (typeof _groupAuthor !== 'undefined' && _groupAuthor?.supported()) caps.push('group-author-sig-v1');
     if (CONFIG.SEAL_V2_ENABLED) caps.push(CAPS_SEAL_V2);
     if (CONFIG.MULTI_RELAY_ENABLED) caps.push(CAPS_MULTI_RELAY);
     if (CONFIG.CALL_E2E_SIGNAL) caps.push(CAPS_CALL_E2E);
@@ -5707,12 +5765,24 @@ async function initMessenger(dbName) {
     return !!(CONFIG.PQXDH_ENABLED && _peerSupportsX3dhV5(bundle) && _parsePeerCaps(bundle).includes(CAPS_PQXDH));
   }
   const CAPS_GROUP_V5 = 'group-v5';
+  const CAPS_GROUP_AUTHOR_SIG = 'group-author-sig-v1';
   // Pure N-party AND rule, exact mirror of negotiate.js's negotiateGroup() — side-effect-free so it cross-tests cleanly.
   function _negotiateGroupCaps(localCaps, memberCapsList) {
     const norm = (c) => (Array.isArray(c) ? c.filter(x => typeof x === 'string') : []);
     const sets = [new Set(norm(localCaps)), ...(Array.isArray(memberCapsList) ? memberCapsList : []).map(c => new Set(norm(c)))];
-    return { useGroupV5: sets.every(s => s.has(CAPS_GROUP_V5)) };
+    return { useGroupV5: sets.every(s => s.has(CAPS_GROUP_V5)), useAuthorSig: sets.every(s => s.has(CAPS_GROUP_AUTHOR_SIG)) };
   }
+  const _groupAuthor = globalThis.__breezeGroupAuthor?.createGroupAuthor({
+    get: (s, k) => s === 'messages' ? dbGet(s, k) : globalThis.__breezeGroupAuthor.readGroupAuthorRecord(db, s, k), put: dbPut,
+    pub: () => myPubB64, sigPub: () => _signingPubB64, supported: () => !!_signingKey?.privateKey && !_isSecondaryDevice && !!navigator.locks,
+    sign: async bytes => new Uint8Array(await crypto.subtle.sign('Ed25519', _signingKey.privateKey, bytes)),
+    negotiate: _negotiateGroupCaps, attributeDevice: _deviceAttributionOk, dbg: _dbg,
+    establishPin: pub => _fetchSessionBundleV5(pub),
+    commit: async (record, auth) => { const ok = await globalThis.__breezeGroupAuthor.commitGroupAcceptance(db, record ? await _msgSealRecord(record) : null, auth); if (record) _notifyBackupDirty('messages'); _notifyBackupDirty('identity'); return ok; },
+    lock: (key, work) => navigator.locks ? navigator.locks.request('breeze-ga:' + myPubB64 + ':' + key, work) : work(),
+    distribute: async gid => { const g = await dbGet('contacts', gid); for (const m of g?.members || []) { if (m.pubB64 === myPubB64) continue; await distributeSenderKey(gid, m.pubB64); await _groupLive?.distributeKey(gid, m); } await _groupLive?.distributeOwnKey(gid); },
+    redistributionNeeded: async (gid, epoch) => { const g = await dbGet('contacts', gid); return (g?.members || []).some(m => m.pubB64 !== myPubB64 && _skDist.get(gid + ':' + m.pubB64?.slice(0, 12))?.epoch !== epoch); },
+  });
   // Computes (doesn't persist) the group decision: local flag AND every OTHER member's caps
   // (reuses _parsePeerCaps — member records and prekey bundles share {caps:[...]}). Fails CLOSED:
   // a member missing `caps` (legacy client or failed fetch) contributes [] and blocks v5 group-wide.
@@ -5859,7 +5929,8 @@ async function initMessenger(dbName) {
     // relay that cannot be reached spends nothing.
     const peerId = peerPubB64.slice(0, 12);
     const fetchContact = await dbGet('contacts', peerId).catch(() => null);
-    const rejectIdentityBinding = (reason) => {
+    const rejectIdentityBinding = async (reason) => {
+      if (typeof _contactVerify !== 'undefined') await _contactVerify?.invalidate(peerId, 'identity-binding');
       _dbg(null, 'X3DH: identity binding rejected for ' + peerId + ': ' + reason);
       showToast(t('identityBindingFailed'), 'error', 8 * MS.SEC);
       return false;
@@ -5912,6 +5983,7 @@ async function initMessenger(dbName) {
       if (!supplied) {
         const ktPeerId = peerPubB64.slice(0, 12);
         const ktPin = await dbGet('identity', 'ktPin:' + ktPeerId); const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory); const pinBroken = !!(ktPin && ktPin.c && !(bundle.keyHistory || []).some(e => e && e.c === ktPin.c)); // D05: pinned chain head gone = the relay replaced or rolled back the log, even if the new one is internally consistent
+        if (typeof _contactVerify !== 'undefined' && (pinBroken || ['rolled', 'tampered'].includes(audit.verdict))) await _contactVerify?.invalidate(ktPeerId, pinBroken ? 'kt-tampered' : 'kt-' + audit.verdict);
         if (audit.verdict === 'tampered' || pinBroken) { showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn')); if (_settings.ktBlockOnTamper) return false; }
         else if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
         if (audit.verdict !== 'tampered' && !pinBroken) await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId); // don't pin a key vouched for by a broken chain (no silent TOFU baseline from a tampered log)
@@ -6000,6 +6072,7 @@ async function initMessenger(dbName) {
 
   // Shared MITM/key-change warning UI (decrypt-failure reset, X3DH ktlog, signing TOFU). peerId is the contacts key (pub.slice(0,12)).
   async function showKeyChangeWarning(peerId, peerPubB64, reason) {
+    if (typeof _contactVerify !== 'undefined') await _contactVerify?.invalidate(peerId, 'key-warning');
     const name = (await dbGet('contacts', peerId))?.name || peerId;
     const box = _DOM.get('msg-messages');
     if (box && activeContact?.pubB64 === peerPubB64) {
@@ -6078,12 +6151,13 @@ async function initMessenger(dbName) {
     return next;
   }
   function encryptFor(text, peerPubB64, frank, pairing = false) {
-    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _encryptForRaw(text, peerPubB64, frank, pairing));
+    return _withPeerLock((peerPubB64 || '').slice(0, 12), async () => { const wire = await _encryptForRaw(text, peerPubB64, frank, pairing); if (!pairing && typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', (peerPubB64 || '').slice(0, 12)); if (c && !await _contactVerify.permit(c)) return null; } return wire; });
   }
   async function _encryptForRaw(text, peerPubB64, frank, pairing = false) {
     try {  
       const peerId = peerPubB64.slice(0, 12);
       const contact = await dbGet('contacts', peerId);
+      if (!pairing && typeof _contactVerify !== 'undefined' && _contactVerify && contact && !await _contactVerify.permit(contact)) return null;
       if (contact?.offlinePairing && contact.offlinePairing.state !== 'paired' && !pairing) return null;
       let sess = await getSession(peerId);
       if (!sess && (await dbGet('contacts', peerId))?.offlineVerified) return null;
@@ -6411,40 +6485,8 @@ async function initMessenger(dbName) {
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
   // Returns { list, ts }: verified device pubs + the registry's signed revision ts (D14).
-  async function _fetchDeviceRegistry(accountId, rootPubB64) {
-    if (!API) return null;
-    try {
-      const resp = await postAPIRaw('/device/list', { accountId });
-      if (!resp.ok) return null;
-      const rec = await resp.json();
-      if (!rec || !rec.root || !Array.isArray(rec.devices)) return null;
-      if (rootPubB64 && rec.root !== rootPubB64) return null; // registry for a different root
-      // Recompute the signed digest and verify against the ROOT's registered signing key.
-      const digestBuf = await crypto.subtle.digest('SHA-256',
-        new TextEncoder().encode(JSON.stringify(rec.devices.map(d => d.pub))));
-      const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16)
-        .map(b => b.toString(16).padStart(2, '0')).join('');
-      if (!rec.devices.some(d => d.pub === rec.root)) return null;
-      // Verify under the account's PINNED signing key (TOFU pin from message signatures), or my
-      // own signing key when the registry is mine. No pinned key -> DO NOT trust extra devices:
-      // an unverifiable registry falls back to single-device rather than letting the relay
-      // inject a listening device. (Withholding degrades to today's behaviour either way.)
-      let sigPub = null;
-      if (accountId === myId) sigPub = _signingPubB64;
-      if (!sigPub) sigPub = (await dbGet('contacts', accountId).catch(() => null))?.sigPub || null;
-      if (!sigPub) {
-        // Secondary device verifying its OWN account: use the root signing key pinned at link
-        // time (TOFU anchored to the physically-pasted root pub, like adding a contact by key).
-        const acct = await dbGet('identity', 'account').catch(() => null);
-        if (acct?.root && acct.root.slice(0, 12) === accountId && acct.rootEd) sigPub = acct.rootEd;
-      }
-      if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
-      const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
-      if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
-      if (accountId === myId && rec.ts) _ownRegistryTs = rec.ts; // my next presence beat advertises this revision (D14)
-      return { list: rec.devices.map(d => d.pub), ts: rec.ts || 0 };
-    } catch(e) { _dbg(e, 'device-list'); return null; }
-  }
+  const _deviceAlerts = globalThis.__breezeDeviceAlerts?.createDeviceAlerts({ api: () => !!API, post: postAPIRaw, get: dbGet, put: dbPut, verify: verifySignature, sign: signMessage, myId: () => myId, me: () => myPubB64, ed: () => _signingPubB64, minute: MS.MIN, ownTs: ts => { _ownRegistryTs = ts; }, dbg: _dbg, t, esc, safeSetHTML, root: () => _ac.signal.aborted ? null : _DOM.get('msg-main'), unlink: i => _deviceLink.handleCommand('/unlink ' + i) });
+  async function _fetchDeviceRegistry(accountId, rootPubB64) { return await _deviceAlerts?.registry(accountId, rootPubB64) || null; }
   // A camera-scan button for the link panels, mirroring the rendezvous
   // dialog's availability rule: no BarcodeDetector (or no QR helper)
   // means the button stays disabled with the reason shown, and the
@@ -6526,6 +6568,7 @@ async function initMessenger(dbName) {
     await _groupLive?.distributeOwnKey(contact.id, (contact.members || []).length).catch(e => _dbg(e, 'sk-dist-own'));
     const groupCiphertext = await encryptGroupMsg(contact.id, wireText);
     if (!groupCiphertext) return false;
+    let authorFields; try { authorFields = await _groupAuthor.sign(contact.id, groupCiphertext); } catch(e) { _dbg(e, 'group-sign'); return false; }
     if (onEncrypted) await onEncrypted();
     const waits = new Map();
     // D25: a secondary skips the direct path (DCs are keyed by the ROOT pub) — relay deposits are its path.
@@ -6534,7 +6577,7 @@ async function initMessenger(dbName) {
       if (peer?.connected && peer.dc?.readyState === 'open') {
         const w = _directAck?.expect(m.pubB64, ts);
         try {
-          peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, sender: myPubB64, name: myName, isGroupSK: true }));
+          peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg', msgId, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, sender: myPubB64, name: myName, isGroupSK: true, ...authorFields }));
           if (w) waits.set(m.id, w);
         } catch(e) { _dbg(e, 'group-p2p-send'); if (w) _directAck.cancel(m.pubB64, ts); }
       }
@@ -6547,9 +6590,9 @@ async function initMessenger(dbName) {
       if (!acked) owed.push(m);
     }
     await _poolMap(owed, 8, async (m) => {
-      try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64); } catch(e) { _dbg(e); }
+      try { await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName, payload: groupCiphertext, ts, groupId: contact.id, groupName: contact.name, isGroupSK: true, ...authorFields, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64); } catch(e) { _dbg(e); }
     });
-    await _groupLive?.depositCopies(members, groupCiphertext, { ts, groupId: contact.id, groupName: contact.name });
+    await _groupLive?.depositCopies(members, groupCiphertext, { ts, groupId: contact.id, groupName: contact.name, ...authorFields });
     return true;
   }
 
@@ -7039,6 +7082,7 @@ async function initMessenger(dbName) {
 
   async function relaySend(to, payload, sealPub, contactHint) {
     if (!API) return;
+    if (typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', to); if (c && !await _contactVerify.permit(c)) return; }
     // Stage 6 step 2: a multi-relay account asserts its home list in
     // the envelope (sealed for v2 peers); default-only stays identical.
     if (payload && !payload.groupId && !payload.isGroupSK && Array.isArray(_settings.relays) && _settings.relays.length) payload = { ...payload, fromRelays: _myHomeWire() };
@@ -7199,6 +7243,7 @@ async function initMessenger(dbName) {
       _retryTimer = null;
       if (_isOffline || _retryQueue.length === 0) return;
       const item = _retryQueue.shift();
+      if (typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', item.to); if (c && !await _contactVerify.permit(c)) { _retryQueue.push(item); scheduleRetry(); return; } }
       if (item.attempts >= 3) {
         // v3.6: Dead letter queue — don't silently drop; store in IDB + notify user
         _dbg(null, 'Retry exhausted for msg to ' + item.to + ' — moving to dead letter');
@@ -7282,6 +7327,7 @@ async function initMessenger(dbName) {
 
   // v3.3: SW message handler — flush outbox on sync event
   navigator.serviceWorker?.addEventListener('message', (e) => {
+    if (_vault.isBlocked()) return;
     if (e.data?.type === 'sync-outbox' && _retryQueue.length > 0) {
       _dbg(null, 'Background sync: flushing ' + _retryQueue.length + ' messages');
       scheduleRetry();
@@ -7327,8 +7373,10 @@ async function initMessenger(dbName) {
   // Caches the decision onto the group record for kick/UI to read.
   async function getGroupSenderKey(groupId) {
     try {
+      if (!_groupAuthor) return null;
+      return await _groupAuthor.withKey(groupId, async () => {
       const stored = await dbGet('identity', 'gsk:' + groupId);
-      if (stored) return stored;
+      if (stored) return _groupAuthor ? await _groupAuthor.prepareKey(groupId, stored) : stored;
       const group = await dbGet('contacts', groupId);
       const useV5 = _computeGroupV5(group || {});
       if (group && group.groupV5 !== useV5) { group.groupV5 = useV5; await dbPut('contacts', group); }
@@ -7337,13 +7385,19 @@ async function initMessenger(dbName) {
         ? { chainKey: Array.from(rawBytes), counter: 0, epoch: 0, v: 5, skipped: {} }
         : { raw: Array.from(rawBytes), counter: 0, epoch: 0 };
       await dbPut('identity', key, 'gsk:' + groupId);
-      return key;
+      return _groupAuthor ? await _groupAuthor.prepareKey(groupId, key) : key;
+      });
     } catch(_e) { _dbg(_e, 'getGroupSenderKey'); }
   }
 
   async function encryptGroupMsg(groupId, text) {
     try {
+      if (typeof _contactVerify !== 'undefined' && _contactVerify && !await _contactVerify.permit(await dbGet('contacts', groupId))) return null;
+      if (!_groupAuthor) return null;
+      return await _groupAuthor.withSend(groupId, async () => {
       const sk = await getGroupSenderKey(groupId);
+      await _groupAuthor.ensureDistributed(groupId, sk);
+      if (sk.counter >= 0xFFFFFFFF) throw new Error('group sender key counter overflow — rotate group');
       let msgKeyBits, version;
       if (CONFIG.GROUP_RATCHET_V5 && sk.v === 5) {
         // v5: hash ratchet — derive msg key from current chainKey, then advance
@@ -7359,7 +7413,7 @@ async function initMessenger(dbName) {
         version = 3;
       }
       sk.counter++;
-      await dbPut('identity', sk, 'gsk:' + groupId);
+      if (!await dbPut('identity', sk, 'gsk:' + groupId)) throw new Error('group sender counter persistence failed');
       const raw = new TextEncoder().encode(text);
       const padded = new Uint8Array(_padBucketSize(raw.length + 2, CONFIG.MSG_PAD_BOUNDARY));
       new DataView(padded.buffer).setUint16(0, raw.length);
@@ -7368,16 +7422,18 @@ async function initMessenger(dbName) {
       const importedKey = await crypto.subtle.importKey('raw', msgKeyBits, { name: 'AES-GCM' }, false, ['encrypt']);
       const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, importedKey, padded);
       return JSON.stringify({ v: version, g: true, i: arr(iv), d: arr(new Uint8Array(ct)), c: sk.counter - 1, ep: sk.epoch, cm: await _keyCommit(msgKeyBits) });
+      });
     } catch(_e) { _dbg(_e, 'encryptGroupMsg'); }
   }
 
-  async function decryptGroupMsg(groupId, senderId, payload) {
+  async function decryptGroupMsg(groupId, senderId, payload, author) {
     try {
       const p = JSON.parse(payload);
       if (!p.g) return null;
       const skKey = 'gsk-peer:' + groupId + ':' + senderId;
       const peerSK = await dbGet('identity', skKey);
       if (!peerSK) return null;
+      if ((peerSK.epoch || 0) !== (p.ep || 0)) return null;
 
       let msgKeyBits;
       let stashedPeerSK = null; // v5 state staged here; committed to IDB only after AEAD success
@@ -7436,7 +7492,7 @@ async function initMessenger(dbName) {
       // Commit ratchet state only now — a forged ciphertext must not advance the
       // chain or burn a cached skipped key (previously dbPut ran before the AEAD
       // check, so one forged packet permanently desynced this member).
-      if (stashedPeerSK) await dbPut('identity', stashedPeerSK, skKey);
+      if (stashedPeerSK) { if (author) author.ratchet = { key: skKey, value: stashedPeerSK, expected: peerSK }; else await dbPut('identity', stashedPeerSK, skKey); }
       const textLen = new DataView(padded.buffer).getUint16(0);
       return new TextDecoder().decode(padded.slice(2, 2 + textLen));
     } catch(e) { _dbg(e, 'group-decrypt'); return null; }
@@ -7457,6 +7513,7 @@ async function initMessenger(dbName) {
       const skPayload = (CONFIG.GROUP_RATCHET_V5 && sk.v === 5)
         ? { type: 'sender_key', groupId, chainKey: sk.chainKey, epoch: sk.epoch, v: 5 }
         : { type: 'sender_key', groupId, key: sk.raw, epoch: sk.epoch };
+      Object.assign(skPayload, await _groupAuthor?.capability(groupId));
       const encrypted = await encryptFor(JSON.stringify(skPayload), memberPubB64);
       if (!encrypted) { _dbg(null, 'encrypt failed'); return; }
       await relaySend(memberId, { to: memberId, from: myId, fromPub: myPubB64, fromName: myName, payload: encrypted, ts: Date.now(), isSenderKey: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, memberPubB64);
@@ -7537,6 +7594,7 @@ async function initMessenger(dbName) {
       // setTimeout/clearTimeout instrumentation: switching accounts with focus mode on
       // left the old timer's id out of the cleared set entirely.
       if (_focusTimer) { clearTimeout(_focusTimer); _focusTimer = null; }
+      if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; }
       // Discard this account's in-memory outbox. The Map is module-level and persists
       // across initMessenger calls; without clearing it here, pending P2P messages from
       // the old account would be sent under the new account's identity if both accounts
@@ -7584,6 +7642,9 @@ async function initMessenger(dbName) {
       // Null out cryptographic key material so pending callbacks from this account
       // cannot sign or decrypt under the old identity after the switch.
       _signingKey = null; myKeys = null; _keywrapWriter = null;
+      _pqSeedUnlocked = null; _msgStoreKey = null;
+      for (const url of _mailWsByRelay.keys()) _closeRelayWs(url);
+      if (_gcall?.state() !== 'idle') _gcall?.endCall(false);
       // Clear the in-memory replay cache: msgId entries from this account's sessions
       // should not be used to deduplicate incoming messages for the next account.
       _replayCache._map.clear();
@@ -7606,6 +7667,8 @@ async function initMessenger(dbName) {
   // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
   // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
+    _deviceAlerts?.check(); _intervals.push(setInterval(() => _deviceAlerts?.check(), MS.MIN));
+    await _contactVerify.migrate();
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
     if (shortIdEl) {
@@ -7973,6 +8036,7 @@ async function initMessenger(dbName) {
     if (!queue || queue.length === 0) return;
     const peer = peers[peerId];
     if (!peer?.connected || peer.dc?.readyState !== 'open') return;
+    if (typeof _contactVerify !== 'undefined' && _contactVerify && !await _contactVerify.permit(await dbGet('contacts', peerId.slice(0, 12)))) return;
     const toSend = [...queue];
     _outbox.set(peerId, []);
     _persistOutbox();
@@ -8348,7 +8412,7 @@ async function initMessenger(dbName) {
   const _nameTools = globalThis.__breezeNames?.createNameTools({ settings: () => _settings, esc, t, dom: id => _DOM.get(id), html: safeSetHTML, put: dbPut, render: () => renderContacts(), active: () => activeContact, list: () => dbGetAll('contacts'), confirm: showConfirm, toast: showToast, dbg: _dbg });
   const contactDisplayName = _nameTools?.contactDisplayName || (c => (c?.name || '').replace(/[\p{Default_Ignorable_Code_Point}\p{Cc}]/gu, ''));
   const contactPeerNameHtml = _nameTools?.contactPeerNameHtml || (() => '');
-  function _setConvName(c) { if (_nameTools) _nameTools._setConvName(c); else if (c) _DOM.get('msg-conv-name').textContent = contactDisplayName(c); }
+  function _setConvName(c) { if (_nameTools) _nameTools._setConvName(c); else if (c) _DOM.get('msg-conv-name').textContent = contactDisplayName(c); if (c && typeof _contactVerify !== 'undefined') _contactVerify?.paintHeader(c).catch(e => _dbg(e, 'verification-header')); }
   const setContactNickname = _nameTools?.setContactNickname || (async () => {});
 
   async function renderContacts() {
@@ -8452,7 +8516,7 @@ async function initMessenger(dbName) {
       else if (draftText) previewText = `<span class="color-r">${t('draftLabel')}:</span> ${esc(draftText.slice(0, 30))}`;
       else if (c.isGroup && c.lastMsgSender && c.lastMsg) previewText = `<span class="color-t2">${esc(contactDisplayName({ name: c.lastMsgSender }))}:</span> ${esc(c.lastMsg)}`;
       else previewText = esc(c.lastMsg || '');
-      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${_nameTools?.warningHtml(c) || ''}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
+      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${typeof _contactVerify !== 'undefined' && _contactVerify ? await _contactVerify.label(c, true) : ''}${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${_nameTools?.warningHtml(c) || ''}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
       div.onclick = () => openConversation(c);
       // v3.6: Swipe-left-to-archive on contact (iOS Mail/WhatsApp pattern)
       if (IS_TOUCH) {
@@ -8791,7 +8855,7 @@ async function initMessenger(dbName) {
           disappearAt: m.disappearAt, voice: m.voice, reactions: m.reactions, sticker: m.sticker,
           loc: m.loc, liveUntil: m.liveUntil, liveEnded: m.liveEnded,
           forwarded: m.forwarded, bookmarked: m.bookmarked,
-          verified: m.verified, tampered: m.tampered,
+          verified: m.verified, tampered: m.tampered, authorVerified: m.authorVerified,
           replyCount: _replyCounts[m.msgId] || 0,
           poll: m.isPoll ? (() => { try { return JSON.parse(m.text); } catch { return null; } })() : null,
         });
@@ -9024,6 +9088,7 @@ async function initMessenger(dbName) {
 
     // v3.3: Forwarded message tag
     if (meta.forwarded) content += '<div class="msg-fwd">' + t('forwarded') + '</div>';
+    if (!isMine && activeContact?.isGroup && meta.authorVerified !== true) content += '<div class="i-tiny-meta">' + esc(t('groupAuthorLegacy')) + '</div>';
 
     // Group: show sender name (skip if grouped with same sender)
     if (meta.senderName && !isMine && !isGrouped) {
@@ -9749,8 +9814,9 @@ async function initMessenger(dbName) {
 
   // v3.6: Translate message inline (DeepL → LibreTranslate → MyMemory)
   // Signal helper for edit/delete/reaction sync (1:1 + group)
-  function sendSignal(data) {
+  async function sendSignal(data) {
     if (!activeContact) return;
+    if (!await _contactVerify.permit(activeContact)) return;
     // v3.6: Group signal fan-out — send encrypted signal to each member
     if (activeContact.isGroup && activeContact.members?.length > 0) {
       const signalPayload = JSON.stringify(data);
@@ -9903,6 +9969,7 @@ async function initMessenger(dbName) {
   let _isSending = false; // v3.3: Double-submit prevention
   async function sendMessage() {
     if (!activeContact) return;
+    if (typeof _contactVerify !== 'undefined' && _contactVerify && !await _contactVerify.permit(activeContact)) { showToast(t('cvBlocked'), 'error'); return; }
     if (activeContact.offlinePairing && activeContact.offlinePairing.state !== 'paired') { showToast(t('opPending'), 'info'); return; }
     if (activeContact.blocked) return;
     // v3.3: Announce-only groups — only admins can send
@@ -9996,6 +10063,7 @@ async function initMessenger(dbName) {
       // Encrypt once with Sender Key (O(1))
       const groupCiphertext = await encryptGroupMsg(groupId, text);
         if (!groupCiphertext) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
+      let authorFields; try { authorFields = await _groupAuthor.sign(groupId, groupCiphertext); } catch(e) { _dbg(e, 'group-sign'); showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
       // Send same ciphertext to all members (no per-member re-encryption)
       // P2P_PLAN Step 2 (direct-first): every direct copy goes out
       // first and each ack wait starts together, so one silent member's
@@ -10010,7 +10078,7 @@ async function initMessenger(dbName) {
           try {
             peer.dc.send(JSON.stringify({ v: CONFIG.PROTOCOL_VERSION, type: 'group_msg',
               msgId, payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
-              sender: myPubB64, name: myName, isGroupSK: true,
+              sender: myPubB64, name: myName, isGroupSK: true, ...authorFields,
               replyTo: meta.replyTo, disappearAt: meta.disappearAt }));
             if (ackWait) _groupAckWaits.set(m.id, ackWait);
           } catch(e) { _dbg(e, 'group-p2p-send'); if (ackWait) _directAck.cancel(m.pubB64, ts); }
@@ -10037,10 +10105,10 @@ async function initMessenger(dbName) {
         try {
           await relaySend(m.id, { to: m.id, from: myId, fromPub: myPubB64, fromName: myName,
             payload: groupCiphertext, ts, groupId, groupName: activeContact.name,
-            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64);
+            replyTo: meta.replyTo, disappearAt: meta.disappearAt, isGroupSK: true, ...authorFields, ...(_isSecondaryDevice && _myAcctRoot ? { acctRoot: _myAcctRoot } : {}) }, m.pubB64);
         } catch(e) { _dbg(e); }
       });
-      await _groupLive?.depositCopies(members, groupCiphertext, { ts, groupId, groupName: activeContact.name, replyTo: meta.replyTo, disappearAt: meta.disappearAt });
+      await _groupLive?.depositCopies(members, groupCiphertext, { ts, groupId, groupName: activeContact.name, replyTo: meta.replyTo, disappearAt: meta.disappearAt, ...authorFields });
     } else {
       // 1:1: v3 Double Ratchet + P2P + Sealed Sender
       const _frank = {};
@@ -10493,7 +10561,7 @@ async function initMessenger(dbName) {
   // completes it in the input (with a trailing space for its argument).
   // The 60+ commands stay the single implementation — this is only a
   // discovery surface for them.
-  const _SLASH_COMMANDS = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/online', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
+  const _SLASH_COMMANDS = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/online', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/vault', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
   _DOM.get('msg-input')?.addEventListener('input', (e) => {
     const input = e.target;
     const m = input.value.match(/^\/(\w*)$/);
@@ -10663,7 +10731,7 @@ async function initMessenger(dbName) {
     noteCallSample: (pc, seconds) => _p2pStats?.sampleCall(pc, seconds),
     myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
     isBusy: () => _callMgr.state() !== 'idle', isSecondary: () => _isSecondaryDevice,
-    myAccountId: () => (_myAcctRoot ? _myAcctRoot.slice(0, 12) : myId), myAccountPub: () => _myAcctRoot || myPubB64, acctRoot: () => (_isSecondaryDevice && _myAcctRoot) ? _myAcctRoot : undefined, devicesFor: _devicesFor, depositControlCopies: (members, ct, fields) => _groupLive?.depositCopies(members, ct, { ...fields, gctl: true }), distributeKeyDevices: (gid, m, force, size) => _groupLive?.distributeKey(gid, m, force, size), distributeOwnKeyDevices: (gid, size) => _groupLive?.distributeOwnKey(gid, size),
+    myAccountId: () => (_myAcctRoot ? _myAcctRoot.slice(0, 12) : myId), myAccountPub: () => _myAcctRoot || myPubB64, acctRoot: () => (_isSecondaryDevice && _myAcctRoot) ? _myAcctRoot : undefined, devicesFor: _devicesFor, authorFields: (gid, ct) => _groupAuthor.sign(gid, ct), depositControlCopies: (members, ct, fields) => _groupLive?.depositCopies(members, ct, { ...fields, gctl: true }), distributeKeyDevices: (gid, m, force, size) => _groupLive?.distributeKey(gid, m, force, size), distributeOwnKeyDevices: (gid, size) => _groupLive?.distributeOwnKey(gid, size),
   }) || { start() {}, route() {}, state: () => 'idle' };
   const _poolMap = (items, n, fn) => globalThis.__breezeGCall?.poolMap ? globalThis.__breezeGCall.poolMap(items, n, fn) : Promise.all(items.map(fn));
 
@@ -10743,11 +10811,15 @@ async function initMessenger(dbName) {
   // line-budget move); these wrappers keep the call sites unchanged.
   // The /security and /who panels live in src/app/info-panels.js
   // (stage 5 step 5 line-budget move); the dispatcher delegates to them.
+  _contactVerify = globalThis.__breezeContactVerify.createContactVerify({ account: dbName, get: dbGet, put: dbPut, contacts: () => dbGetAll('contacts'), audit: auditLog, t, esc, safeSetHTML, dbg: _dbg,
+    safetyNumber, auditKeys: _auditKeyTransparency, local: () => ({ pubB64: myPubB64, sigPub: _signingPubB64 }), active: () => activeContact, header: () => _DOM.get('msg-conv-name'),
+    refresh: async () => { if (activeContact) { activeContact = await dbGet('contacts', activeContact.id) || activeContact; _setConvName(activeContact); } await renderContacts(); },
+  });
   const _infoPanels = globalThis.__breezeInfoPanels?.createInfoPanels({
-    dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML,
+    dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML, deviceAlerts: _deviceAlerts, contactVerify: _contactVerify,
     cmdPanel: (id) => _cmdPanelEl(id),
     cryptoStack: () => _cryptoStack, activeContact: () => activeContact,
-    atRestIsWrapped: _atRestIsWrapped, p2pStats: () => _p2pStats, turnCredential: () => _turnCredential,
+    atRestIsWrapped: r => _vault.enabled() || _atRestIsWrapped(r), p2pStats: () => _p2pStats, turnCredential: () => _turnCredential,
     signingPubB64: () => _signingPubB64, hasX25519: () => _hasX25519, hasEd25519: () => _hasEd25519, hasPQ: () => _hasPQ,
     replayCacheSize: () => _replayCache.size(), config: () => CONFIG, settings: () => _settings,
     relayPinGate: () => _relayPinGate, relayPinFp: () => _relayPinFp,
@@ -10757,6 +10829,7 @@ async function initMessenger(dbName) {
   const _dataPanels = globalThis.__breezeInfoPanels?.createDataPanels({
     dbGet, dbGetAll, fmtSize, downloadBlob, auditLog, showToast, t, esc, safeSetHTML,
     cmdPanel: (id) => _cmdPanelEl(id), db: () => db, config: () => CONFIG, dbg: _dbg,
+    gdprExport: () => _historyTools?.gdprExport(), runGdpr: () => exportGdpr(),
   });
   const _profileUI = globalThis.__breezeProfileUI?.createProfileUI({
     dbGet, dbPut, dbGetAll, encryptFor, relaySend, showToast, t, esc, safeSetHTML,
@@ -10773,7 +10846,7 @@ async function initMessenger(dbName) {
     setNoticeDay: (v) => { try { localStorage.setItem('brz-turn-quota-day', v); } catch {} },
     auditLog, showToast, t, dbg: _dbg,
   });
-  const _groupLive = globalThis.__breezeGroupLive?.createGroupLive({ devicesFor: _devicesFor, myOtherDevices: _myOtherDevices, relaySend, encryptFor, getSenderKey: getGroupSenderKey, poolMap: _poolMap, dbg: _dbg, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName, myRootPub: () => _myAcctRoot || myPubB64, acctRoot: () => (_isSecondaryDevice && _myAcctRoot) ? _myAcctRoot : undefined, groupRatchetV5: () => CONFIG.GROUP_RATCHET_V5, skRedistEvery: () => CONFIG.SK_REDIST_EVERY });
+  const _groupLive = globalThis.__breezeGroupLive?.createGroupLive({ devicesFor: _devicesFor, myOtherDevices: _myOtherDevices, relaySend, encryptFor, getSenderKey: getGroupSenderKey, poolMap: _poolMap, dbg: _dbg, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName, myRootPub: () => _myAcctRoot || myPubB64, acctRoot: () => (_isSecondaryDevice && _myAcctRoot) ? _myAcctRoot : undefined, groupRatchetV5: () => CONFIG.GROUP_RATCHET_V5, skRedistEvery: () => CONFIG.SK_REDIST_EVERY, authorFields: (gid, ct) => _groupAuthor.sign(gid, ct), authorCapability: gid => _groupAuthor?.capability(gid) });
   const _locUI = globalThis.__breezeLocationUI?.createLocationShare({
     dbGet, dbPut, encryptFor, relaySend, showToast, t, esc, safeSetHTML, appendMsg,
     fanOut: (c, wire, ts, extra, sfExtra) => _fanOut(c, wire, ts, extra, sfExtra),
@@ -10812,6 +10885,7 @@ async function initMessenger(dbName) {
     syncActiveMembers: (gid, members) => { if (activeContact?.id === gid) activeContact.members = members; },
     pushInterval: (h) => _intervals.push(h), minMs: () => MS.MIN,
     hasApi: () => !!API, groupMax: () => CONFIG.GROUP_MAX, groupV5: () => CONFIG.GROUP_RATCHET_V5, capsGroupV5: () => CAPS_GROUP_V5,
+    authorCaps: () => _groupAuthor?.supported() ? [CAPS_GROUP_AUTHOR_SIG] : [],
     origin: () => location.origin, pathname: () => location.pathname,
     clipboardWrite: (text) => { navigator.clipboard?.writeText(text); },
     share: async (o) => { if (navigator.share) { try { await navigator.share(o); } catch(e) { _dbg(e); } } },
@@ -11174,6 +11248,10 @@ async function initMessenger(dbName) {
   // on which a Step-2 sender stakes its mailbox deposit — is sent only
   // when the flag is set. Relay-path callers pass nothing.
   async function handleIncoming(msg, ackOut) {
+    if (msg.isGroupSK || (msg.groupId && !msg.isSignal && !msg.isGroupInvite && !msg.isGroupKick && !msg.isSenderKey)) return _groupAuthor?.receive(msg, ackOut, author => _handleIncoming(msg, ackOut, author));
+    return _handleIncoming(msg, ackOut);
+  }
+  async function _handleIncoming(msg, ackOut, author) {
     // Normalize msg.ts to a safe integer. P2P DataChannel messages carry a peer-supplied
     // ts field that is never validated by the relay; a non-numeric value would be
     // concatenated into msgId (contactId + ':' + msg.ts) and later break querySelector
@@ -11386,6 +11464,7 @@ async function initMessenger(dbName) {
             ? { chainKey: skMsg.chainKey, counter: 0, epoch: skMsg.epoch || 0, v: 5, skipped: {} }
             : { raw: skMsg.key, counter: 0, epoch: skMsg.epoch || 0 };
           await dbPut('identity', skEntry, peerKey);
+          await _groupAuthor?.bindCapability(skMsg.groupId, peerPub, skMsg);
           _dbg(null, 'Received sender key for group ' + skMsg.groupId);
         }
       } catch(e) { _dbg(e, 'sender-key'); }
@@ -11499,6 +11578,7 @@ async function initMessenger(dbName) {
           // containing CSS selector metacharacters (e.g. "] .other [") would break the
           // attribute selector and potentially match unintended DOM elements.
           const targetMsgId = safeMsgId(signal.msgId || '');
+          if ((signal.type === 'edit' || signal.type === 'delete') && !targetMsgId.startsWith(member.id + ':')) return;
           if (signal.type === 'edit') {
             const stored = await dbGet('messages', targetMsgId);
             // Only allow editing messages not authored by us — peers cannot remote-edit our outgoing messages.
@@ -11538,9 +11618,9 @@ async function initMessenger(dbName) {
       let text;
       // v3.1: Try Sender Key decryption first (O(1)), fallback to per-member
       if (msg.isGroupSK) {
-        text = await decryptGroupMsg(msg.groupId, (msg.from || '').slice(0, 12), msg.payload);
+        text = await decryptGroupMsg(msg.groupId, (msg.from || '').slice(0, 12), msg.payload, author);
       }
-      if (!text) {
+      if (!text && !author?.verified) {
         // Fallback: legacy per-member encryption, using the local member key.
         text = await decryptFrom(msg.payload, peerPub);
       }
@@ -11548,20 +11628,18 @@ async function initMessenger(dbName) {
       // Cap group message text — relay enforces 256 KB but the P2P group path has no server check; a {gfile} wire gets the group-file cap (GROUP_FILE_TEXT_MAX in src/app/group-file.js) and is re-sanitized below.
       if (text.length > (text.startsWith('{"gfile":') ? 69312 : 65536)) return;
       const msgId = member.id + ':' + msg.ts;
-      if (_replayCache.has(msgId)) return; // Fast in-memory dedup
-      _replayCache.add(msgId); // Speculative mark before first await — blocks concurrent-path duplicates
       if (msg.gctl) { // Stage 5 step 2: group-call control — routed to the call manager, never stored or rendered.
-        try { const ctl = JSON.parse(text); if (ctl && ctl.gctl) _gcall.route(group, member, ctl); } catch(e) { _dbg(e, 'gctl'); }
+        try { const ctl = JSON.parse(text); if (ctl && ctl.gctl) { if (author) await author.commit(null); _gcall.route(group, member, ctl); } } catch(e) { _dbg(e, 'gctl'); }
         return;
       }
-      if (await dbGet('messages', msgId)) { if (ackOut) ackOut.stored = true; return; } // Already persisted
+      const existingGroupMsg = await dbGet('messages', msgId); if (existingGroupMsg) { if (ackOut && (!author?.verified || existingGroupMsg.authorTuple === author.tuple)) ackOut.stored = true; return; }
       const senderContact = await dbGet('contacts', member.id);
       const senderName = (senderContact?.pubB64 === member.pubB64 && typeof senderContact.name === 'string')
         ? senderContact.name : (typeof member.name === 'string' ? member.name : member.id);
-      const meta = { msgId, senderName, senderId: member.id, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
+      const meta = { msgId, senderName, senderId: member.id, replyTo: msg.replyTo, disappearAt: msg.disappearAt, authorVerified: author?.verified === true };
       const locP = globalThis.__breezeLocation?.parseGroupLocationText(text);
       if (locP) { // Stage 5 step 6: group location — collapses into the live/one-shot record, never text.
-        await _locUI?.applyLocation(msg.groupId, member.id, locP, msg.ts, senderName);
+        if (!_locUI) return; await _locUI.applyLocation(msg.groupId, member.id, locP, msg.ts, senderName, author);
         const g2 = await dbGet('contacts', msg.groupId).catch(() => null);
         if (g2) { g2.lastMsgSender = senderName; await dbPut('contacts', g2); }
         if (ackOut) ackOut.stored = true;
@@ -11571,7 +11649,7 @@ async function initMessenger(dbName) {
       if (stk) { // Stage 5 step 5: group sticker — stored/rendered as a sticker, never as text.
         const label = globalThis.__breezeStickers.stickerLabel(stk);
         const smeta = { ...meta, sticker: stk };
-        await dbPut('messages', { msgId, contactId: msg.groupId, text: label, mine: false, ts: msg.ts, ...smeta });
+        await author.commit({ msgId, contactId: msg.groupId, text: label, mine: false, ts: msg.ts, ...smeta });
         if (ackOut) ackOut.stored = true;
         group.lastMsg = label;
         group.lastMsgSender = senderName;
@@ -11584,7 +11662,7 @@ async function initMessenger(dbName) {
       }
       const gf = globalThis.__breezeGroupFile?.parseGroupFileText(text); if (gf) { // D25 wave 9: group file — stored/rendered as a file, never as text.
         const fileData = JSON.stringify(gf), label = '📎 ' + gf.name;
-        await dbPut('messages', { msgId, contactId: msg.groupId, text: label, mine: false, ts: msg.ts, fileData, ...meta }); if (ackOut) ackOut.stored = true;
+        await author.commit({ msgId, contactId: msg.groupId, text: label, mine: false, ts: msg.ts, fileData, ...meta }); if (ackOut) ackOut.stored = true;
         group.lastMsg = label.slice(0, 30); group.lastMsgSender = senderName; group.lastMsgAt = msg.ts;
         if (activeContact?.id !== msg.groupId) { group.unread = (group.unread || 0) + 1; if (_shouldAlert(group, label)) playNotif(); }
         await dbPut('contacts', group);
@@ -11592,7 +11670,7 @@ async function initMessenger(dbName) {
         _renderContactsThrottled();
         return;
       }
-      await dbPut('messages', { msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
+      await author.commit({ msgId, contactId: msg.groupId, text, mine: false, ts: msg.ts, ...meta });
       if (ackOut) ackOut.stored = true;
       group.lastMsg = text.slice(0, 30);
       group.lastMsgSender = senderName;
@@ -12200,7 +12278,7 @@ async function initMessenger(dbName) {
           if (msg.type === 'peer_relay_request') { handlePeerRelayRequest(contact, e.data); return; }
           // v3 Peer Relay: delivery of held message
           if (msg.type === 'peer_relay_deliver') {
-            try { await handleIncoming({ from: msg.from, fromPub: '', fromName: '', payload: msg.payload, ts: msg.ts }); } catch(err) { _dbg(err); }
+            try { await handleIncoming({ from: msg.from, fromPub: '', fromName: '', payload: msg.payload, ts: msg.ts, ...globalThis.__breezeGroupAuthor?.forwardedGroupFields(msg) }); } catch(err) { _dbg(err); }
             return;
           }
           if (msg.type === 'msg') {
@@ -12222,22 +12300,13 @@ async function initMessenger(dbName) {
           // v3.6: P2P direct group message (dual-path: P2P instant + sealed sender reliable)
           if (msg.type === 'group_msg' && msg.groupId) {
             if (msg.sender !== contact.pubB64) { _dbg(null, 'group sender does not match connected peer'); return; }
-            // v3.6: Dedup — dual-path (P2P + sealed) may deliver same message twice
-            const gmsgId = contact.id + ':' + msg.ts;
-            if (_replayCache.has(gmsgId)) return;
-            if (await dbGet('messages', gmsgId)) {
-              _replayCache.add(gmsgId);
-              // Step 2: already persisted IS delivery — ack it, so the
-              // sender can skip a deposit copy we would only dedup.
-              try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); }
-              return;
-            }
             const group = (await dbGetAll('contacts')).find(c => c.id === msg.groupId);
             if (group) {
               const ackOut = {};
               await handleIncoming({ from: contact.id, fromPub: contact.pubB64,
                 fromName: contact.name, payload: msg.payload, ts: msg.ts,
                 groupId: msg.groupId, groupName: msg.groupName, isGroupSK: msg.isGroupSK,
+                authorSigV: msg.authorSigV, authorSig: msg.authorSig,
                 replyTo: msg.replyTo, disappearAt: msg.disappearAt }, ackOut);
               // Step 2: ack only on confirmed persistence (see 'msg').
               if (ackOut.stored) { try { ch.send(JSON.stringify({ type: 'ack', i: msg.ts + '', st: 0 })); } catch(e) { _dbg(e); } }
@@ -12424,6 +12493,7 @@ async function initMessenger(dbName) {
                   const wrapper = JSON.parse(s.data);
                   if (wrapper && typeof wrapper.sdp === 'string' && wrapper.sig && wrapper.sigPub) {
                     if (contact.sigPub && contact.sigPub !== wrapper.sigPub) {
+                      try { if (typeof _contactVerify !== 'undefined') await _contactVerify?.invalidate(contact.id, 'sdp-signing'); } catch(e) { _dbg(e, 'verification-sdp'); }
                       _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');
                       continue;
                     }
@@ -12533,6 +12603,7 @@ async function initMessenger(dbName) {
 
   // v3.3: Shared lock screen function (used by /lock and auto-lock)
   function showLockScreen() {
+    if (typeof initMessenger !== 'undefined' && initMessenger._vault?.enabled()) { initMessenger._vault.lock(); return; }
     if (_DOM.get('lock-screen')) return;
     const raw = localStorage.getItem('brz-lock-hash');
     if (!raw) return;
@@ -12747,6 +12818,7 @@ async function initMessenger(dbName) {
   // and the one write-back phrase restore performs via adoptRestoredSigning.
   // Absent module ⇒ inert no-op entries (the pq-facade doctrine).
   const _backupTools = globalThis.__breezeBackup?.createBackupTools({
+    vault: _vault,
     db, dbGet, dbPut, dbGetAll, authFields, homeRelays, postAPIRelay, signMessage, renderContacts, auditLog,
     myId: () => myId,
     autoBackupEnabled: () => _settings.autoBackup !== false,
@@ -13077,8 +13149,9 @@ async function initMessenger(dbName) {
           if (!await ensureRelayVerified(relay)) continue;
           if (_relayHealthByUrl.get(relay.url)?.vapidPublicKey !== boundKey) continue;
         }
-        await postAPIRelay(relay, '/push/subscribe', { userId: myId, subscription: subJson,
+        const subscribed = await postAPIRelay(relay, '/push/subscribe', { userId: myId, subscription: subJson,
           ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJson.endpoint || ''}:${subJson.keys?.p256dh || ''}:${subJson.keys?.auth || ''}`)) }).catch(e => _dbg(e));
+        if (subscribed?.ok && isOriginRelay(relay)) await _deviceAlerts?.announce('push', await globalThis.__breezeDeviceAlerts.activityHash(JSON.stringify([subJson.endpoint, subJson.keys?.p256dh])));
       }
     } catch(e) { _dbg(e, 'push'); }
   }
@@ -13112,7 +13185,7 @@ async function initMessenger(dbName) {
       // larger is malformed and would waste memory in the relay queue.
       if (typeof req.payload !== 'string' || req.payload.length > 65536) return;
       if (!Object.prototype.hasOwnProperty.call(_peerRelayQueue, targetId)) _peerRelayQueue[targetId] = [];
-      _peerRelayQueue[targetId].push({ payload: req.payload, ts: Date.now(), from: contact.id });
+      _peerRelayQueue[targetId].push({ payload: req.payload, ts: req.groupId ? req.ts : Date.now(), from: req.groupId ? req.from : contact.id, ...globalThis.__breezeGroupAuthor?.forwardedGroupFields(req) });
       // Limit: 20 messages per target, 1 hour TTL
       _peerRelayQueue[targetId] = _peerRelayQueue[targetId]
         .filter(m => Date.now() - m.ts < MS.HOUR)
@@ -13129,7 +13202,7 @@ async function initMessenger(dbName) {
     if (!peer?.connected || peer.dc?.readyState !== 'open') return;
     for (const msg of queue) {
       try {
-        peer.dc.send(JSON.stringify({ type: 'peer_relay_deliver', payload: msg.payload, from: msg.from, ts: msg.ts }));
+        peer.dc.send(JSON.stringify({ type: 'peer_relay_deliver', payload: msg.payload, from: msg.from, ts: msg.ts, ...globalThis.__breezeGroupAuthor?.forwardedGroupFields(msg) }));
       } catch(e) { _dbg(e); }
     }
     delete _peerRelayQueue[targetId];
@@ -13176,6 +13249,7 @@ async function initMessenger(dbName) {
   }, { signal: _ac.signal });
 
   async function executePanic() {
+    if (_vault.enabled()) { await _vault.command('/vault disable'); return; }
     safeSetHTML(document.body, '<div class="i-fullscreen"></div>');
     try {
       if (indexedDB.databases) { for (const d of await indexedDB.databases()) { if (d.name) indexedDB.deleteDatabase(d.name); } }
@@ -13354,7 +13428,8 @@ async function initMessenger(dbName) {
 
   // Send file as binary chunks (v3)
   async function sendBinaryFile(peer, file) {
-    try {  
+    try {
+      if (!await _contactVerify.permit(peer)) { showToast(t('cvBlocked'), 'error'); return false; }
       const dc = peers[peer.pubB64]?.dc;
       if (!dc || dc.readyState !== 'open') return false;
       const CHUNK = CONFIG.CHUNK_SIZE;
@@ -13393,6 +13468,7 @@ async function initMessenger(dbName) {
             setTimeout(resolve, 5 * MS.SEC);
           });
         }
+        if (!await _contactVerify.permit(peer)) return false;
         dc.send(packet);
         // Update progress
         const pct = Math.round(((seq + 1) / total) * 100);
@@ -13419,35 +13495,13 @@ async function initMessenger(dbName) {
       const { log } = await resp.json();
       const stored = (await dbGet('identity', 'ktIk:' + contact.id)) ?? contact.pubB64;
       const audit = await _auditKeyHistory(stored, log); const ktPin = await dbGet('identity', 'ktPin:' + contact.id); if (ktPin && ktPin.c && !(log || []).some(e => e && e.c === ktPin.c)) audit.verdict = 'tampered'; // D05: pinned chain head vanished — log replaced or rolled back
+      if (audit.verdict === 'rolled' || audit.verdict === 'tampered') await _contactVerify.invalidate(contact.id, 'kt-' + audit.verdict);
       if (audit.verdict === 'ok' || audit.verdict === 'new') { await dbPut('identity', contact.pubB64, 'ktIk:' + contact.id); const hc = _ktHeadC(log); if (hc) await dbPut('identity', { c: hc }, 'ktPin:' + contact.id); }
       return audit;
     } catch(e) { _dbg(e, 'kt-audit'); return null; }
   }
 
-  async function showSafetyNumber(contact) {
-    try {
-      const num = await safetyNumber(contact.pubB64);
-      const overlay = document.createElement('div');
-      overlay.className = 'overlay overlay-dark';
-      safeSetHTML(overlay, `<div class="modal">
-        <div class="i-emoji-lg">🔐</div>
-        <div class="fw-700 text-sm mb-2">${t('safetyNumber')}</div>
-        <div class="i-safety-num">${num}</div>
-        <div class="text-xs color-t3 mb-3">${t('safetyDesc')}</div>
-        <div class="text-xs mb-3" id="kt-audit-status">${esc(t('ktChecking'))}</div>
-        <button class="btn btn-o btn-sm" data-close="overlay">${t('close')}</button>
-      </div>`);
-      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-      document.body.appendChild(overlay);
-      _auditKeyTransparency(contact).then(audit => {
-        const el = overlay.querySelector('#kt-audit-status');
-        if (!el) return; // modal already closed
-        const key = !audit ? 'ktUnavailable' : audit.verdict === 'tampered' ? 'ktTampered' : audit.verdict === 'rolled' ? 'ktRolled' : 'ktOk';
-        el.textContent = t(key);
-        el.className = 'text-xs mb-3 ' + (key === 'ktOk' ? 'color-g' : key === 'ktUnavailable' ? 'color-t3' : 'color-r');
-      });
-    } catch(_e) { _dbg(_e, 'showSafetyNumber'); }
-  }
+  async function showSafetyNumber(contact) { try { await _contactVerify.show(contact); } catch(e) { _dbg(e, 'showSafetyNumber'); } }
 
   // Contact info panel: who this contact is, and the local nickname
   // editor. The nickname writes the same c.name + nameLocked store
@@ -13832,45 +13886,13 @@ async function initMessenger(dbName) {
 
   // v1 INTEGRATION: Message Search
 
-  // MIGRATION: Import from LINE / WhatsApp / Telegram — the format parsers
-  // live in src/app/import-parsers.js (modularization); read through the
-  // bridge — absent ⇒ the parsers' own Unknown result.
-  const detectAndParse = (text) => globalThis.__breezeImportParsers?.detectAndParse(text) || { source: 'Unknown', msgs: [] };
-
-  async function importChat(file) {
-    try {  
-      if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-      const text = await file.text();
-      const { source, msgs } = detectAndParse(text);
-      if (msgs.length === 0) { showToast(t('toastNoImportMsgs'), 'error'); return; }
-  
-      const myNames = [myName.toLowerCase(), myAlias?.toLowerCase(), 'you', 'me', 'self'].filter(Boolean);
-      let imported = 0;
-      for (const m of msgs) {
-        const isMine = myNames.some(n => m.sender.toLowerCase().includes(n));
-        const msgId = 'import:' + m.ts + ':' + (isMine ? '1' : '0');
-        const existing = await dbGet('messages', msgId);
-        if (existing) continue;
-        await dbPut('messages', {
-          msgId, contactId: activeContact.id,
-          text: typeof m.text === 'string' ? m.text.slice(0, CONFIG.MAX_MSG_LENGTH) : '',
-          mine: isMine, ts: m.ts,
-          senderName: isMine ? myName : (typeof m.sender === 'string' ? m.sender.slice(0, 64) : ''),
-          imported: true
-        });
-        imported++;
-      }
-  
-      activeContact.lastMsg = msgs[msgs.length - 1]?.text?.slice(0, 40) || '';
-      activeContact.lastMsgAt = msgs[msgs.length - 1]?.ts || Date.now();
-      await dbPut('contacts', activeContact);
-  
-      // Refresh conversation
-      await openConversation(activeContact);
-      showToast(t('toastImported', imported, source), "success");
-    
-    } catch(_e) { _dbg(_e, 'importChat'); }
-  }
+  const _historyTools = globalThis.__breezeHistoryTools?.createHistoryTools({
+    dbGet, dbGetAll, dbGetByIndex, dbPut, openConversation, auditLog, contactDisplayName,
+    db: () => db, activeContact: () => activeContact, myName: () => myName, myAlias: () => myAlias,
+  });
+  const importChat = _historyTools?.importChat || (async () => {});
+  const exportChat = _historyTools?.exportChat || (async () => {});
+  const exportGdpr = _historyTools?.exportGdpr || (async () => {});
 
   // QR CODE: the ISO 18004 encoder and the share-ID modal live in
   // src/app/qr.js (modularization); read opportunistically through the
@@ -13915,6 +13937,7 @@ async function initMessenger(dbName) {
     matchPreKey: pairingPreKeyMatches, blockPeer: id => globalThis.__breezeOfflinePairing.blockedPeerIds.add(myId + ':' + id),
     closePeer: c => { const p = peers[c.pubB64]; if (p) { p.transition('CLOSED'); p.pc.close(); delete peers[c.pubB64]; } },
     exclusive: _withPeerLock, signal: _ac.signal, qr: globalThis.__breezeQR, root: () => _DOM.get('msg-main'), log: e => _dbg(e, 'offline-pair'),
+    verified: c => _contactVerify.verify(c, 'in-person-pairing'),
     toast: text => showToast(text, 'info'), changed: c => { if (activeContact?.id === c.id) activeContact = c; renderContacts(); updateConvStatus(); },
   });
 
@@ -14347,7 +14370,7 @@ async function initMessenger(dbName) {
         '/alias &lt;name&gt; · /whoami · /who · /debug · /online',
         '',
         '<b>' + t('helpSecurity') + '</b>',
-        '/security · /verify · /audit · /retention · /backup · /keywrap',
+        '/security · /verify · /audit · /retention · /backup · /vault · /keywrap',
         '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
         '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers · /location',
         '',
@@ -14657,54 +14680,9 @@ async function initMessenger(dbName) {
     // v3: /export — Export chat history as encrypted JSON
     // v3.3: Unified /export — /export [json|csv|all]
     if (val === '/export' || val.startsWith('/export ')) {
-      e.preventDefault(); clearInput();
-      const sub = val.slice(7).trim() || 'json';
-      if (sub === 'all') {
-        const allContacts = await dbGetAll('contacts');
-        const allMsgs = await dbGetAll('messages');
-        const chats = {};
-        for (const c of allContacts) {
-          const msgs = allMsgs.filter(m => m.contactId === c.id).sort((a, b) => a.ts - b.ts);
-          if (msgs.length === 0) continue;
-          chats[c.name || c.id] = msgs.map(m => ({ ts: m.ts, text: m.text, mine: m.mine }));
-        }
-        const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, exportedAt: new Date().toISOString(), chats }, null, 2)], { type: 'application/json' });
-        downloadBlob(blob, 'breeze-all-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExportedMessages', allMsgs.length, Object.keys(chats).length), 'success');
-      } else if (sub === 'csv') {
-        if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
-        const rows = [t('csvHeader')];
-        for (const m of msgs) { if (!m.deleted) rows.push('"' + new Date(m.ts).toISOString() + '","' + (m.mine ? myName : activeContact.name).replace(/"/g, '""') + '","' + (m.text||'').replace(/"/g,'""').replace(/\n/g,' ') + '"'); }
-        const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-        downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.csv');
-        showToast(t('toastExportedMessagesCSV', msgs.length), 'success');
-      } else if (sub === 'html') {
-        // v3.6: Human-readable HTML chat export (printable, self-contained)
-        if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts);
-        const rows = msgs.filter(m => !m.deleted).map(m => {
-          const sender = m.mine ? myName : (m.senderName || activeContact.name);
-          const time = new Date(m.ts).toLocaleString();
-          const cls = m.mine ? 'me' : 'them';
-          return `<div class="${cls}"><b>${esc(sender)}</b> <span class="ts">${esc(time)}</span><br>${esc(m.text || t('htmlExportFileLabel'))}</div>`;
-        }).join('\n');
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(contactDisplayName(activeContact))}</title>
-<style>body{font-family:system-ui;max-width:700px;margin:0 auto;padding:20px;background:#f5f5f5}
-.me,.them{padding:8px 14px;border-radius:12px;margin:4px 0;max-width:80%}
-.me{background:#d1fae5;margin-left:auto;text-align:right}.them{background:#fff}
-b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
-<body><h1>🌊 ${esc(contactDisplayName(activeContact))}</h1><p>${t('htmlExportMeta', msgs.length, new Date().toLocaleDateString())}</p>${rows}</body></html>`;
-        downloadBlob(new Blob([html], { type: 'text/html' }), 'breeze-' + activeContact.name.replace(/\s+/g, '-') + '-' + new Date().toISOString().slice(0, 10) + '.html');
-        showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
-      } else {
-        if (!activeContact) { showToast(t('toastOpenChat'), 'error'); return; }
-        const msgs = (await dbGetByIndex('messages', 'contact', activeContact.id)).sort((a, b) => a.ts - b.ts).map(m => ({ ts: m.ts, text: m.text, mine: m.mine, sender: m.senderName || (m.mine ? myName : activeContact.name) }));
-        const blob = new Blob([JSON.stringify({ version: CONFIG.VERSION, contact: activeContact.name, messages: msgs }, null, 2)], { type: 'application/json' });
-        downloadBlob(blob, 'breeze-' + activeContact.name.replace(/\s+/g,'-') + '-' + new Date().toISOString().slice(0,10) + '.json');
-        showToast(t('toastExportedMessagesJSON', msgs.length), 'success');
-      }
-      auditLog('settings', 'Export: ' + sub);
+      e.preventDefault();
+      clearInput();
+      await exportChat(val);
     }
     // /summarize — Local extractive summary
     if (val === '/summarize') {
@@ -14729,6 +14707,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
     // v3.3: ENTERPRISE — /wipe — Remote wipe (send wipe signal to other devices)
     if (val === '/wipe') {
       e.preventDefault(); clearInput();
+      if (_vault.enabled()) { await _vault.command('/vault disable'); return; }
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
       // Send remote wipe signal to own inbox (wakes other devices)
@@ -15308,7 +15287,8 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       return;
     }
 
-    // v3.6: /keywrap — Enable or disable at-rest identity key wrapping
+    if (/^\/(?:vault|keywrap)(?:\s|$)/.test(val)) { e.preventDefault(); clearInput(); await _vault.command(val); return; }
+    // Legacy reader compatibility; vault commands above are the only protection writer.
     if (val === '/keywrap' || val === '/keywrap enable' || val === '/keywrap disable') {
       e.preventDefault(); clearInput();
       if (!myKeys) { showToast(t('noIdentity'), 'error'); return; }
@@ -15467,11 +15447,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
         box.appendChild(d); box.scrollTop = box.scrollHeight; return;
       }
       const [box, d] = _cmdPanelEl('cmd-panel-mono');
-      const members = activeContact.members || [];
+      const members = activeContact.members || [], verificationLabels = await _contactVerify.labels(activeContact.members || []);
       safeSetHTML(d, '<b class="i-g">' + esc(contactDisplayName(activeContact)) + ' — ' + members.length + ' ' + t('cmdMembersLabel') + '</b><br>' +
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
-          return (isOn ? '🟢' : '⚫') + ' ' + esc(contactDisplayName(m) || m.id) + (_nameTools?.warningHtml(m) || '') + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
+          return (isOn ? '🟢' : '⚫') + ' ' + esc(contactDisplayName(m) || m.id) + (_nameTools?.warningHtml(m) || '') + (m.id === myId ? ' ' + t('cmdMemberYou') : '') + (verificationLabels.get(m.id) || '');
         }).join('<br>') + (CONFIG.GROUP_RATCHET_V5 && !_computeGroupV5(activeContact) ? '<br><span class="i-t3-10">' + t('groupLegacyNoFs') + '</span>' : '')); // D30: a legacy member holds the whole group on v3 (no FS) — say so, and what fixes it
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }

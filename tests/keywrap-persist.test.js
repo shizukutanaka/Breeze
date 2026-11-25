@@ -200,7 +200,7 @@ describe('persistent keywrap policy in deployed storage and prekey generation', 
   });
 
   it('command success is conditional on the complete transition succeeding', () => {
-    const command = slice('// v3.6: /keywrap —', '// v3.3: /reply —');
+    const command = slice('// Legacy reader compatibility;', '// v3.3: /reply —');
     expect(command).toContain("if (!await _keywrapChange(pass, false)) { showToast(t('keyWrapChangeFailed'), 'error'); return; }");
     expect(command).toContain("if (!await _keywrapChange(pass, true)) { showToast(t('keyWrapChangeFailed'), 'error'); return; }");
   });

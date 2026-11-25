@@ -400,14 +400,14 @@ if (gs < 0 || ge < 0) {
 function makeGroupInline(config) {
   const store = new Map();
   const dbGet = async (_s, key) => (store.has(key) ? store.get(key) : null);
-  const dbPut = async (_s, val, key) => { store.set(key, val); };
+  const dbPut = async (_s, val, key) => { store.set(key, val); return true; };
   // getGroupSenderKey calls _computeGroupV5 as a free variable — inject the already-bound
   // version from an X3DH-inline instance sharing the same config, rather than duplicating
   // the negotiation code's extraction here (both live in the same source window anyway).
   const { _computeGroupV5 } = makeX3dhInline(null, config, 'me');
   const factory = new Function(
     'crypto', 'CONFIG', 'dbGet', 'dbPut', 'hkdf', 'arr', 'u8', '_dbg', 'TextEncoder', 'TextDecoder', '_computeGroupV5',
-    '_keyCommit', '_cmOk', 'MS', '_padBucketSize',
+    '_keyCommit', '_cmOk', 'MS', '_padBucketSize', '_groupAuthor',
     html.slice(gs, ge) +
       '\nreturn { getGroupSenderKey, encryptGroupMsg, decryptGroupMsg };',
   );
@@ -415,6 +415,7 @@ function makeGroupInline(config) {
     globalThis.crypto, config, dbGet, dbPut, inlineKdf.hkdf,
     (a) => Array.from(a), (a) => new Uint8Array(a), () => {}, TextEncoder, TextDecoder, _computeGroupV5,
     _injKeyCommit, _injCmOk, { WEEK: 604800000 }, inlinePadBucketSize,
+    { prepareKey: async (_gid, key) => key, withKey: (_gid, work) => work(), withSend: (_gid, work) => work(), ensureDistributed: async () => {} },
   );
   return { ...api, store };
 }
@@ -1087,6 +1088,17 @@ describe('PQXDH mirror (stage-3 step 5) — inline wiring vs references + deploy
 // can never decrypt anything the moment the group freezes into v5 format.
 // ---------------------------------------------------------------------------
 describe('Group-v5 negotiation mirror — inline (index.html) vs reference (src/crypto/negotiate.js)', () => {
+  it('author-signature capability has independent N-party AND parity, including unknown/missing caps', () => {
+    const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
+    const cap = 'group-author-sig-v1';
+    for (const local of [[], ['group-v5'], [cap], ['group-v5', cap], null]) {
+      for (const members of [[], [[cap], [cap]], [[cap], []], [null], [undefined], ['group-v5'], [['unknown']], [[cap], { caps: [cap] }]]) {
+        expect(inline._negotiateGroupCaps(local, members).useAuthorSig).toBe(negotiateGroup(local, members).useAuthorSig);
+      }
+    }
+    expect(inline._negotiateGroupCaps([cap], [[cap], [cap]]).useAuthorSig).toBe(true);
+    expect(inline._negotiateGroupCaps(['group-v5'], [['group-v5']]).useAuthorSig).toBe(false);
+  });
   it('PARITY — ALL-V5: local + every member advertise group-v5', () => {
     const inline = makeX3dhInline(null, { GROUP_RATCHET_V5: true }, 'me');
     const local = ['group-v5'], members = [['group-v5'], ['group-v5']];
