@@ -43,7 +43,7 @@ describe('batch 3a: page-side listeners are abortable via _ac', () => {
   it('the chat back button click listeners carry the signal', () => {
     const main = slice("_DOM.get('b-msg-back')?.addEventListener('click', () => {\n    // v3.6", '\n  });');
     expect(main).toContain('}, { signal: _ac.signal });');
-    expect(html).toContain("_DOM.get('b-msg-back')?.addEventListener('click', () => _setActiveTab('contacts'), { signal: _ac.signal });");
+    expect(html).toContain("_DOM.get('b-msg-back')?.addEventListener('click', () => _setActiveTab(_listTab), { signal: _ac.signal });");
   });
 });
 
@@ -55,16 +55,15 @@ describe('batch 3b: bottom bar uses navigation semantics', () => {
     expect(bar).not.toContain('role="tab"');
     expect(bar).not.toContain('aria-selected');
   });
-  it('contacts starts as the one current page', () => {
-    expect(bar).toContain('aria-current="page" data-action="tab-contacts"');
+  it('chats starts as the one current page', () => {
+    expect(bar).toContain('aria-current="page" data-action="tab-chats"');
     expect(bar.match(/aria-current="page"/g)).toHaveLength(1);
   });
   it('_setActiveTab moves aria-current instead of aria-selected', () => {
-    const fn = slice('function _setActiveTab(which)', 'function _showContactsTab()');
-    expect(fn).toContain("c.setAttribute('aria-current', 'page')");
-    expect(fn).toContain("s.setAttribute('aria-current', 'page')");
-    expect(fn).toContain("c.removeAttribute('aria-current')");
-    expect(fn).toContain("s.removeAttribute('aria-current')");
+    const fn = slice('function _setActiveTab(which)', 'function _applyTabVisibility()');
+    expect(fn).toContain("el.setAttribute('aria-current', 'page')");
+    expect(fn).toContain("el.removeAttribute('aria-current')");
+    expect(fn).toContain("_TAB_IDS");
     expect(fn).not.toContain('aria-selected');
   });
 });

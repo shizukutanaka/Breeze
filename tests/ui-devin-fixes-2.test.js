@@ -154,7 +154,7 @@ describe('(d) first-contact backup nudge and the always-visible account door', (
 
   it('the flag has a default and the card offers the real backup action', () => {
     expect(html).toContain('backupNudgeShown: false');
-    const fn = sliceBetween('function _showBackupNudgeCard()', '// Bottom tab bar: two tabs');
+    const fn = sliceBetween('function _showBackupNudgeCard()', '// Bottom tab bar: page navigation');
     expect(fn).toContain("go.dataset.action = 'backup'");
     expect(fn).toContain("t('backupNudgeTitle')");
     expect(fn).toContain("t('backupNudgeBody')");
