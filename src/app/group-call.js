@@ -188,12 +188,13 @@ export function createGroupCallManager(D) {
       try { await D.distributeOwnKeyDevices?.(group.id, (group.members || []).length); } catch(e) { _dbg(e, 'sk-dist-own'); }
       const ct = await D.encryptGroupMsg(group.id, JSON.stringify(obj));
       if (!ct) return false;
+      const authorFields = await D.authorFields?.(group.id, ct);
       const ts = Date.now();
       for (const m of members) {
-        try { await D.relaySend(m.id, { to: m.id, from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(), ...(D.acctRoot?.() ? { acctRoot: D.acctRoot() } : {}), payload: ct, ts, groupId: group.id, groupName: group.name, isGroupSK: true, gctl: true }, m.pubB64); }
+        try { await D.relaySend(m.id, { to: m.id, from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(), ...(D.acctRoot?.() ? { acctRoot: D.acctRoot() } : {}), payload: ct, ts, groupId: group.id, groupName: group.name, isGroupSK: true, gctl: true, ...authorFields }, m.pubB64); }
         catch(e) { _dbg(e, 'gctl-send'); }
       }
-      try { await D.depositControlCopies?.(members, ct, { ts, groupId: group.id, groupName: group.name }); } catch(e) { _dbg(e, 'gctl-copies'); }
+      try { await D.depositControlCopies?.(members, ct, { ts, groupId: group.id, groupName: group.name, ...authorFields }); } catch(e) { _dbg(e, 'gctl-copies'); }
       return true;
     } catch(e) { _dbg(e, 'gctl-send'); return false; }
   }

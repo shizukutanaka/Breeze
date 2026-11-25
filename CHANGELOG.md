@@ -4,6 +4,8 @@
 
 ### Security
 
+- Group author signatures Part B: deployed `BreezeGroupAuthor/v1` Ed25519 signatures bind the exact Sender-Key ciphertext, group, full author, epoch and counter across DC/relay/sealed/forwarded and linked-device copies. Verification uses local signing-key pins before decryption or delivery ACK. Independently negotiated `group-author-sig-v1` uses authenticated N-party capability proofs and monotonic strict policy; unsigned legacy messages are visibly labeled. Atomic message/ratchet/replay acceptance, cross-tab serialization, fresh strict epochs, byte vectors and insider-forgery regressions are included. Legacy-admission UI, device signing-key bindings and AFKS remain deferred; secondary senders stay legacy-only until separately pinned. See `docs/GROUP_AUTHOR_SIG.md` for compatibility limits, including old plain-relay allowlists and English fallback labels outside Japanese.
+
 - **Self-hosted relay: `TRUST_PROXY` no longer trusts a client-forged address.** The Node host took the *first* `X-Forwarded-For` entry as the client address. Common proxies (nginx `$proxy_add_x_forwarded_for`, Traefik) append to whatever the client sent, so a client could put any value first and get a fresh per-IP rate-limit bucket on every request — or spend someone else's. The host now uses the last entry, the one the operator's proxy appended.
 
 ### Fixed

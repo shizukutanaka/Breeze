@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Izvanmrežno uparivanje kontakata",
  "opScope": "Razmijenite ove pozivnice identiteta u OBA smjera osobno. Istječu za 30 minuta. Usporedite otisak prsta na oba uređaja i potvrdite samo ako se podudara. Držite ovu aplikaciju otvorenom dok /rendezvous ne završi; ponovno učitavanje otkazuje uparivanje na čekanju. Nema traženja pseudonima ni provjere releja.",
  "opImport": "Uvezi pozivnicu sugovornika",

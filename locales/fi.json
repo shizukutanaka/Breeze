@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Yhteystiedon pariliitos offline-tilassa",
  "opScope": "Vaihda nämä henkilöllisyyskutsut MOLEMMIN SUUNTIIN henkilökohtaisesti. Ne vanhenevat 30 minuutissa. Vertaa sormenjälkeä molemmilla laitteilla ja vahvista vain, jos se täsmää. Pidä sovellus auki, kunnes /rendezvous valmistuu; uudelleenlataus peruuttaa odottavan pariliitoksen. Ei aliasten hakua tai välittäjän vahvistusta.",
  "opImport": "Tuo kumppanin kutsu",

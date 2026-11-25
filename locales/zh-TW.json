@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "離線聯絡人配對",
  "secTurnUsage": "本月通話流量的 TURN 比例",
  "secDiagPersist": "持久化失敗（死信／重試還原）",

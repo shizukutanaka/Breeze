@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Párování kontaktů offline",
  "opScope": "Tyto pozvánky identity si vyměňte osobně OBOUSTRANNĚ. Platí 30 minut. Porovnejte otisk na obou zařízeních a potvrďte jen tehdy, pokud se shoduje. Nechte aplikaci otevřenou, dokud neskončí /rendezvous; opětovné načtení zruší čekající párování. Bez vyhledávání aliasů a ověření přes relay.",
  "opImport": "Importovat pozvánku protějšku",

@@ -178,8 +178,8 @@ describe('wave 10 wiring', () => {
     // (depositControlCopies / distributeKeyDevices / distributeOwnKeyDevices)
     // wrap these for {gctl} control copies.
     expect(html.split('_groupLive?.depositCopies(').length - 1).toBe(3);
-    expect(html.split('_groupLive?.distributeKey(').length - 1).toBe(4); // sendMessage, transport, kick rotation, group-call control
-    expect(html.split('_groupLive?.distributeOwnKey(').length - 1).toBe(3);
+    expect(html.split('_groupLive?.distributeKey(').length - 1).toBe(5); // sendMessage, transport, kick rotation, group-call control, strict activation
+    expect(html.split('_groupLive?.distributeOwnKey(').length - 1).toBe(4);
   });
 
   it('signals and kick notices fan out to devices too', () => {

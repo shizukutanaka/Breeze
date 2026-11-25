@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Kapcsolat párosítása offline",
  "opScope": "Ezeket az azonosító-meghívókat személyesen, MINDKÉT irányban cseréljétek ki. 30 percig érvényesek. Hasonlítsátok össze az ujjlenyomatot mindkét eszközön, és csak egyezés esetén erősítsétek meg. Tartsátok nyitva az alkalmazást, amíg a /rendezvous be nem fejeződik; az újratöltés megszakítja a függő párosítást. Nincs alias-keresés vagy közvetítő-ellenőrzés.",
  "opImport": "Partner meghívójának importálása",

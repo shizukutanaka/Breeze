@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Pagpapares ng contact nang offline",
  "opScope": "Ipagpalit nang personal ang mga identity invite na ito sa DALAWANG direksyon. Mag-e-expire ang mga ito sa loob ng 30 minuto. Ikumpara ang fingerprint sa dalawang device at kumpirmahin lamang kung magkatugma ito. Panatilihing bukas ang app na ito hanggang matapos ang /rendezvous; kakanselahin ng pag-reload ang nakabinbing pagpapares. Walang alias lookup o relay verification.",
  "opImport": "I-import ang invite ng peer",

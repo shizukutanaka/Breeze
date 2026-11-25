@@ -125,7 +125,8 @@ describe('group call wiring (deployed files)', () => {
   it('group control rides the sender-key channel and is routed, never rendered', () => {
     const gcall = readFileSync(new URL('../src/app/group-call.js', import.meta.url), 'utf8');
     expect(html).toContain('distributeSenderKey, encryptGroupMsg, relaySend, iceConfig:');
-    expect(gcall).toContain('isGroupSK: true, gctl: true }, m.pubB64)');
+    expect(gcall).toContain('isGroupSK: true, gctl: true, ...authorFields }, m.pubB64)');
+    expect(gcall).toContain('await D.authorFields?.(group.id, ct)');
     expect(html).toContain('_gcall.route(group, member, ctl)');
   });
 

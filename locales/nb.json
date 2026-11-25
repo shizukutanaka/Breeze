@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Paring av kontakter uten nett",
  "opScope": "Utveksle disse identitetsinvitasjonene BEGGE veier personlig. De utløper om 30 minutter. Sammenlign fingeravtrykket på begge enheter og bekreft bare hvis det stemmer. Hold appen åpen til /rendezvous er ferdig; ny innlasting avbryter ventende paring. Ingen aliasoppslag eller reléverifisering.",
  "opImport": "Importer invitasjon fra motpart",

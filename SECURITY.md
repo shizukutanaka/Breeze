@@ -371,7 +371,7 @@ Breeze uses the following cryptographic primitives:
 | At-Rest | PBKDF2 ≥600k SHA-256 + AES-256-GCM | App-lock / identity key wrapping (I4) |
 | Protocol (1:1) | Signal Double Ratchet (v4/v5) | Per-message FS; Nr reset on DH step |
 | Protocol (group) | Sender Key chain-ratchet + epoch rotation | Group FS (I2) + PCS/kick (I3) |
-| Group Auth | Peer-bound direct frames + symmetric Sender Keys | Membership/transport checks; no deployed per-message author signature (N2) |
+| Group Auth | Ed25519 `BreezeGroupAuthor/v1` signatures under locally pinned signing keys | Insider sender forgery rejected in negotiated strict groups; unsigned legacy explicitly unverified |
 | Franking | HMAC-SHA256 commitment/opening | Verifiable abuse reporting without escrow (I17) |
 | Sealed Sender v2 | Ephemeral X25519 ECDH + HKDF('breeze-seal-v2') + AES-256-GCM (AAD: to+ts) | Sender anonymity vs the relay, incl. first-contact X3DH header |
 | Anti-Replay | Counter + msgId dedup + TTL-expiring skipped-key cache | Replay + stale-key FS (I7) |
@@ -380,16 +380,43 @@ Breeze uses the following cryptographic primitives:
 | Timing | Constant-time ctEqual() | Commitment + MAC comparisons |
 | Memory | zeroBuffer() | Key material erasure after use |
 
-Group receive checks membership before either Sender-Key or legacy decryption. Direct
-`group_msg` frames must match the connected peer's full public key; explicitly forwarded
-frames do not gain group-author authentication from the forwarder's identity. Group
-attribution uses local contact/member names, not received display names. Relay sender
-and public-key fields must be consistent with the local member record, but are not
-an author proof: another member receives the same Sender-Key material and can forge
-a ciphertext as that sender with consistent fields. Sealed Sender does not remove
-this insider attack. The Ed25519 author signatures in reference `src/crypto/group.js`
-are not deployed by these checks; per-message author signatures need a separately
-negotiated protocol upgrade. Local names likewise do not establish a human identity.
+Group receive checks membership and author signatures before Sender-Key/legacy decryption,
+ratchet advancement, deduplication, persistence or delivery ACK. Direct `group_msg` frames
+also match the connected peer's full encryption key. Explicit forwarding preserves the
+enclosed author's signature: the forwarding contact supplies neither authority nor name.
+The verification key comes from the author's local contact/member pin (`sigPub`), never
+an envelope or relay roster. Own-account root copies use the locally pinned link-time
+`rootEd`; this is not a remotely supplied signing key. Missing pins reject signed traffic.
+
+`group-author-sig-v1` is independent of `group-v5`. The N-party AND floor uses explicit
+capability proofs signed by every member's pinned identity and carried in authenticated
+1:1 Sender-Key distributions. Relay-only caps cannot activate strict mode. Strict is
+persisted monotonically, survives roster changes/restarts, and never falls back; entering
+strict rotates fresh Sender-Key material into a new epoch. Invalid signatures reject in
+every group. Unsigned legacy messages remain permitted ONLY before strict activation,
+with **Legacy — author not verified** shown live and on history reload. Such groups still
+permit symmetric-key insider forgery of unsigned traffic; the label is not an author proof.
+
+The deployed signature is one long-term Ed25519 identity signature, not reference
+`src/crypto/group.js`'s experimental two-layer/AFKS scheme. It covers the exact transported
+ciphertext string plus group, full encryption author, epoch and counter. It does NOT
+authenticate outer timestamps, reply previews, expiration or display metadata. Local names
+do not establish a human identity. Durable replay windows retain 1024 counters per
+group/full author/current epoch; failed decryption or aborted persistence consumes nothing.
+Acceptance, receiver ratchet and replay state share one IDB transaction. Web Locks serialize
+sender allocation and receiver processing across tabs; runtimes without signing/Web Locks
+stay legacy-only. Message-at-rest sealing and backup-dirty notifications are preserved.
+
+**Deferred rollout work:** explicit downgrade/legacy-admission confirmation UI, membership
+consensus, per-message forward-secure signing keys, selective relay ACK redesign, and
+root-signed **device signing-key** bindings. The existing device registry binds device
+encryption keys only. Secondary senders therefore remain unsigned in legacy groups and
+cannot send into a strict group until they have an authenticated local signing-key pin;
+no message-supplied device key is trusted to work around this. Signed root messages still
+reach linked-device mailboxes. A missing author module fails group sends/receives closed.
+Sealed relays already preserve opaque bytes; older plain `/msg` relays that strip the new
+fields must be upgraded for strict delivery (stripping cannot trigger legacy fallback).
+Protocol, vectors and limits: [Group author signatures](docs/GROUP_AUTHOR_SIG.md).
 
 ## Security Headers
 
