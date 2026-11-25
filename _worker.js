@@ -1642,7 +1642,8 @@ function plainPathDisabled(request) {
 
 async function handleMsgSend(body, ip, env, request) {
   if (env.PLAIN_PATH_DISABLED === 'true') return plainPathDisabled(request);
-  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub } = body;
+  const { to, from, fromPub, fromName, payload, ts, isFile, isGroupInvite, isVoice, isCall, isVideoCall, isSenderKey, isGroupSK, isGroupKick, groupId, groupName, replyTo, disappearAt, sig, sigPub, authorSigV, authorSig } = body;
+  if ((authorSigV !== undefined || authorSig !== undefined) && (authorSigV !== 1 || typeof authorSig !== 'string' || !/^[A-Za-z0-9+/]{86}==$/.test(authorSig))) return json({ error: 'Invalid group author signature', code: 'INVALID_AUTHOR_SIG' }, 400, request);
   if (!to || !from || !payload) return json({ error: 'to, from, payload required', code: 'MISSING_FIELDS' }, 400, request);
   // v3.3: Input type validation
   if (typeof to !== 'string' || typeof from !== 'string' || typeof payload !== 'string') return json({ error: 'Invalid types', code: 'INVALID_TYPE' }, 400, request);
@@ -1730,6 +1731,7 @@ async function handleMsgSend(body, ip, env, request) {
   if (isVideoCall) msg.isVideoCall = true;
   if (isSenderKey) msg.isSenderKey = true;
   if (isGroupSK) msg.isGroupSK = true;
+  if (authorSigV === 1) { msg.authorSigV = 1; msg.authorSig = sanitizeString(authorSig, 88); }
   if (isGroupKick) msg.isGroupKick = true;
   if (typeof groupId === 'string' && groupId) { msg.groupId = groupId.slice(0, 64); msg.groupName = typeof groupName === 'string' ? groupName.slice(0, 50) : undefined; }
   if (typeof replyTo === 'string' && replyTo) msg.replyTo = replyTo.slice(0, 128);
