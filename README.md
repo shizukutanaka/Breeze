@@ -16,7 +16,7 @@
 
 Breeze には「運営会社のサーバー」がありません。**使うには、あなた自身が置き場所（サーバー）を用意して、そこに Breeze を置きます。これが正式な使い方です。**
 
-- 標準の設置手順では Cloudflare を使うため、**Cloudflare のアカウントが必要です**。運用は Cloudflare の無料枠を使わせてもらう形になります（無料枠は Cloudflare が提供するもので、その条件は Cloudflare の定めによります）。手順は[設置の手順書](docs/SELF_HOSTING.md)（多言語版は手順書の冒頭から選べます）にあります。
+- 標準の設置手順では Cloudflare を使うため、**Cloudflare のアカウントが必要です**。手順は[設置の手順書](docs/SELF_HOSTING.md)（多言語版は手順書の冒頭から選べます）にあります。
 - アプリ（Windows / Mac / Linux / Android / iPhone）は[ダウンロードのページ](https://github.com/shizukutanaka/Breeze/releases/latest)から取り、自分のサーバーに接続して使います。
 - **見本の設置について（正直なお知らせ）**: 動作確認のための見本（https://breeze-469.pages.dev/）を置いてあります。置いてあるのは同じソフトウェアですが、実利用は自分のサーバーでお願いします。見本は予告なく変わったり止まったりします。自分のサーバーに置いたものは、見本の停止の影響を受けません。
 
@@ -114,7 +114,7 @@ npm test          # テストを実行する
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (it runs within Cloudflare's free tier, which Cloudflare makes available to us) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](docs/i18n/README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](docs/COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](docs/i18n/README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](docs/COMPARISON.md).
 
 ## ライセンス
 
