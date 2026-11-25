@@ -12957,6 +12957,7 @@ async function initMessenger(dbName) {
   function startPresencePolling() {
     if (!API) return;
     async function poll() {
+      if (_powerPresenceOff()) return;
       const contacts = await dbGetAll('contacts');
       const ids = contacts.filter(c => !c.isGroup && !peers[c.pubB64]?.connected).map(c => c.id);
       for (const c of contacts) {
@@ -12964,7 +12965,7 @@ async function initMessenger(dbName) {
       }
       if (ids.length === 0) { renderContacts(); return; }
       try {
-        const r = _powerPresenceOff() ? null : await postAPIRaw('/presence', { ids, check: true });
+        const r = await postAPIRaw('/presence', { ids, check: true });
         if (r?.ok) {
           const d = await r.json();
           for (const id of ids) {
@@ -15747,7 +15748,6 @@ if (PLATFORM === 'electron' && window.breeze) {
   // the moment this block stopped being dead code).
   setInterval(async () => {
     try {
-      const db = indexedDB.open('breeze-messenger', 2);
       // Simple approach: read unread count from contact list DOM
       const badges = document.querySelectorAll('.cbadge');
       let total = 0;

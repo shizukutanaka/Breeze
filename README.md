@@ -16,7 +16,7 @@
 
 Breeze には「運営会社のサーバー」がありません。**使うには、あなた自身が置き場所（サーバー）を用意して、そこに Breeze を置きます。これが正式な使い方です。**
 
-- 標準の設置手順では Cloudflare を使うため、**Cloudflare のアカウントが必要です**。手順は[設置の手順書](docs/SELF_HOSTING.md)（多言語版は手順書の冒頭から選べます）にあります。
+- 標準の設置手順では Cloudflare を使うため、**Cloudflare のアカウントが必要です**。手順は[設置の手順書](docs/SELF_HOSTING.md)（多言語版は手順書の冒頭から選べます）にあります。Cloudflare を使わない立て方（自分の機械や VPS で Docker／Node で立てる）も手順書にあり、その場合は Cloudflare のアカウントは要りません。
 - アプリ（Windows / Mac / Linux / Android / iPhone）は[ダウンロードのページ](https://github.com/shizukutanaka/Breeze/releases/latest)から取り、自分のサーバーに接続して使います。
 - **見本の設置について（正直なお知らせ）**: 動作確認のための見本（https://breeze-469.pages.dev/）を置いてあります。置いてあるのは同じソフトウェアですが、実利用は自分のサーバーでお願いします。見本は予告なく変わったり止まったりします。自分のサーバーに置いたものは、見本の停止の影響を受けません。
 
@@ -84,6 +84,12 @@ Breeze は Cloudflare の無料の範囲で動きます。クレジットカー�
 
 ```bash
 wrangler pages deploy . --project-name=breeze
+```
+
+Cloudflare を使わず、自分の機械や VPS に置く場合は Docker でも立てられます（中身は同じソフトウェアです）。
+
+```bash
+BREEZE_ALLOWLIST=<あなたの Breeze ID> docker compose up -d
 ```
 
 ## 技術の詳細（開発者向け）
