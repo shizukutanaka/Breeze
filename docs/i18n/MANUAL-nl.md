@@ -75,7 +75,7 @@ Als de andere persoon de app ook open heeft, maak je rechtstreeks verbinding en 
 - **De contactenlijst**: de tijd van het laatste gesprek wordt weergegeven als de tijd voor vandaag, “Gisteren” voor gisteren, maand/dag voor dit jaar en jaar/maand/dag voor alles daarvoor. Contacten met ongelezen berichten hebben hun naam en tijd benadrukt.
 - **Namen voor contacten**: Open “Contactinfo” (in het rechtsklikmenu van een contact, of het menu “⋮” van het gesprek) en je kunt je eigen naam voor dat contact instellen (een bijnaam). Bijnamen worden alleen op dit apparaat bewaard en nooit naar het contact of de relayserver gestuurd. Als je een bijnaam instelt, wordt de naam die het contact zelf heeft ingesteld er ook naast weergegeven in een gedempte kleur. Je kunt die tweede naam uitzetten met “Toon ook de naam die elk contact zelf heeft ingesteld” in de sectie “Privacy” van de instellingen.
 - **Je eigen kaart**: bovenaan de lijst staat je eigen profielkaart; druk erop om je profiel te openen. Deze scrollt mee met de lijst.
-- **Onderste tabbladen op een telefoon**: bij telefoonbreedte verschijnen onderaan het scherm de tabbladen “Contacten” en “Instellingen”.
+- **Onderste tabbladen op een telefoon**: Bij telefoonbreedte verschijnen er vijf tabbladen onderaan het scherm: 'Chats', 'Oproepen', 'Contacten', 'Mijn kaart' en 'Instellingen'. Welke tabbladen worden weergegeven, kun je één voor één kiezen bij 'Onderste tabbladen' in de instellingen (Chats wordt altijd weergegeven. Zelfs als je het tabblad Instellingen verbergt, kun je de instellingen nog steeds openen via de tandwielknop op het scherm).
 - **De gespreksbovenkant**: via het zoekpictogram kun je binnen het gesprek zoeken. Via het menu “⋮” kun je het veiligheidsnummer controleren, meldingen dempen, vastzetten, een peiling maken en meer.
 
 ### Commando's
@@ -99,6 +99,9 @@ Sommige handelingen, zoals instellingen en het koppelen van apparaten, doe je me
 - Je kunt een-op-een spraak- en videogesprekken voeren. Er zijn ook groepsgesprekken (tot 8 mensen).
 - **Bevestigingscode voor gesprekken**: op het gespreksscherm wordt een bevestigingscode weergegeven. Lees hem aan elkaar voor en controleer of hij op beide schermen overeenkomt. Als hij niet overeenkomt, kan het zijn dat iemand onderweg meeluistert. Beëindig in dat geval het gesprek.
 - Groepsgesprekken kunnen soms niet beginnen als niet ieders app op de nieuwste versie zit.
+- **Oproepgeschiedenis**: Eén-op-één oproepen laten alleen op dit apparaat een geschiedenis achter (de andere persoon, of het uitgaand / inkomend / gemist was, de tijd en de duur van de oproep. Er wordt niets bewaard van wat er is gezegd). De geschiedenis wordt nooit naar een server of naar de andere persoon gestuurd. Er worden maximaal 200 vermeldingen bewaard, waarbij de oudste eerst worden verwijderd. Groepsoproepen verschijnen niet in de geschiedenis.
+- Open de geschiedenis op een telefoon via het tabblad 'Oproepen'. Wanneer er een gemiste oproep is die je nog niet hebt gezien, verschijnt er een getallenbadge op het tabblad Oproepen, die verdwijnt zodra je de geschiedenis opent. Vanuit een rij in de geschiedenis kun je het gesprek met die persoon openen of hem terugbellen. Je kunt de hele geschiedenis verwijderen met een knop op het scherm.
+- **De oproepgeschiedenis maakt geen deel uit van een back-up.** Op een nieuw apparaat begint de geschiedenis leeg. Als je geen geschiedenis bewaard wilt hebben, schakel dan 'Een oproepgeschiedenis op dit apparaat bewaren' uit in het gedeelte 'Privacy' van de instellingen, en het opnemen zelf stopt.
 
 ---
 
@@ -121,6 +124,8 @@ Instellingen openen als een eigen scherm. Open ze op een telefoon via het tabbla
 - **Wachtwoordzin voor de sleutel**: je kunt de sleutel in je apparaat beschermen met een wachtwoordzin. Bij het openen van de app wordt erom gevraagd.
 - **Toon ook de naam die elk contact zelf heeft ingesteld**: in de sectie “Privacy”. Voor een contact waaraan je een bijnaam hebt gegeven, kun je kiezen of hun eigen naam ernaast wordt weergegeven (hoofdstuk 3).
 - **Blokkeren**: je kunt vervelende personen blokkeren. Berichten van geblokkeerde personen komen niet aan.
+- **Of er een oproepgeschiedenis wordt bewaard**: Met 'Een oproepgeschiedenis op dit apparaat bewaren' in het gedeelte 'Privacy' kun je het vastleggen van de oproepgeschiedenis stoppen (hoofdstuk 5).
+- **Zichtbaarheid van de onderste tabbladen**: In het gedeelte 'Onderste tabbladen' kun je de onderste tabbladen van de telefoon (Oproepen / Contacten / Mijn kaart / Instellingen) één voor één weergeven of verbergen. Chats wordt altijd weergegeven.
 
 ---
 
@@ -187,6 +192,7 @@ Er zijn geen kabels of bestandsoverdrachten nodig.
 - **Als je de wachtwoordzin vergeet, is herstel niet mogelijk.** Ook de maker kan dat niet herstellen. Schrijf de wachtwoordzin ergens anders op.
 - De wachtwoordzin voor de automatische back-up moet op elk apparaat worden ingevoerd. Voer hem op een nieuw apparaat nog een keer in.
 - Maak een handmatige back-up opnieuw wanneer je identiteiten toenemen of wanneer je van apparaat wisselt.
+- De oproepgeschiedenis maakt geen deel uit van een back-up. Wanneer je van apparaat wisselt, verhuist de oproepgeschiedenis niet mee naar het nieuwe apparaat.
 
 ---
 

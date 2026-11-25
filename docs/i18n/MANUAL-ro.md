@@ -75,7 +75,7 @@ Dacă și cealaltă persoană a deschis aplicația, vă puteți conecta direct �
 - **Lista de contacte**: Ora ultimei conversații este afișată ca oră pentru azi, „Ieri” pentru ieri, lună/zi pentru acest an și an/lună/zi pentru orice este mai vechi. Contactele cu mesaje necitite au numele și ora evidențiate.
 - **Nume pentru contacte**: Deschideți „Informații despre contact” (în meniul cu clic dreapta al unui contact sau în meniul „⋮” al conversației) și puteți seta un nume propriu pentru acel contact (o poreclă). Poreclele se păstrează numai pe acest dispozitiv și nu sunt trimise niciodată contactului sau serverului releu. Când setați o poreclă, lângă ea este afișat, într-o culoare estompată, și numele pe care contactul și l-a setat singur. Puteți dezactiva acest al doilea nume cu „Afișează și numele pe care fiecare contact și l-a setat singur” din secțiunea „Confidențialitate” a setărilor.
 - **Cardul dumneavoastră**: În partea de sus a listei se află cardul propriului profil; apăsați-l pentru a vă deschide profilul. Se derulează împreună cu lista.
-- **Filele de jos pe telefon**: La lățimea telefonului, în partea de jos a ecranului apar filele „Contacte” și „Setări”.
+- **File inferioare pe un telefon**: La lățimea unui telefon, în partea de jos a ecranului apar cinci file: „Conversații”, „Apeluri”, „Contacte”, „Cardul meu” și „Setări”. Ce file sunt afișate poți alege una câte una la „File inferioare” din setări (Conversații este afișată întotdeauna. Chiar dacă ascunzi fila Setări, poți deschide în continuare setările de la butonul cu rotiță de pe ecran).
 - **Antetul conversației**: Din pictograma de căutare puteți căuta în conversație. Din meniul „⋮” puteți verifica numărul de siguranță, dezactiva notificările, fixa, crea un sondaj și altele.
 
 ### Comenzi
@@ -99,6 +99,9 @@ Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin come
 - Se pot face apeluri vocale și apeluri video individuale. Există și apeluri de grup (cu până la 8 persoane).
 - **Codul de verificare a apelului**: Pe ecranul apelului este afișat un cod de verificare. Citiți-l împreună cu cealaltă persoană și verificați dacă coincide pe ambele ecrane. Dacă nu coincide, este posibil ca cineva să asculte pe parcurs. În acel caz, închideți apelul.
 - Apelul de grup poate să nu poată fi pornit dacă aplicațiile tuturor nu sunt la cea mai nouă versiune.
+- **Istoricul apelurilor**: Apelurile individuale lasă un istoric doar pe acest dispozitiv (cealaltă persoană, dacă a fost efectuat / primit / pierdut, ora și durata apelului. Nu se păstrează nimic din ce s-a spus). Istoricul nu este trimis niciodată unui server sau celeilalte persoane. Se păstrează până la 200 de înregistrări, cele mai vechi fiind eliminate primele. Apelurile de grup nu apar în istoric.
+- Deschide istoricul de pe un telefon din fila „Apeluri”. Când există un apel pierdut pe care nu l-ai văzut încă, pe fila Apeluri apare o insignă cu un număr, care dispare când deschizi istoricul. Dintr-un rând al istoricului poți deschide conversația cu acea persoană sau o poți suna înapoi. Poți șterge întregul istoric cu un buton de pe ecran.
+- **Istoricul apelurilor nu face parte dintr-o copie de rezervă.** Pe un dispozitiv nou, istoricul începe gol. Dacă nu vrei să se păstreze un istoric, dezactivează „Păstrează un istoric al apelurilor pe acest dispozitiv” în secțiunea „Confidențialitate” din setări, iar înregistrarea însăși se oprește.
 
 ---
 
@@ -121,6 +124,8 @@ Setările se deschid ca un ecran separat. Pe telefon, deschideți-le din fila �
 - **Fraza de acces a cheii**: Cheia din interiorul dispozitivului poate fi protejată înfășurată într-o frază de acces. La deschiderea aplicației vi se cere introducerea ei.
 - **Afișează și numele pe care fiecare contact și l-a setat singur**: În secțiunea „Confidențialitate”. Pentru un contact căruia i-ați dat o poreclă, puteți alege dacă numele său propriu este afișat alături de ea (capitolul 3).
 - **Blocare**: Persoanele deranjante pot fi blocate. De la o persoană blocată nu mai sosesc contacte.
+- **Dacă se păstrează un istoric al apelurilor**: Cu „Păstrează un istoric al apelurilor pe acest dispozitiv” în secțiunea „Confidențialitate”, poți opri înregistrarea istoricului apelurilor (capitolul 5).
+- **Vizibilitatea filelor inferioare**: În secțiunea „File inferioare” poți afișa sau ascunde filele inferioare ale telefonului (Apeluri / Contacte / Cardul meu / Setări) una câte una. Conversații este afișată întotdeauna.
 
 ---
 
@@ -187,6 +192,7 @@ Nu sunt necesare cabluri sau predări de fișiere.
 - **Dacă uitați fraza de acces, restaurarea nu este posibilă.** Nici creatorul nu o poate repara. Notați fraza de acces într-un alt loc.
 - Introducerea frazei de acces pentru copia de rezervă automată este necesară pe fiecare dispozitiv. Pe un dispozitiv nou, introduceți-o încă o dată.
 - Refăceți manual copia de rezervă atunci când identitățile dumneavoastră se înmulțesc sau când schimbați dispozitivul.
+- Istoricul apelurilor nu face parte dintr-o copie de rezervă. Când schimbi dispozitivul, istoricul apelurilor nu se mută pe noul dispozitiv.
 
 ---
 

@@ -41,6 +41,7 @@ Poctivě píšeme i o mezích. Kvůli doručování existuje na serveru krátkod
 
 - Konverzace jeden na jednoho a skupinové konverzace (až 1 000 lidí)
 - Hlasové a videohovory (skupinové hovory až pro 8 lidí)
+- Historie hovorů (uchovává se pouze v tomto zařízení: pouze druhá osoba, směr, čas a délka hovoru — nic z toho, co bylo řečeno. Nikdy se neposílá na server ani druhé osobě)
 - Posílání souborů (v konverzacích jeden na jednoho až 50MB. Posílat lze i ve skupinách, ale limit velikosti je menší)
 - Používání více zařízení a více účtů pro různé účely (například pracovní a soukromé. Počet zařízení i účtů je zdarma a neomezený)
 - Automatické zálohování (když se něco změní, zašifrovaná záloha se automaticky uloží na váš vlastní server. Na novém zařízení se po obnovení identity záloha najde automaticky a nabídne se vám. Nastavení vás také provede přechodem na nové zařízení)
@@ -49,6 +50,7 @@ Poctivě píšeme i o mezích. Kvůli doručování existuje na serveru krátkod
 - Profily s fotografií, samolepky, sdílení polohy
 - Příkazy jako `/help` (71 druhů)
 - Režimy napájení přizpůsobené vaší baterii (automatický / normální / úsporný / nouzový). Když baterie dochází, kontroly doručení se rozloží, aby baterie vydržela déle. Pojistka pro katastrofy a jiné situace, kdy nemůžete nabíjet
+- Spodní karty v telefonu (Chaty / Hovory / Kontakty / Moje karta / Nastavení. Které karty se zobrazí, lze vybrat v nastavení)
 - Čitelné obrazovky (pozornost věnovaná kontrastu barev, velikosti textu a ovládání pouze klávesnicí)
 
 ## Rozdíly oproti jiným messengerům

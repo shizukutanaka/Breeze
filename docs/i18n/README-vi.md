@@ -41,6 +41,7 @@ Chúng tôi cũng viết trung thực về phạm vi. Để chuyển phát, máy
 
 - Trò chuyện 1 đối 1 và trò chuyện nhóm (tối đa 1.000 người)
 - Gọi thoại và gọi video (gọi nhóm tối đa 8 người)
+- Lịch sử cuộc gọi (chỉ được giữ trên thiết bị này: chỉ người kia, hướng, thời gian và thời lượng cuộc gọi — không có gì trong những điều đã nói. Không bao giờ được gửi đến máy chủ hoặc người kia)
 - Gửi tệp (trong trò chuyện 1 đối 1, tối đa 50MB. Trong nhóm cũng gửi được, nhưng giới hạn kích thước nhỏ hơn)
 - Sử dụng nhiều thiết bị, nhiều tài khoản (chẳng hạn công việc và cá nhân. Cả số thiết bị và số tài khoản đều miễn phí và không giới hạn)
 - Sao lưu tự động (khi có thay đổi, một bản sao lưu đã mã hóa được lưu tự động vào máy chủ của riêng bạn. Trên thiết bị mới, sau khi bạn khôi phục danh tính, một bản sao lưu được tìm thấy tự động và được đề xuất cho bạn. Cài đặt cũng hướng dẫn bạn chuyển sang thiết bị mới)
@@ -49,6 +50,7 @@ Chúng tôi cũng viết trung thực về phạm vi. Để chuyển phát, máy
 - Hồ sơ có ảnh, nhãn dán, chia sẻ vị trí
 - Thao tác bằng lệnh như `/help` (71 loại)
 - Chế độ nguồn phù hợp với pin của bạn (tự động / bình thường / tiết kiệm pin / khẩn cấp). Khi pin yếu dần, việc kiểm tra thư đến được giãn cách để pin dùng được lâu hơn. Một biện pháp bảo vệ cho thảm họa và những lúc không thể sạc pin
+- Tab dưới cùng trên điện thoại (Trò chuyện / Cuộc gọi / Danh bạ / Thẻ của tôi / Cài đặt. Tab nào được hiển thị có thể được chọn trong cài đặt)
 - Màn hình dễ đọc (chú trọng độ tương phản màu, cỡ chữ và thao tác chỉ bằng bàn phím)
 
 ## Khác biệt với các ứng dụng nhắn tin khác

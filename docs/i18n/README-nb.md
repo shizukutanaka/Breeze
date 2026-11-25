@@ -41,6 +41,7 @@ Vi skriver også ærlig om grensene. For å levere meldinger finnes det en kortv
 
 - Samtaler én-til-én og gruppesamtaler (opptil 1 000 personer)
 - Tale- og videosamtaler (gruppesamtaler opptil 8 personer)
+- Anropslogg (beholdes bare på denne enheten: bare den andre personen, retning, tidspunkt og anropets varighet — ingenting av det som ble sagt. Sendes aldri til en server eller til den andre personen)
 - Sende filer (opptil 50MB i én-til-én-samtaler. Det går også i grupper, men størrelsesgrensen er mindre)
 - Flere enheter og flere kontoer til ulike formål (for eksempel jobb og privat. Både antall enheter og antall kontoer er gratis og ubegrenset)
 - Automatisk sikkerhetskopiering (når noe endres, lagres en kryptert sikkerhetskopi automatisk på din egen server. På en ny enhet, når du har gjenopprettet identiteten din, blir en sikkerhetskopi funnet automatisk og tilbudt deg. Innstillingene veileder deg også gjennom flyttingen til en ny enhet)
@@ -49,6 +50,7 @@ Vi skriver også ærlig om grensene. For å levere meldinger finnes det en kortv
 - Profiler med bilde, klistremerker, posisjonsdeling
 - Kommandoer som `/help` (71 typer)
 - Strømmoduser tilpasset batteriet ditt (automatisk / normal / strømsparing / nødmodus). Etter hvert som batteriet tømmes, spres leveringskontroller ut slik at batteriet varer lenger. En sikring for katastrofer og andre tider da du ikke kan lade
+- Nederste faner på en telefon (Chatter / Anrop / Kontakter / Mitt kort / Innstillinger. Hvilke faner som vises, kan velges i innstillingene)
 - Lettleste skjermer (oppmerksomhet på fargekontrast, tekststørrelse og betjening med bare tastaturet)
 
 ## Forskjeller fra andre meldingstjenester

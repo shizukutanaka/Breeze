@@ -75,7 +75,7 @@ Jos myös toisella henkilöllä on sovellus auki, voitte yhdistyä suoraan ja ke
 - **Yhteystietoluettelo**: Viimeisimmän keskustelun aika näkyy kellonaikana tälle päivälle, "Eilen" eiliselle, kuukausi/päivä tälle vuodelle ja vuosi/kuukausi/päivä sitä vanhemmille. Yhteyshenkilöillä, joilta on lukemattomia viestejä, nimi ja aika ovat korostettuina.
 - **Yhteyshenkilöiden nimet**: Avaa "Yhteystiedot" (yhteyshenkilön oikean napsautuksen valikosta tai keskustelun valikosta "⋮"), niin voit asettaa oman nimesi kyseiselle yhteyshenkilölle (lempinimen). Lempinimet tallennetaan vain tähän laitteeseen, eikä niitä lähetetä koskaan yhteyshenkilölle tai välityspalvelimelle. Kun asetat lempinimen, yhteyshenkilön itse asettama nimi näytetään myös sen vieressä hillityllä värillä. Voit kytkeä toisen nimen pois päältä asetusten "Yksityisyys"-osion kohdalla "Näytä myös nimi, jonka kukin yhteyshenkilö on itse asettanut".
 - **Oma korttisi**: Luettelon yläosassa on oma profiilikorttisi; avaa profiilisi painamalla sitä. Se vierii luettelon mukana.
-- **Alareunan välilehdet puhelimessa**: Puhelimen leveydellä näytön alareunaan ilmestyvät välilehdet "Yhteystiedot" ja "Asetukset".
+- **Alavälilehdet puhelimessa**: Puhelimen leveydellä näytön alareunaan ilmestyy viisi välilehteä: ”Keskustelut”, ”Puhelut”, ”Yhteystiedot”, ”Oma kortti” ja ”Asetukset”. Mitkä välilehdet näytetään, voit valita yksi kerrallaan asetusten kohdassa ”Alavälilehdet” (Keskustelut näytetään aina. Vaikka piilottaisit Asetukset-välilehden, voit silti avata asetukset näytön rataskuvakepainikkeesta).
 - **Keskustelun otsikko**: Hakukuvakkeesta voit hakea keskustelusta. Valikosta "⋮" voit tarkistaa turvanumeron, mykistää ilmoitukset, kiinnittää, luoda äänestyksen ja muuta.
 
 ### Komennot
@@ -99,6 +99,9 @@ Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 - Voit soittaa kahdenkeskisiä ääni- ja videopuheluita. Myös ryhmäpuheluita on (enintään 8 henkilölle).
 - **Puhelun vahvistuskoodi**: Puhelunäytöllä näkyy vahvistuskoodi. Lukekaa se ääneen toisen henkilön kanssa ja tarkistakaa, että se täsmää molemmilla näytöillä. Jos se ei täsmää, joku saattaa salakuunnella puhelua. Katkaise puhelu siinä tapauksessa.
 - Ryhmäpuheluita ei joskus voi aloittaa, jos kaikkien sovellukset eivät ole uusinta versiota.
+- **Puheluhistoria**: Kahdenkeskiset puhelut jättävät historian vain tähän laitteeseen (toinen henkilö, oliko puhelu lähtevä / saapuva / vastaamaton, kellonaika ja puhelun kesto. Mitään puhutusta ei säilytetä). Historiaa ei koskaan lähetetä palvelimelle tai toiselle henkilölle. Enintään 200 merkintää säilytetään, ja vanhimmat poistetaan ensin. Ryhmäpuhelut eivät näy historiassa.
+- Avaa historia puhelimessa ”Puhelut”-välilehdeltä. Kun on vastaamaton puhelu, jota et ole vielä nähnyt, Puhelut-välilehdessä näkyy numeromerkki, joka katoaa, kun avaat historian. Historian riviltä voit avata keskustelun kyseisen henkilön kanssa tai soittaa takaisin. Voit poistaa koko historian näytön painikkeella.
+- **Puheluhistoria ei sisälly varmuuskopioon.** Uudella laitteella historia alkaa tyhjänä. Jos et halua, että historiaa säilytetään, kytke asetusten ”Yksityisyys”-osion ”Säilytä puheluhistoria tässä laitteessa” pois päältä, niin tallennus itse pysähtyy.
 
 ---
 
@@ -121,6 +124,8 @@ Asetukset avautuvat omana näyttönään. Puhelimessa avaa ne näytön alareunan
 - **Avaimen tunnuslause**: Voit suojata laitteesi sisällä olevan avaimen käärimällä sen tunnuslauseeseen. Sinua pyydetään syöttämään se, kun avaat sovelluksen.
 - **Näytä myös nimi, jonka kukin yhteyshenkilö on itse asettanut**: "Yksityisyys"-osiossa. Yhteyshenkilölle, jolle olet antanut lempinimen, voit valita, näytetäänkö heidän oma nimensä sen rinnalla (luku 3).
 - **Esto**: Voit estää häiritsevät henkilöt. Estetyn henkilön viestit eivät tavoita sinua.
+- **Säilytetäänkö puheluhistoria**: Asetusten ”Yksityisyys”-osion kohdalla ”Säilytä puheluhistoria tässä laitteessa” voit pysäyttää puheluhistorian tallennuksen (luku 5).
+- **Alavälilehtien näkyvyys**: Kohdassa ”Alavälilehdet” voit näyttää tai piilottaa puhelimen alavälilehdet (Puhelut / Yhteystiedot / Oma kortti / Asetukset) yksi kerrallaan. Keskustelut näytetään aina.
 
 ---
 
@@ -187,6 +192,7 @@ Kaapeleita tai tiedostojen luovutuksia ei tarvita.
 - **Jos unohdat tunnuslauseen, palautus on mahdotonta.** Tekijäkään ei voi korjata sitä. Kirjoita tunnuslause muistiin toiseen paikkaan.
 - Automaattisen varmuuskopioinnin tunnuslause on syötettävä jokaisella laitteella. Syötä se uudella laitteella vielä kerran.
 - Tee manuaalinen varmuuskopio uudelleen, kun identiteettisi lisääntyvät tai kun vaihdat laitetta.
+- Puheluhistoria ei sisälly varmuuskopioon. Kun vaihdat laitetta, puheluhistoria ei siirry uuteen laitteeseen.
 
 ---
 

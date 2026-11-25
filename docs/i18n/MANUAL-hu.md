@@ -75,7 +75,7 @@ Ha a másik fél is megnyitotta az alkalmazást, közvetlenül kapcsolódhatnak 
 - **A névjegyzék**: A legutóbbi beszélgetés ideje ma esetén óra-perc formában, tegnap esetén „Tegnap”, idén esetén hónap/nap, korábbinál év/hónap/nap formában jelenik meg. Azoknál a névjegyeknél, amelyektől olvasatlan üzenet van, a név és az idő ki van emelve.
 - **Nevek a névjegyekhez**: Nyissa meg a „Névjegy adatai” panelt (a névjegy jobb gombos menüjében vagy a beszélgetés „⋮” menüjében), és saját nevet (becenevet) adhat az adott névjegynek. A becenevek csak ezen az eszközön tárolódnak, és soha nem kerülnek elküldésre sem a névjegynek, sem a közvetítő szervernek. Amikor becenevet állít be, mellette visszafogott színnel megjelenik az a név is, amelyet a névjegy magának beállított. Ezt a második nevet a beállítások „Adatvédelem” szakaszában kapcsolhatja ki „A névjegy által magának beállított név is jelenjen meg” beállítással.
 - **A saját kártyája**: A lista tetején a saját profilkártyája található; nyomja meg a profil megnyitásához. A listával együtt görgetődik.
-- **Alsó lapok telefonon**: Telefonszélességben a képernyő alján a „Névjegyek” és a „Beállítások” lap jelenik meg.
+- **Alsó fülek telefonon**: Telefon szélességénél öt fül jelenik meg a képernyő alján: „Csevegések”, „Hívások”, „Névjegyek”, „Saját kártyám” és „Beállítások”. Hogy mely fülek jelenjenek meg, egyenként választhatja ki a beállítások „Alsó fülek” részében (a Csevegések mindig megjelenik. Még ha el is rejti a Beállítások fület, a beállításokat továbbra is megnyithatja a képernyőn lévő fogaskerék gombbal).
 - **A beszélgetés fejléc**: A keresés ikonból a beszélgetésen belül kereshet. A „⋮” menüből ellenőrizheti a biztonsági számot, némíthatja az értesítéseket, kitűzhet, szavazást hozhat létre és még sok mást.
 
 ### Parancsok
@@ -99,6 +99,9 @@ Egyes műveletek, például a beállítások és az eszközök összekapcsolása
 - Egyéni hanghívás és videohívás lehetséges. Csoportos hívás is van (legfeljebb 8 főig).
 - **Hívásellenőrző kód**: A hívás képernyőjén ellenőrző kód jelenik meg. Olvassák fel egymásnak a másik féllel, és ellenőrizzék, hogy mindkét képernyőn egyezik-e. Ha nem egyezik, lehet, hogy valaki útközben lehallgat. Ilyenkor bontsa a hívást.
 - A csoportos hívás esetenként nem indítható el, ha nem mindenki alkalmazása a legújabb változat.
+- **Híváselőzmények**: A négyszemközti hívások csak ezen az eszközön hagynak előzményt (a másik fél, hogy kimenő / bejövő / nem fogadott volt-e, az időpont és a hívás időtartama. Semmi sem marad meg abból, ami elhangzott). Az előzmény soha nem kerül elküldésre sem szerverre, sem a másik félnek. Legfeljebb 200 bejegyzés marad meg, a legrégebbiek törlődnek először. A csoportos hívások nem jelennek meg az előzményekben.
+- Az előzményt telefonon a „Hívások” fülről nyithatja meg. Ha van nem fogadott hívás, amelyet még nem látott, a Hívások fülön egy számjelvény jelenik meg, amely eltűnik, amikor megnyitja az előzményt. Az előzmény egy sorából megnyithatja az adott személlyel folytatott beszélgetést, vagy visszahívhatja. A teljes előzményt a képernyőn lévő gombbal törölheti.
+- **A híváselőzmény nem része a biztonsági mentésnek.** Új eszközön az előzmény üresen indul. Ha nem szeretné, hogy előzmény maradjon, kapcsolja ki a beállítások „Adatvédelem” részében a „Híváselőzmény megőrzése ezen az eszközön” lehetőséget, és maga a rögzítés is leáll.
 
 ---
 
@@ -121,6 +124,8 @@ A beállítások saját képernyőként nyílnak meg. Telefonon a képernyő alj
 - **Kulcs jelmondata**: Az eszközön belüli kulcs jelmondatba csomagolva védhető. Az alkalmazás megnyitásakor be kell írni.
 - **A névjegy által magának beállított név is jelenjen meg**: Az „Adatvédelem” szakaszban. Annak a névjegynek az esetében, amelynek becenevet adott, kiválaszthatja, hogy a saját neve is megjelenjen-e mellette (3. fejezet).
 - **Letiltás**: A zaklató feleket le lehet tiltani. A letiltott féltől nem érkezik kapcsolat.
+- **Megmaradjon-e a híváselőzmény**: Az „Adatvédelem” részben lévő „Híváselőzmény megőrzése ezen az eszközön” lehetőséggel leállíthatja a híváselőzmény rögzítését (5. fejezet).
+- **Az alsó fülek láthatósága**: Az „Alsó fülek” részben egyenként megjelenítheti vagy elrejtheti a telefon alsó füleit (Hívások / Névjegyek / Saját kártyám / Beállítások). A Csevegések mindig megjelenik.
 
 ---
 
@@ -187,6 +192,7 @@ Nincs szükség kábelekre vagy fájlátadásra.
 - **Ha elfelejti a jelmondatot, a visszaállítás nem lehetséges.** A készítő sem tudja kijavítani. A jelmondatot írja fel egy másik helyre.
 - Az automatikus biztonsági mentéshez a jelmondatot minden eszközön meg kell adni. Új eszközön adja meg még egyszer.
 - A kézi biztonsági mentést készítse el újra, amikor a személyazonosságai szaporodnak, vagy eszközt cserél.
+- A híváselőzmény nem része a biztonsági mentésnek. Amikor eszközt vált, a híváselőzmény nem költözik át az új eszközre.
 
 ---
 

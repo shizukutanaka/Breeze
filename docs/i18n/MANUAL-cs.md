@@ -75,7 +75,7 @@ Pokud má i druhá osoba aplikaci otevřenou, můžete se připojit přímo a ml
 - **Seznam kontaktů**: Čas vaší poslední konverzace se zobrazuje jako čas pro dnešek, "Včera" pro včerejšek, měsíc/den pro tento rok a rok/měsíc/den pro vše dřívější. Kontakty se zprávami, které jste nečetli, mají zvýrazněné jméno a čas.
 - **Jména pro kontakty**: Otevřete "Informace o kontaktu" (v nabídce po kliknutí pravým tlačítkem na kontakt nebo v nabídce "⋮" konverzace) a můžete si pro daný kontakt nastavit vlastní jméno (přezdívku). Přezdívky se ukládají pouze v tomto zařízení a nikdy se neposílají kontaktu ani relé serveru. Když přezdívku nastavíte, zobrazí se vedle ní tlumenou barvou také jméno, které si kontakt sám nastavil. Toto druhé jméno můžete vypnout volbou "Zobrazit také jméno, které si každý kontakt sám nastavil" v části "Soukromí" v nastavení.
 - **Vaše vlastní karta**: Na začátku seznamu je vaše vlastní profilová karta; stisknutím ji otevřete svůj profil. Posouvá se spolu se seznamem.
-- **Dolní karty na telefonu**: Při šířce telefonu se v dolní části obrazovky zobrazují karty "Kontakty" a "Nastavení".
+- **Spodní karty v telefonu**: Při šířce telefonu se ve spodní části obrazovky zobrazí pět karet: „Chaty“, „Hovory“, „Kontakty“, „Moje karta“ a „Nastavení“. Které karty se zobrazí, můžete vybrat po jedné v části „Spodní karty“ v nastavení (karta Chaty se zobrazuje vždy. I když kartu Nastavení skryjete, nastavení můžete stále otevřít tlačítkem s ozubeným kolem na obrazovce).
 - **Záhlaví konverzace**: Z ikony hledání můžete hledat v konverzaci. Z nabídky "⋮" můžete zkontrolovat bezpečnostní číslo, ztlumit oznámení, připnout, vytvořit anketu a další.
 
 ### Příkazy
@@ -99,6 +99,9 @@ Některé operace, například nastavení a propojení zařízení, se provádě
 - Můžete vést hlasové a videohovory jeden na jednoho. Existují i skupinové hovory (až pro 8 lidí).
 - **Potvrzovací kód hovoru**: Na obrazovce hovoru se zobrazí potvrzovací kód. Přečtěte si jej nahlas s druhou osobou a ověřte, že se na obou obrazovkách shoduje. Pokud se neshoduje, je možné, že někdo hovor odposlouchává. V takovém případě zavěste.
 - Skupinové hovory někdy nelze zahájit, pokud aplikace všech nejsou v nejnovější verzi.
+- **Historie hovorů**: Individuální hovory zanechávají historii pouze v tomto zařízení (druhá osoba, zda šlo o odchozí / příchozí / zmeškaný hovor, čas a délka hovoru. Nic z toho, co bylo řečeno, se neukládá). Historie se nikdy neposílá na server ani druhé osobě. Uchovává se až 200 záznamů a nejstarší se odstraňují jako první. Skupinové hovory se v historii nezobrazují.
+- Historii otevřete v telefonu z karty „Hovory“. Když existuje zmeškaný hovor, který jste ještě neviděli, zobrazí se na kartě Hovory odznak s číslem, který zmizí, jakmile historii otevřete. Z řádku historie můžete otevřít konverzaci s danou osobou nebo zavolat zpět. Celou historii můžete smazat tlačítkem na obrazovce.
+- **Historie hovorů není součástí zálohy.** Na novém zařízení začíná historie prázdná. Pokud nechcete, aby se historie uchovávala, vypněte v části „Soukromí“ v nastavení volbu „Uchovávat historii hovorů v tomto zařízení“ a samotné zaznamenávání se zastaví.
 
 ---
 
@@ -121,6 +124,8 @@ Nastavení se otevírají jako vlastní obrazovka. Na telefonu je otevřete z ka
 - **Přístupová fráze ke klíči**: Klíč uvnitř zařízení můžete chránit zabalením do přístupové fráze. Při otevření aplikace budete vyzváni k jejímu zadání.
 - **Zobrazit také jméno, které si každý kontakt sám nastavil**: V části "Soukromí". U kontaktu, kterému jste dali přezdívku, si můžete zvolit, zda se vedle ní zobrazí i jeho vlastní jméno (kapitola 3).
 - **Blokování**: Obtěžující osoby můžete zablokovat. Zprávy od zablokované osoby k vám nedorazí.
+- **Zda se má uchovávat historie hovorů**: Pomocí volby „Uchovávat historii hovorů v tomto zařízení“ v části „Soukromí“ můžete zaznamenávání historie hovorů zastavit (kapitola 5).
+- **Viditelnost spodních karet**: V části „Spodní karty“ můžete spodní karty telefonu (Hovory / Kontakty / Moje karta / Nastavení) po jedné zobrazit nebo skrýt. Karta Chaty se zobrazuje vždy.
 
 ---
 
@@ -187,6 +192,7 @@ Nejsou potřeba žádné kabely ani předávání souborů.
 - **Pokud přístupovou frázi zapomenete, obnova není možná.** Ani tvůrce to nemůže napravit. Přístupovou frázi si zapište na jiné místo.
 - Zadání přístupové fráze pro automatické zálohování je potřeba na každém zařízení. Na novém zařízení ji zadejte ještě jednou.
 - Ruční zálohu vytvořte znovu, když se vaše identity rozšíří nebo když měníte zařízení.
+- Historie hovorů není součástí zálohy. Když změníte zařízení, historie hovorů se na nové zařízení nepřesune.
 
 ---
 

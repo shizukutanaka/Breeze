@@ -75,7 +75,7 @@ Om den andra personen också har appen öppen kan ni ansluta direkt och prata.
 - **Kontaktlistan**: Tiden för det senaste samtalet visas som tiden för i dag, "I går" för i går, månad/dag för i år och år/månad/dag för allt tidigare. Kontakter med meddelanden som du inte har läst har namn och tid framhävda.
 - **Namn på kontakter**: Öppna "Kontaktinfo" (i högerklicksmenyn för en kontakt, eller konversationens meny "⋮") så kan du ange ett eget namn för den kontakten (ett smeknamn). Smeknamn lagras bara på den här enheten och skickas aldrig till kontakten eller reläservern. När du anger ett smeknamn visas också namnet som kontakten själv har ställt in bredvid det i en dämpad färg. Du kan stänga av det andra namnet med "Visa också namnet som varje kontakt själv har ställt in" i avsnittet "Integritet" i inställningarna.
 - **Ditt eget kort**: Överst i listan finns ditt eget profilkort; tryck på det för att öppna din profil. Det rullar tillsammans med listan.
-- **Nedre flikar på en telefon**: Vid telefonbredd visas flikarna "Kontakter" och "Inställningar" längst ned på skärmen.
+- **Nedre flikar på en telefon**: Vid telefonbredd visas fem flikar längst ner på skärmen: ”Chattar”, ”Samtal”, ”Kontakter”, ”Mitt kort” och ”Inställningar”. Vilka flikar som visas kan du välja en i taget under ”Nedre flikar” i inställningarna (Chattar visas alltid. Även om du döljer fliken Inställningar kan du fortfarande öppna inställningarna från kugghjulsknappen på skärmen).
 - **Konversationens rubrik**: Från sökikonen kan du söka i konversationen. Från menyn "⋮" kan du kontrollera säkerhetsnumret, tysta aviseringar, fästa, skapa en omröstning och mer.
 
 ### Kommandon
@@ -99,6 +99,9 @@ Vissa åtgärder, som inställningar och enhetslänkning, görs via kommandon.
 - Du kan ha röst- och videosamtal en mot en. Det finns även gruppsamtal (upp till 8 personer).
 - **Samtalsbekräftelsekod**: En bekräftelsekod visas på samtalsskärmen. Läs den högt med den andra personen och kontrollera att den stämmer på båda skärmarna. Om den inte stämmer kan någon avlyssna samtalet i smyg. Lägg på i så fall.
 - Gruppsamtal kan ibland inte startas om inte allas appar är den senaste versionen.
+- **Samtalshistorik**: Enskilda samtal lämnar en historik endast på den här enheten (den andra personen, om det var utgående / inkommande / missat, tiden och samtalets längd. Inget av det som sades sparas). Historiken skickas aldrig till en server eller till den andra personen. Upp till 200 poster sparas, och de äldsta tas bort först. Gruppsamtal visas inte i historiken.
+- Öppna historiken på en telefon från fliken ”Samtal”. När det finns ett missat samtal som du ännu inte har sett visas ett siffermärke på fliken Samtal, och det försvinner när du öppnar historiken. Från en rad i historiken kan du öppna konversationen med den personen eller ringa tillbaka. Du kan radera hela historiken med en knapp på skärmen.
+- **Samtalshistoriken ingår inte i en säkerhetskopia.** På en ny enhet börjar historiken tom. Om du inte vill att en historik sparas, stäng av ”Behåll en samtalshistorik på den här enheten” i avsnittet ”Integritet” i inställningarna, så stoppas själva inspelningen.
 
 ---
 
@@ -121,6 +124,8 @@ Inställningar öppnas som en egen skärm. Öppna dem på en telefon från flike
 - **Nyckelns lösenfras**: Du kan skydda nyckeln inuti din enhet genom att slå in den i en lösenfras. Du ombeds ange den när du öppnar appen.
 - **Visa också namnet som varje kontakt själv har ställt in**: I avsnittet "Integritet". För en kontakt som du har gett ett smeknamn kan du välja om deras eget namn visas bredvid det (kapitel 3).
 - **Blockera**: Du kan blockera besvärliga personer. Meddelanden från en blockerad person når dig inte.
+- **Om en samtalshistorik ska behållas**: Med ”Behåll en samtalshistorik på den här enheten” i avsnittet ”Integritet” kan du stoppa inspelningen av samtalshistorik (kapitel 5).
+- **De nedre flikarnas synlighet**: I avsnittet ”Nedre flikar” kan du visa eller dölja telefonens nedre flikar (Samtal / Kontakter / Mitt kort / Inställningar) en i taget. Chattar visas alltid.
 
 ---
 
@@ -187,6 +192,7 @@ Inga kablar eller filöverlämningar behövs.
 - **Om du glömmer lösenfrasen går det inte att återställa.** Inte ens skaparen kan fixa det. Skriv ner lösenfrasen någon annanstans.
 - Att ange lösenfrasen för automatisk säkerhetskopiering behövs på varje enhet. På en ny enhet anger du den en gång till.
 - Gör om en manuell säkerhetskopia när dina identiteter blir fler eller när du byter enhet.
+- Samtalshistoriken ingår inte i en säkerhetskopia. När du byter enhet följer samtalshistoriken inte med till den nya enheten.
 
 ---
 

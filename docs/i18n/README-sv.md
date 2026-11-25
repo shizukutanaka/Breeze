@@ -41,6 +41,7 @@ Vi skriver också ärligt om gränserna. För att leverera meddelanden finns det
 
 - Chattar en mot en och gruppchattar (upp till 1 000 personer)
 - Röstsamtal och videosamtal (gruppsamtal upp till 8 personer)
+- Samtalshistorik (sparas endast på den här enheten: endast den andra personen, riktning, tid och samtalets längd — inget av det som sades. Skickas aldrig till en server eller till den andra personen)
 - Skicka filer (upp till 50MB i chattar en mot en. Det går även i grupper, men storleksgränsen är mindre där)
 - Flera enheter och flera konton för olika ändamål (till exempel arbete och privat. Både antal enheter och konton är gratis och obegränsade)
 - Automatisk säkerhetskopiering (när något ändras sparas en krypterad säkerhetskopia automatiskt på din egen server. På en ny enhet, när du har återställt din identitet, hittas en säkerhetskopia automatiskt och erbjuds dig. Inställningarna vägleder dig också genom flytten till en ny enhet)
@@ -49,6 +50,7 @@ Vi skriver också ärligt om gränserna. För att leverera meddelanden finns det
 - Profiler med foto, klistermärken, platsdelning
 - Kommandon som `/help` (71 typer)
 - Energilägen anpassade till ditt batteri (automatiskt / normalt / energisparläge / nödläge). När batteriet tar slut sprids leveranskontroller ut så att batteriet räcker längre. Ett skydd för katastrofer och andra tider då du inte kan ladda
+- Nedre flikar på en telefon (Chattar / Samtal / Kontakter / Mitt kort / Inställningar. Vilka flikar som visas kan väljas i inställningarna)
 - Lättlästa skärmar (uppmärksamhet på färgkontrast, textstorlek och användning med enbart tangentbordet)
 
 ## Skillnader mot andra meddelandeappar

@@ -75,7 +75,7 @@ Ako i druga strana otvori aplikaciju, možete se izravno povezati i razgovarati.
 - **Popis kontakata**: Vrijeme posljednjeg razgovora prikazuje se kao vrijeme za danas, «Jučer» za jučer, mjesec/dan za ovu godinu i godina/mjesec/dan za ranije. Kontakti s nepročitanim porukama imaju istaknuto ime i vrijeme.
 - **Imena za kontakte**: Otvorite «Podaci o kontaktu» (u izborniku desnog klika na kontakt ili u izborniku «⋮» razgovora) i možete postaviti svoje ime za taj kontakt (nadimak). Nadimci se čuvaju samo na ovom uređaju i nikada se ne šalju kontaktu ni relejnom poslužitelju. Kada postavite nadimak, ime koje je kontakt sam sebi postavio također se prikazuje pored njega prigušenom bojom. To drugo ime možete isključiti pomoću «Prikaži i ime koje je svaki kontakt sam sebi postavio» u odjeljku «Privatnost» u postavkama.
 - **Vaša kartica**: Na vrhu popisa je vaša profilna kartica; pritisnite je da otvorite profil. Pomiče se zajedno s popisom.
-- **Donje kartice na telefonu**: Pri širini telefona, na dnu zaslona pojavljuju se kartice «Kontakti» i «Postavke».
+- **Donje kartice na telefonu**: Pri širini telefona, na dnu zaslona pojavljuje se pet kartica: „Razgovori“, „Pozivi“, „Kontakti“, „Moja kartica“ i „Postavke“. Koje će se kartice prikazivati možete odabrati jednu po jednu u „Donje kartice“ u postavkama (Razgovori se uvijek prikazuju. Čak i ako sakrijete karticu Postavke, postavke i dalje možete otvoriti gumbom sa zupčanikom na zaslonu).
 - **Zaglavlje razgovora**: Od ikone pretraživanja možete pretraživati unutar razgovora. Iz izbornika «⋮» možete provjeriti sigurnosni broj, utišati obavijesti, prikvačiti, napraviti anketu i još toga.
 
 ### Naredbe
@@ -99,6 +99,9 @@ Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 - Mogu se obavljati glasovni pozivi i videopozivi jedan na jedan. Postoje i grupni pozivi (do 8 ljudi).
 - **Kod za provjeru poziva**: Na zaslonu poziva prikazuje se kod za provjeru. Pročitajte ga jedno drugom s drugom stranom i provjerite podudara li se na oba zaslona. Ako se ne podudara, možda netko prisluškuje usput. U tom slučaju prekinite poziv.
 - Grupni pozivi možda se ne mogu započeti ako aplikacije svih sudionika nisu najnovija verzija.
+- **Povijest poziva**: Pozivi jedan na jedan ostavljaju povijest samo na ovom uređaju (druga osoba, je li poziv bio odlazni / dolazni / propušten, vrijeme i trajanje poziva. Ništa od izgovorenog se ne čuva). Povijest se nikada ne šalje poslužitelju niti drugoj osobi. Čuva se do 200 unosa, a najstariji se prvi uklanjaju. Grupni pozivi ne pojavljuju se u povijesti.
+- Otvorite povijest na telefonu iz kartice „Pozivi“. Kada postoji propušten poziv koji još niste vidjeli, na kartici Pozivi pojavljuje se značka s brojem i nestaje kada otvorite povijest. Iz retka povijesti možete otvoriti razgovor s tom osobom ili je nazvati natrag. Cijelu povijest možete izbrisati gumbom na zaslonu.
+- **Povijest poziva nije dio sigurnosne kopije.** Na novom uređaju povijest počinje prazna. Ako ne želite da se povijest čuva, isključite „Čuvaj povijest poziva na ovom uređaju“ u odjeljku „Privatnost“ u postavkama, i samo snimanje će se zaustaviti.
 
 ---
 
@@ -121,6 +124,8 @@ Postavke se otvaraju kao poseban zaslon. Na telefonu ih otvorite s kartice «Pos
 - **Lozinka za ključ**: Ključ u uređaju možete zaštititi omotavanjem lozinkom. Pri otvaranju aplikacije traži se unos.
 - **Prikaži i ime koje je svaki kontakt sam sebi postavio**: U odjeljku «Privatnost». Za kontakt kojem ste dali nadimak možete odabrati prikazuje li se pored njega i njegovo vlastito ime (poglavlje 3).
 - **Blokiranje**: Možete blokirati dosadne osobe. Od blokiranih osoba ne stiže nikakva veza.
+- **Čuva li se povijest poziva**: Pomoću „Čuvaj povijest poziva na ovom uređaju“ u odjeljku „Privatnost“ možete zaustaviti snimanje povijesti poziva (poglavlje 5).
+- **Vidljivost donjih kartica**: U odjeljku „Donje kartice“ možete jednu po jednu prikazivati ili skrivati donje kartice telefona (Pozivi / Kontakti / Moja kartica / Postavke). Razgovori se uvijek prikazuju.
 
 ---
 
@@ -187,6 +192,7 @@ Nisu potrebni kabeli ni predaja datoteka.
 - **Ako zaboravite lozinku, oporavak nije moguć.** Ni autor to ne može popraviti. Lozinku zapišite na drugom mjestu.
 - Unos zaporke za automatsku sigurnosnu kopiju potreban je na svakom uređaju. Na novom je uređaju unesite još jednom.
 - Ručnu sigurnosnu kopiju ponovno napravite kada se broj identiteta poveća ili kada promijenite uređaj.
+- Povijest poziva nije dio sigurnosne kopije. Kada promijenite uređaj, povijest poziva ne seli se na novi uređaj.
 
 ---
 

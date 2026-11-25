@@ -41,6 +41,7 @@ Az őszinteség kedvéért a határokat is leírjuk. A kézbesítés érdekében
 
 - Egyéni beszélgetések és csoportos beszélgetések (legfeljebb 1 000 fő)
 - Hanghívások és videohívások (csoportos hívások legfeljebb 8 főig)
+- Híváselőzmény (csak ezen az eszközön marad meg: csak a másik fél, az irány, az időpont és a hívás időtartama — semmi abból, ami elhangzott. Soha nem kerül elküldésre sem szerverre, sem a másik félnek)
 - Fájlküldés (egyéni beszélgetésben legfeljebb 50 MB. Csoportban is küldhető, de ott kisebb a méretkorlát.)
 - Több eszköz és több fiók külön használata (például munkahelyi és magán; az eszközök és a fiókok száma is ingyenes és korlátlan)
 - Automatikus biztonsági mentés (amikor valami megváltozik, a titkosított biztonsági mentés automatikusan a saját szerverére kerül. Új eszközön, a személyazonosság visszaállítása után a rendszer automatikusan megtalálja a biztonsági mentést, és felajánlja Önnek. A beállítások az új eszközre való átköltözésben is útmutatást adnak)
@@ -49,6 +50,7 @@ Az őszinteség kedvéért a határokat is leírjuk. A kézbesítés érdekében
 - Fotóval ellátott profil, matricák, helymegosztás
 - Parancsok használata, például `/help` (71 féle)
 - Az akkumulátorhoz igazodó energiamódok (automatikus / normál / energiatakarékos / vészhelyzeti). Ahogy merül az akkumulátor, a kézbesítési ellenőrzések ritkulnak, hogy az akkumulátor tovább tartson. Védelem katasztrófákra és más olyan helyzetekre, amikor nem tud tölteni
+- Alsó fülek telefonon (Csevegések / Hívások / Névjegyek / Saját kártyám / Beállítások. Hogy mely fülek jelenjenek meg, a beállításokban választható ki)
 - Jól olvasható képernyők (figyelem a színkontrasztra, a szövegméretre és a csak billentyűzettel történő kezelésre)
 
 ## Miben különbözik a többi üzenetküldőtől

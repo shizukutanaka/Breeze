@@ -41,6 +41,7 @@ Tapat din naming isinusulat ang saklaw. Para sa paghahatid, may maikling pag-iim
 
 - Usapang isa-sa-isa at panggrupong usapan (hanggang 1,000 tao)
 - Voice call at video call (panggrupong tawag hanggang 8 tao)
+- Kasaysayan ng tawag (itinatago lamang sa device na ito: ang kabilang tao, direksyon, oras at tagal ng tawag lamang — wala sa mga sinabi. Hindi kailanman ipinapadala sa isang server o sa kabilang tao)
 - Pagpapadala ng file (sa isa-sa-isa, hanggang 50MB. Maaari ring magpadala sa grupo, ngunit mas maliit ang limitasyon ng laki)
 - Paghihiwalay ng gamit ng maraming device at maraming account (para sa trabaho at personal, halimbawa. Walang limitasyon sa bilang ng device at account, at libre)
 - Awtomatikong backup (kapag may nagbago, awtomatikong sine-save ang naka-encrypt na backup sa sarili mong server. Sa bagong device, kapag naibalik mo na ang iyong pagkakakilanlan, awtomatikong mahahanap ang backup at iaalok sa iyo. Ginagabayan ka rin ng mga setting sa paglipat sa bagong device)
@@ -49,6 +50,7 @@ Tapat din naming isinusulat ang saklaw. Para sa paghahatid, may maikling pag-iim
 - Profile na may larawan, mga sticker, pagbabahagi ng lokasyon
 - Mga utos tulad ng `/help` (71 uri)
 - Mga power mode na akma sa iyong baterya (awtomatiko / normal / pagtitipid ng kuryente / emergency). Habang nauubos ang baterya, pinapalayo ang mga pagsusuri ng paghahatid para mas tumagal ang baterya. Isang pananggalang para sa mga sakuna at iba pang panahong hindi ka makapag-charge
+- Mga tab sa ibaba sa isang telepono (Mga Chat / Mga Tawag / Mga Contact / Aking Card / Mga Setting. Aling mga tab ang ipapakita ay maaaring piliin sa mga setting)
 - Mga screen na madaling basahin (pansin sa contrast ng kulay, laki ng teksto, at pagpapatakbo gamit ang keyboard lamang)
 
 ## Pagkakaiba sa ibang mga messenger

@@ -41,6 +41,7 @@ We also state the scope honestly. In order to deliver messages, the server holds
 
 - One-to-one conversations and group conversations (up to 1,000 people)
 - Voice calls and video calls (group calls up to 8 people)
+- Call history (kept only on this device: the other person, direction, time, and call duration only — nothing of what was said. Never sent to a server or to the other person)
 - File sending (up to 50MB one-to-one. Groups can send files too, but the size limit is smaller)
 - Use across multiple devices and multiple accounts (for example, work and personal. Both the number of devices and the number of accounts are free and unlimited)
 - Automatic backup (when something changes, an encrypted backup is saved automatically to your own server. On a new device, once you recover your identity, a backup is found automatically and offered to you. Settings also guide you through moving to a new device)
@@ -49,6 +50,7 @@ We also state the scope honestly. In order to deliver messages, the server holds
 - Profiles with a photo, stickers, location sharing
 - Command operations such as `/help` (71 kinds)
 - Power modes matched to your battery (automatic / normal / power saving / emergency). As the battery runs down, delivery checks are spaced out so the battery lasts longer. A safeguard for disasters and other times when you cannot recharge
+- Bottom tabs on a phone (Chats / Calls / Contacts / My card / Settings. Which tabs are shown can be chosen in the settings)
 - Readable screens (attention to colour contrast, text size, and operating with the keyboard alone)
 
 ## Differences from other messengers

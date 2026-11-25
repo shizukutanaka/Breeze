@@ -75,7 +75,7 @@ Jika pihak lain juga membuka aplikasi, anda boleh berhubung secara terus dan ber
 - **Senarai kenalan**: Masa terakhir anda berbual dipaparkan sebagai masa untuk hari ini, "Semalam" untuk semalam, bulan/hari untuk tahun ini, dan tahun/bulan/hari untuk yang lebih awal. Kenalan yang mempunyai mesej belum dibaca akan ditonjolkan nama dan masanya.
 - **Nama untuk kenalan**: Buka "Maklumat kenalan" (dalam menu klik kanan pada kenalan, atau menu "⋮" perbualan) dan anda boleh menetapkan nama anda sendiri untuk kenalan itu (nama panggilan). Nama panggilan disimpan hanya pada peranti ini dan tidak pernah dihantar kepada kenalan atau pelayan geganti. Apabila anda menetapkan nama panggilan, nama yang ditetapkan oleh kenalan itu untuk diri mereka sendiri juga dipaparkan di sebelahnya dengan warna yang malap. Anda boleh mematikan nama kedua itu dengan "Tunjukkan juga nama yang ditetapkan oleh setiap kenalan untuk diri mereka sendiri" dalam bahagian "Privasi" tetapan.
 - **Kad anda sendiri**: Di bahagian atas senarai ialah kad profil anda sendiri; tekan untuk membuka profil anda. Ia menatal bersama senarai.
-- **Tab bawah pada telefon**: Pada lebar telefon, tab "Kenalan" dan "Tetapan" muncul di bahagian bawah skrin.
+- **Tab bawah pada telefon**: Pada lebar telefon, lima tab muncul di bahagian bawah skrin: "Sembang", "Panggilan", "Kenalan", "Kad saya" dan "Tetapan". Tab mana yang dipaparkan boleh anda pilih satu demi satu di "Tab bawah" dalam tetapan (Sembang sentiasa dipaparkan. Walaupun anda menyembunyikan tab Tetapan, anda masih boleh membuka tetapan dari butang gear pada skrin).
 - **Pengepala perbualan**: Daripada ikon carian, anda boleh mencari di dalam perbualan. Daripada menu "⋮", anda boleh menyemak nombor keselamatan, menyenyapkan pemberitahuan, menyemat, membuat undian, dan lain-lain.
 
 ### Arahan
@@ -99,6 +99,9 @@ Sebahagian operasi seperti tetapan dan pautan peranti dilakukan melalui arahan.
 - Panggilan suara dan panggilan video 1 lawan 1 boleh dibuat. Panggilan kumpulan juga ada (sehingga 8 orang).
 - **Kod pengesahan panggilan**: Kod pengesahan dipaparkan pada skrin panggilan. Bacakan sesama anda dengan pihak lain, dan sahkan sama ada ia sepadan pada kedua-dua skrin. Jika tidak sepadan, ada kemungkinan seseorang sedang mencuri dengar di tengah jalan. Dalam kes itu, tamatkan panggilan.
 - Panggilan kumpulan mungkin tidak boleh dimulakan jika aplikasi semua orang bukan versi terkini.
+- **Sejarah panggilan**: Panggilan satu lawan satu meninggalkan sejarah hanya pada peranti ini (orang lain, sama ada panggilan itu keluar / masuk / terlepas, masa dan tempoh panggilan. Tiada apa-apa daripada yang dikatakan disimpan). Sejarah tidak pernah dihantar ke pelayan atau kepada orang lain. Sehingga 200 entri disimpan, dengan yang paling lama dibuang dahulu. Panggilan kumpulan tidak muncul dalam sejarah.
+- Buka sejarah pada telefon dari tab "Panggilan". Apabila terdapat panggilan terlepas yang belum anda lihat, lencana nombor muncul pada tab Panggilan, dan ia hilang apabila anda membuka sejarah. Dari baris sejarah anda boleh membuka perbualan dengan orang itu atau menelefonnya semula. Anda boleh memadam keseluruhan sejarah dengan butang pada skrin.
+- **Sejarah panggilan bukan sebahagian daripada sandaran.** Pada peranti baharu, sejarah bermula kosong. Jika anda tidak mahu sejarah disimpan, matikan "Simpan sejarah panggilan pada peranti ini" di bahagian "Privasi" dalam tetapan, dan rakaman itu sendiri berhenti.
 
 ---
 
@@ -121,6 +124,8 @@ Tetapan dibuka sebagai skrinnya sendiri. Pada telefon, buka dari tab "Tetapan" d
 - **Frasa laluan kunci**: Kunci di dalam peranti boleh dilindungi dengan membalutnya dalam frasa laluan. Anda akan diminta memasukkannya apabila membuka aplikasi.
 - **Tunjukkan juga nama yang ditetapkan oleh setiap kenalan untuk diri mereka sendiri**: Dalam bahagian "Privasi". Bagi kenalan yang telah anda berikan nama panggilan, anda boleh memilih sama ada nama mereka sendiri dipaparkan di sebelahnya (bab 3).
 - **Sekat**: Pihak yang mengganggu boleh disekat. Hubungan daripada pihak yang disekat tidak akan sampai.
+- **Sama ada sejarah panggilan disimpan**: Dengan "Simpan sejarah panggilan pada peranti ini" di bahagian "Privasi", anda boleh menghentikan rakaman sejarah panggilan (bab 5).
+- **Keterlihatan tab bawah**: Di bahagian "Tab bawah" anda boleh memaparkan atau menyembunyikan tab bawah telefon (Panggilan / Kenalan / Kad saya / Tetapan) satu demi satu. Sembang sentiasa dipaparkan.
 
 ---
 
@@ -187,6 +192,7 @@ Tiada kabel atau serahan fail diperlukan.
 - **Jika anda lupa frasa laluan, pemulihan tidak boleh dilakukan.** Pencipta pun tidak boleh membaikinya. Catatkan frasa laluan di tempat lain.
 - Memasukkan frasa laluan untuk sandaran automatik diperlukan pada setiap peranti. Pada peranti baharu, masukkannya sekali lagi.
 - Buat semula sandaran manual apabila identiti anda bertambah atau apabila anda menukar peranti.
+- Sejarah panggilan bukan sebahagian daripada sandaran. Apabila anda menukar peranti, sejarah panggilan tidak berpindah ke peranti baharu.
 
 ---
 

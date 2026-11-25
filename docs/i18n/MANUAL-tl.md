@@ -75,7 +75,7 @@ Kung bukas din ang app ng kausap, maaari kayong direktang kumonekta at mag-usap.
 - **Listahan ng mga contact**: Ang oras ng huling pag-uusap ay ipinapakita bilang oras para sa ngayon, "Kahapon" para sa kahapon, buwan/araw para sa taong ito, at taon/buwan/araw para sa mas maaga pa. Ang mga contact na may mensaheng hindi mo pa nababasa ay may diin sa pangalan at oras.
 - **Mga pangalan para sa mga contact**: Buksan ang "Impormasyon ng contact" (sa right-click menu ng isang contact, o sa menu na "⋮" ng usapan) at maaari kang magtakda ng sarili mong pangalan para sa contact na iyon (isang palayaw). Ang mga palayaw ay nakaimbak lamang sa device na ito at hindi kailanman ipinapadala sa contact o sa relay server. Kapag nagtakda ka ng palayaw, ipinapakita rin sa tabi nito, sa mapusyaw na kulay, ang pangalang itinakda ng contact para sa sarili. Maaari mong i-off ang pangalawang pangalang iyon gamit ang "Ipakita rin ang pangalang itinakda ng bawat contact para sa sarili" sa seksyong "Privacy" ng mga setting.
 - **Sarili mong card**: Sa itaas ng listahan ay ang sarili mong profile card; pindutin ito para buksan ang iyong profile. Gumagalaw ito kasama ng listahan.
-- **Mga tab sa ibaba sa telepono**: Sa lapad ng telepono, lalabas sa ibaba ng screen ang mga tab na "Mga contact" at "Mga setting".
+- **Mga tab sa ibaba sa isang telepono**: Sa lapad ng telepono, limang tab ang lumalabas sa ibaba ng screen: "Mga Chat", "Mga Tawag", "Mga Contact", "Aking Card" at "Mga Setting". Aling mga tab ang ipapakita ay maaari mong piliin nang isa-isa sa "Mga tab sa ibaba" sa mga setting (Palaging ipinapakita ang Mga Chat. Kahit itago mo ang tab na Mga Setting, maaari mo pa ring buksan ang mga setting mula sa gear button sa screen).
 - **Header ng usapan**: Mula sa icon ng paghahanap, maaari kang maghanap sa loob ng usapan. Mula sa menu na "⋮", maaari mong tingnan ang safety number, i-mute ang mga notification, i-pin, gumawa ng poll, at iba pa.
 
 ### Mga utos
@@ -99,6 +99,9 @@ Ang ilang operasyon, tulad ng mga setting at pag-link ng device, ay ginagawa sa 
 - Maaari kang gumawa ng isa-sa-isang voice call at video call. Mayroon ding mga panggrupong tawag (hanggang 8 tao).
 - **Code ng kumpirmasyon ng tawag**: Ipinapakita ang code ng kumpirmasyon sa screen ng tawag. Basahin ito nang magkasama ng kausap at tiyaking tumutugma ito sa magkabilang screen. Kung hindi ito tumutugma, maaaring may nakikinig sa pagitan. Sa ganoong kaso, ibaba ang tawag.
 - Ang mga panggrupong tawag ay maaaring hindi masimulan kung hindi lahat ng app ay nasa pinakabagong bersyon.
+- **Kasaysayan ng tawag**: Ang one-to-one na mga tawag ay nag-iiwan ng kasaysayan sa device na ito lamang (ang kabilang tao, kung ito ay papalabas / papasok / hindi nasagot, ang oras at ang tagal ng tawag. Walang anuman sa mga sinabi ang itinatago). Ang kasaysayan ay hindi kailanman ipinapadala sa isang server o sa kabilang tao. Hanggang 200 entry ang itinatago, at ang pinakamatanda ang unang inaalis. Ang mga group call ay hindi lumalabas sa kasaysayan.
+- Buksan ang kasaysayan sa isang telepono mula sa tab na "Mga Tawag". Kapag may hindi nasagot na tawag na hindi mo pa nakikita, may lalabas na number badge sa tab na Mga Tawag, at nawawala ito kapag binuksan mo ang kasaysayan. Mula sa isang row ng kasaysayan maaari mong buksan ang pag-uusap sa taong iyon o tawagan siya pabalik. Maaari mong burahin ang buong kasaysayan gamit ang isang button sa screen.
+- **Ang kasaysayan ng tawag ay hindi bahagi ng isang backup.** Sa isang bagong device, nagsisimula ang kasaysayan na walang laman. Kung ayaw mong may kasaysayang itinatago, i-off ang "Magtago ng kasaysayan ng tawag sa device na ito" sa seksyong "Privacy" ng mga setting, at titigil mismo ang pagre-record.
 
 ---
 
@@ -121,6 +124,8 @@ Ang mga setting ay bumubukas bilang sarili nitong screen. Sa telepono, buksan it
 - **Passphrase ng susi**: Maaari mong balutin ng passphrase ang susi sa loob ng device para protektahan ito. Hihingin itong ilagay kapag binuksan mo ang app.
 - **Ipakita rin ang pangalang itinakda ng bawat contact para sa sarili**: Nasa seksyong "Privacy". Para sa contact na binigyan mo ng palayaw, maaari mong piliin kung ipapakita ang sarili nilang pangalan sa tabi nito (kabanata 3).
 - **Pag-block**: Maaari mong i-block ang mga nakakainis na kausap. Hindi darating ang mga mensahe mula sa mga naka-block na kausap.
+- **Kung magtatago ng kasaysayan ng tawag**: Sa "Magtago ng kasaysayan ng tawag sa device na ito" sa seksyong "Privacy", maaari mong ihinto ang pagre-record ng kasaysayan ng tawag (kabanata 5).
+- **Visibility ng mga tab sa ibaba**: Sa seksyong "Mga tab sa ibaba" maaari mong ipakita o itago ang mga tab sa ibaba ng telepono (Mga Tawag / Mga Contact / Aking Card / Mga Setting) nang isa-isa. Palaging ipinapakita ang Mga Chat.
 
 ---
 
@@ -187,6 +192,7 @@ Hindi kailangan ng mga cable o paglilipat ng file.
 - **Kung makalimutan mo ang passphrase, hindi na maibabalik.** Hindi rin ito maaayos ng gumawa. Isulat ang passphrase sa ibang lugar.
 - Ang paglalagay ng passphrase para sa awtomatikong backup ay kailangan sa bawat device. Sa bagong device, ilagay ito ulit nang isang beses.
 - Gumawa ulit ng manu-manong backup kapag dumami ang mga pagkakakilanlan o nagpalit ka ng device.
+- Ang kasaysayan ng tawag ay hindi bahagi ng isang backup. Kapag nagpalit ka ng device, hindi lilipat ang kasaysayan ng tawag sa bagong device.
 
 ---
 

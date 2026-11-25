@@ -41,6 +41,7 @@ Za mu kuma rubuta iyakar da gaskiya. Don isarwa, saba tana ajiye saƙonni na ɗa
 
 - Tattaunawa ta mutum ɗaya da ɗaya, da tattaunawar ƙungiya (har zuwa mutane 1,000)
 - Kiran murya da kiran bidiyo (kiran ƙungiya har zuwa mutane 8)
+- Tarihin kira (ana riƙe shi a wannan na'ura kaɗai: ɗayan mutum, hanya, lokaci da tsawon kira kaɗai — babu abin da aka faɗa. Ba a taɓa aika shi zuwa uwar garke ko zuwa ɗayan mutum ba)
 - Aika fayiloli (har zuwa 50MB a tattaunawa ta mutum ɗaya da ɗaya. Ana iya aikawa a ƙungiyoyi ma, amma iyakar girma ƙarama ce)
 - Amfani da na'urori da yawa da asusu da yawa (misali na aiki da na sirri. Adadin na'urori da asusu kyauta ne ba tare da iyaka ba)
 - Ajiya ta atomatik (idan wani abu ya canza, ana ajiye ajiyar tanadi da aka ɓoye ta atomatik a sabarka. A sabuwar na'ura, idan ka dawo da asalinka, ana samun ajiyar ta atomatik a miƙa maka ita. Saituna ma suna jagorantar ka zuwa sabuwar na'ura)
@@ -49,6 +50,7 @@ Za mu kuma rubuta iyakar da gaskiya. Don isarwa, saba tana ajiye saƙonni na ɗa
 - Bayanin martaba mai hoto, sitika, raba wuri
 - Ayyukan umarni kamar `/help` (nau'ika 71)
 - Hanyoyin wuta da suka dace da batirinka (ta atomatik / na yau da kullum / tanadin wuta / na gaggawa). Yayin da batir ya ragu, ana faɗaɗa lokutan duba isarwa don batir ya daɗe. Kariya ce ga bala'i da sauran lokutan da ba za ka iya caji ba
+- Shafukan ƙasa a waya (Taɗi / Kira / Lambobin sadarwa / Katina / Saituna. Waɗanne shafuka za a nuna za a iya zaɓa a cikin saituna)
 - Alluna masu sauƙin karantawa (kula da bambancin launi, girman rubutu, da aiki da madanni kaɗai)
 
 ## Bambanci da sauran manzonni

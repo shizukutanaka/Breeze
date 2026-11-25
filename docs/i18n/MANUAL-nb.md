@@ -75,7 +75,7 @@ Hvis den andre personen også har appen åpen, kan dere koble dere direkte samme
 - **Kontaktlisten**: Tidspunktet for den siste samtalen vises som klokkeslettet for i dag, «I går» for i går, måned/dag for i år og år/måned/dag for alt tidligere. Kontakter med meldinger du ikke har lest, har navn og tidspunkt fremhevet.
 - **Navn på kontakter**: Åpne «Kontaktinfo» (i høyreklikkmenyen til en kontakt, eller samtalens meny «⋮»), så kan du angi et eget navn for den kontakten (et kallenavn). Kallenavn lagres bare på denne enheten og sendes aldri til kontakten eller reléserveren. Når du angir et kallenavn, vises også navnet kontakten selv har angitt ved siden av det i en dempet farge. Du kan slå av det andre navnet med «Vis også navnet hver kontakt selv har angitt» i avsnittet «Personvern» i innstillingene.
 - **Ditt eget kort**: Øverst i listen er ditt eget profilkort; trykk på det for å åpne profilen din. Det ruller sammen med listen.
-- **Nederste faner på en telefon**: Ved telefonbredde vises fanene «Kontakter» og «Innstillinger» nederst på skjermen.
+- **Nederste faner på en telefon**: Ved telefonbredde vises fem faner nederst på skjermen: «Chatter», «Anrop», «Kontakter», «Mitt kort» og «Innstillinger». Hvilke faner som vises, kan du velge én om gangen under «Nederste faner» i innstillingene (Chatter vises alltid. Selv om du skjuler fanen Innstillinger, kan du fortsatt åpne innstillingene fra tannhjulsknappen på skjermen).
 - **Samtaleoverskriften**: Fra søkeikonet kan du søke i samtalen. Fra menyen «⋮» kan du sjekke sikkerhetsnummeret, dempe varsler, feste, opprette en avstemning og mer.
 
 ### Kommandoer
@@ -99,6 +99,9 @@ Noen handlinger, som innstillinger og enhetslenking, gjøres via kommandoer.
 - Du kan ha tale- og videosamtaler én-til-én. Det finnes også gruppesamtaler (opptil 8 personer).
 - **Bekreftelseskode for samtale**: En bekreftelseskode vises på samtaleskjermen. Les den høyt sammen med den andre personen og kontroller at den stemmer på begge skjermer. Hvis den ikke stemmer, kan det hende at noen avlytter samtalen. Legg på i så fall.
 - Gruppesamtaler kan noen ganger ikke startes hvis ikke alles apper er den nyeste versjonen.
+- **Anropslogg**: Enkeltanrop etterlater en logg bare på denne enheten (den andre personen, om det var utgående / innkommende / ubesvart, tidspunktet og anropets varighet. Ingenting av det som ble sagt, blir beholdt). Loggen sendes aldri til en server eller til den andre personen. Opptil 200 oppføringer beholdes, og de eldste fjernes først. Gruppeanrop vises ikke i loggen.
+- Åpne loggen på en telefon fra fanen «Anrop». Når det er et ubesvart anrop du ennå ikke har sett, vises et tallmerke på fanen Anrop, og det forsvinner når du åpner loggen. Fra en rad i loggen kan du åpne samtalen med den personen eller ringe tilbake. Du kan slette hele loggen med en knapp på skjermen.
+- **Anropsloggen er ikke en del av en sikkerhetskopi.** På en ny enhet begynner loggen tom. Hvis du ikke vil at en logg skal beholdes, slå av «Behold en anropslogg på denne enheten» i delen «Personvern» i innstillingene, så stopper selve registreringen.
 
 ---
 
@@ -121,6 +124,8 @@ Innstillinger åpnes som en egen skjerm. Åpne dem på en telefon fra fanen «In
 - **Passfrase for nøkkelen**: Du kan beskytte nøkkelen inne i enheten din ved å pakke den inn i en passfrase. Du blir bedt om å skrive den inn når du åpner appen.
 - **Vis også navnet hver kontakt selv har angitt**: I avsnittet «Personvern». For en kontakt du har gitt et kallenavn, kan du velge om deres eget navn vises ved siden av det (kapittel 3).
 - **Blokkere**: Du kan blokkere plagsomme personer. Meldinger fra en blokkert person når deg ikke.
+- **Om en anropslogg skal beholdes**: Med «Behold en anropslogg på denne enheten» i delen «Personvern» kan du stoppe registreringen av anropsloggen (kapittel 5).
+- **Synlighet for de nederste fanene**: I delen «Nederste faner» kan du vise eller skjule telefonens nederste faner (Anrop / Kontakter / Mitt kort / Innstillinger) én om gangen. Chatter vises alltid.
 
 ---
 
@@ -187,6 +192,7 @@ Ingen kabler eller filoverleveringer trengs.
 - **Hvis du glemmer passfrasen, er gjenoppretting umulig.** Ikke engang skaperen kan fikse det. Skriv passfrasen ned et annet sted.
 - Å skrive inn passfrasen for automatisk sikkerhetskopiering trengs på hver enhet. På en ny enhet skriver du den inn én gang til.
 - Lag en manuell sikkerhetskopi på nytt når identitetene dine blir flere, eller når du bytter enhet.
+- Anropsloggen er ikke en del av en sikkerhetskopi. Når du bytter enhet, flytter ikke anropsloggen med til den nye enheten.
 
 ---
 

@@ -41,6 +41,7 @@ Kirjoitamme rehellisesti myös rajoista. Viestien toimittamiseksi palvelimella o
 
 - Kahdenkeskiset keskustelut ja ryhmäkeskustelut (enintään 1 000 henkilöä)
 - Ääni- ja videopuhelut (ryhmäpuhelut enintään 8 henkilölle)
+- Puheluhistoria (säilytetään vain tässä laitteessa: vain toinen henkilö, suunta, kellonaika ja puhelun kesto — mitään puhutusta ei säilytetä. Ei koskaan lähetetä palvelimelle tai toiselle henkilölle)
 - Tiedostojen lähetys (kahdenkeskisissä keskusteluissa enintään 50MB. Myös ryhmissä voi lähettää, mutta kokoraja on pienempi)
 - Useiden laitteiden ja useiden tilien käyttö eri tarkoituksiin (esimerkiksi työ ja yksityinen. Sekä laitteiden että tilien määrä on ilmainen ja rajoittamaton)
 - Automaattinen varmuuskopiointi (kun jokin muuttuu, salattu varmuuskopio tallennetaan automaattisesti omalle palvelimellesi. Uudella laitteella, kun olet palauttanut identiteettisi, varmuuskopio löydetään automaattisesti ja sitä tarjotaan sinulle. Asetukset opastavat myös uuteen laitteeseen siirtymisessä)
@@ -49,6 +50,7 @@ Kirjoitamme rehellisesti myös rajoista. Viestien toimittamiseksi palvelimella o
 - Profiilit kuvalla, tarrat, sijainnin jakaminen
 - Komennot, kuten `/help` (71 tyyppiä)
 - Virtatilat akun mukaan (automaattinen / normaali / virransäästö / hätätila). Kun akku vähenee, toimitustarkistuksia harvennetaan, jotta akku kestää pidempään. Turva katastrofeihin ja muihin tilanteisiin, joissa lataaminen ei ole mahdollista
+- Alavälilehdet puhelimessa (Keskustelut / Puhelut / Yhteystiedot / Oma kortti / Asetukset. Mitkä välilehdet näytetään, voi valita asetuksista)
 - Helppolukuiset näytöt (huomio värikontrastiin, tekstin kokoon ja käyttöön pelkällä näppäimistöllä)
 
 ## Erot muihin viestisovelluksiin

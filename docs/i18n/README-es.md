@@ -41,6 +41,7 @@ También escribimos el alcance con honestidad. Para poder entregar los mensajes,
 
 - Conversaciones individuales y conversaciones en grupo (hasta 1.000 personas)
 - Llamadas de voz y videollamadas (llamadas en grupo de hasta 8 personas)
+- Historial de llamadas (se guarda solo en este dispositivo: solo la otra persona, la dirección, la hora y la duración de la llamada; nada de lo que se dijo. Nunca se envía a un servidor ni a la otra persona)
 - Envío de archivos (hasta 50MB en conversaciones individuales. En los grupos también se pueden enviar, pero el límite de tamaño es menor)
 - Uso con varios dispositivos y varias cuentas (por ejemplo, trabajo y personal. Tanto el número de dispositivos como el de cuentas es gratuito e ilimitado)
 - Copia de seguridad automática (cuando algo cambia, una copia cifrada se guarda automáticamente en tu propio servidor. En un dispositivo nuevo, una vez recuperada tu identidad, se encuentra automáticamente una copia y se te ofrece. Los ajustes también te guían para pasar a un dispositivo nuevo)
@@ -49,6 +50,7 @@ También escribimos el alcance con honestidad. Para poder entregar los mensajes,
 - Perfiles con foto, pegatinas y compartir la ubicación
 - Operaciones por comandos, como `/help` (71 tipos)
 - Modos de energía según tu batería (automático / normal / ahorro de energía / emergencia). Cuando la batería baja, las comprobaciones de recepción se espacian para que la batería dure más. Una salvaguarda para desastres y otros momentos en los que no puedes recargar
+- Pestañas inferiores en un teléfono (Chats / Llamadas / Contactos / Mi tarjeta / Ajustes. Qué pestañas se muestran se puede elegir en los ajustes)
 - Pantallas fáciles de leer (atención al contraste de colores, el tamaño del texto y el uso solo con el teclado)
 
 ## Diferencias con otros mensajeros

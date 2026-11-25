@@ -75,7 +75,7 @@ Wenn die andere Person die App ebenfalls geöffnet hat, verbinden Sie sich direk
 - **Die Kontaktliste**: Die Zeit des letzten Gesprächs wird für heute als Uhrzeit, für gestern als „Gestern“, für dieses Jahr als Monat/Tag und für alles Frühere als Jahr/Monat/Tag angezeigt. Bei Kontakten mit ungelesenen Nachrichten sind Name und Zeit hervorgehoben.
 - **Namen für Kontakte**: Öffnen Sie „Kontaktinfo“ (im Rechtsklickmenü eines Kontakts oder im Menü „⋮“ der Unterhaltung), und Sie können Ihren eigenen Namen für diesen Kontakt festlegen (einen Spitznamen). Spitznamen werden nur auf diesem Gerät gespeichert und niemals an den Kontakt oder den Relay-Server gesendet. Wenn Sie einen Spitznamen festlegen, wird daneben auch der Name, den der Kontakt selbst festgelegt hat, in einer gedämpften Farbe angezeigt. Diesen zweiten Namen können Sie mit „Auch den Namen anzeigen, den jeder Kontakt selbst festgelegt hat“ im Abschnitt „Privatsphäre“ der Einstellungen abschalten.
 - **Ihre eigene Karte**: Oben in der Liste steht Ihre eigene Profilkarte; drücken Sie darauf, um Ihr Profil zu öffnen. Sie scrollt mit der Liste mit.
-- **Untere Tabs auf einem Telefon**: Bei Telefonbreite erscheinen unten auf dem Bildschirm die Tabs „Kontakte“ und „Einstellungen“.
+- **Untere Tabs auf einem Telefon**: Bei Telefonbreite erscheinen unten auf dem Bildschirm fünf Tabs: „Chats“, „Anrufe“, „Kontakte“, „Meine Karte“ und „Einstellungen“. Welche Tabs angezeigt werden, können Sie einzeln unter „Untere Tabs“ in den Einstellungen wählen (Chats wird immer angezeigt. Auch wenn Sie den Tab Einstellungen ausblenden, können Sie die Einstellungen weiterhin über die Zahnrad-Schaltfläche auf dem Bildschirm öffnen).
 - **Der Kopf der Unterhaltung**: Über das Suchsymbol können Sie innerhalb der Unterhaltung suchen. Über das Menü „⋮“ können Sie die Sicherheitsnummer prüfen, Benachrichtigungen stummschalten, anheften, eine Umfrage erstellen und mehr.
 
 ### Befehle
@@ -99,6 +99,9 @@ Einige Vorgänge wie Einstellungen und Geräteverknüpfung erfolgen über Befehl
 - Einzel-Sprach- und Videoanrufe sind möglich. Es gibt auch Gruppenanrufe (bis zu 8 Personen).
 - **Anruf-Prüfcode**: Auf dem Anrufbildschirm wird ein Prüfcode angezeigt. Lesen Sie ihn sich gegenseitig vor und prüfen Sie, ob er auf beiden Bildschirmen übereinstimmt. Wenn er nicht übereinstimmt, hört möglicherweise jemand unterwegs mit. Legen Sie in diesem Fall auf.
 - Ein Gruppenanruf kann unter Umständen nicht beginnen, wenn nicht alle die neueste Version der App haben.
+- **Anrufverlauf**: Einzelgespräche hinterlassen einen Verlauf nur auf diesem Gerät (die andere Person, ob ausgehend / eingehend / verpasst, die Uhrzeit und die Gesprächsdauer. Nichts von dem, was gesagt wurde, wird aufbewahrt). Der Verlauf wird niemals an einen Server oder an die andere Person gesendet. Es werden bis zu 200 Einträge aufbewahrt, die ältesten werden zuerst entfernt. Gruppenanrufe erscheinen nicht im Verlauf.
+- Öffnen Sie den Verlauf auf einem Telefon über den Tab „Anrufe“. Wenn es einen verpassten Anruf gibt, den Sie noch nicht gesehen haben, erscheint ein Zahlenabzeichen auf dem Tab Anrufe, das verschwindet, sobald Sie den Verlauf öffnen. Aus einer Zeile des Verlaufs können Sie die Unterhaltung mit dieser Person öffnen oder sie zurückrufen. Sie können den gesamten Verlauf mit einer Schaltfläche auf dem Bildschirm löschen.
+- **Der Anrufverlauf ist nicht Teil einer Sicherung.** Auf einem neuen Gerät beginnt der Verlauf leer. Wenn Sie keinen Verlauf aufbewahren möchten, schalten Sie „Einen Anrufverlauf auf diesem Gerät aufbewahren“ im Abschnitt „Datenschutz“ der Einstellungen aus, und die Aufzeichnung selbst stoppt.
 
 ---
 
@@ -121,6 +124,8 @@ Die Einstellungen öffnen sich als eigener Bildschirm. Öffnen Sie sie auf einem
 - **Schlüssel-Passphrase**: Sie können den Schlüssel in Ihrem Gerät schützen, indem Sie ihn mit einer Passphrase umhüllen. Beim Öffnen der App wird die Eingabe verlangt.
 - **Auch den Namen anzeigen, den jeder Kontakt selbst festgelegt hat**: im Abschnitt „Privatsphäre“. Für einen Kontakt, dem Sie einen Spitznamen gegeben haben, können Sie wählen, ob dessen eigener Name daneben angezeigt wird (Kapitel 3).
 - **Blockieren**: Störende Gegenüber können blockiert werden. Nachrichten von blockierten Personen erreichen Sie nicht.
+- **Ob ein Anrufverlauf aufbewahrt wird**: Mit „Einen Anrufverlauf auf diesem Gerät aufbewahren“ im Abschnitt „Datenschutz“ können Sie die Aufzeichnung des Anrufverlaufs stoppen (Kapitel 5).
+- **Sichtbarkeit der unteren Tabs**: Im Abschnitt „Untere Tabs“ können Sie die unteren Tabs des Telefons (Anrufe / Kontakte / Meine Karte / Einstellungen) einzeln ein- oder ausblenden. Chats wird immer angezeigt.
 
 ---
 
@@ -187,6 +192,7 @@ Es sind keine Kabel und keine Dateiübergaben nötig.
 - **Wenn Sie die Passphrase vergessen, ist eine Wiederherstellung unmöglich.** Auch die Ersteller können das nicht beheben. Notieren Sie die Passphrase an einem anderen Ort.
 - Die Eingabe der Passphrase für die automatische Sicherung ist auf jedem Gerät nötig. Geben Sie sie auf einem neuen Gerät noch einmal ein.
 - Erstellen Sie eine manuelle Sicherung neu, wenn Ihre Identitäten zunehmen oder Sie das Gerät wechseln.
+- Der Anrufverlauf ist nicht Teil einer Sicherung. Wenn Sie das Gerät wechseln, zieht der Anrufverlauf nicht auf das neue Gerät um.
 
 ---
 

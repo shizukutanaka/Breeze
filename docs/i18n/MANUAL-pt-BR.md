@@ -75,7 +75,7 @@ Se a outra pessoa também estiver com o aplicativo aberto, vocês se conectam di
 - **A lista de contatos**: o horário da última conversa aparece como horário para hoje, “Ontem” para ontem, mês/dia para este ano e ano/mês/dia para antes disso. Contatos com mensagens não lidas têm nome e horário destacados.
 - **Nomes para os contatos**: abra “Informações do contato” (no menu de clique com o botão direito de um contato, ou no menu “⋮” da conversa) e você pode definir um nome seu para esse contato (um apelido). Os apelidos ficam guardados apenas neste dispositivo e nunca são enviados ao contato nem ao servidor de relay. Quando você define um apelido, o nome que o contato definiu para si também é exibido ao lado, em uma cor suave. Você pode desligar esse segundo nome com “Mostrar também o nome que cada contato definiu para si” na seção “Privacidade” das configurações.
 - **Seu próprio cartão**: no topo da lista fica o cartão do seu perfil; toque nele para abrir o seu perfil. Ele rola junto com a lista.
-- **Abas inferiores no celular**: em telas com largura de celular, as abas “Contatos” e “Configurações” aparecem na parte inferior da tela.
+- **Abas inferiores em um telefone**: Na largura de um telefone, cinco abas aparecem na parte inferior da tela: “Conversas”, “Chamadas”, “Contatos”, “Meu cartão” e “Configurações”. Você pode escolher quais abas são exibidas, uma por uma, em “Abas inferiores” nas configurações (Conversas é sempre exibida. Mesmo que você oculte a aba Configurações, ainda pode abrir as configurações pelo botão de engrenagem na tela).
 - **O cabeçalho da conversa**: pelo ícone de busca você pode pesquisar dentro da conversa. Pelo menu “⋮” você pode verificar o número de segurança, silenciar notificações, fixar, criar uma enquete e muito mais.
 
 ### Comandos
@@ -99,6 +99,9 @@ Algumas operações, como configurações e vínculo de dispositivos, são feita
 - É possível fazer chamadas de voz e de vídeo individuais. Também há chamadas em grupo (até 8 pessoas).
 - **Código de confirmação da chamada**: a tela da chamada exibe um código de confirmação. Leiam o código um para o outro e confirmem se ele coincide nas duas telas. Se não coincidir, pode ser que alguém esteja escutando no meio do caminho. Nesse caso, encerre a chamada.
 - As chamadas em grupo podem não começar se os aplicativos de todos não estiverem na versão mais recente.
+- **Histórico de chamadas**: As chamadas individuais deixam um histórico apenas neste dispositivo (a outra pessoa, se foi feita / recebida / perdida, a hora e a duração da chamada. Nada do que foi dito é guardado). O histórico nunca é enviado a um servidor nem à outra pessoa. São mantidas até 200 entradas, removendo primeiro as mais antigas. Chamadas em grupo não aparecem no histórico.
+- Abra o histórico pela aba “Chamadas” em um telefone. Quando há uma chamada perdida que você ainda não viu, um selo com um número aparece na aba Chamadas, e ele some quando você abre o histórico. A partir de uma linha do histórico, você pode abrir a conversa com essa pessoa ou ligar de volta. Você pode apagar todo o histórico com um botão na tela.
+- **O histórico de chamadas não faz parte de um backup.** Em um dispositivo novo, o histórico começa vazio. Se você não quiser que um histórico seja mantido, desative “Manter um histórico de chamadas neste dispositivo” na seção “Privacidade” das configurações, e o registro em si para.
 
 ---
 
@@ -121,6 +124,8 @@ As configurações abrem como uma tela própria. No celular, abra-as pela aba �
 - **Frase secreta da chave**: você pode proteger a chave dentro do dispositivo com uma frase secreta. Ela será pedida ao abrir o aplicativo.
 - **Mostrar também o nome que cada contato definiu para si**: na seção “Privacidade”. Para um contato ao qual você deu um apelido, você pode escolher se o nome dele será exibido junto (capítulo 3).
 - **Bloqueio de pessoas**: é possível bloquear pessoas incômodas. Mensagens de pessoas bloqueadas não chegam.
+- **Se um histórico de chamadas é mantido**: Com “Manter um histórico de chamadas neste dispositivo” na seção “Privacidade”, você pode interromper o registro do histórico de chamadas (capítulo 5).
+- **Visibilidade das abas inferiores**: Na seção “Abas inferiores”, você pode mostrar ou ocultar as abas inferiores do telefone (Chamadas / Contatos / Meu cartão / Configurações) uma por uma. Conversas é sempre exibida.
 
 ---
 
@@ -187,6 +192,7 @@ Não são necessários cabos nem transferências de arquivos.
 - **Se você esquecer a frase secreta, não será possível restaurar.** Nem quem criou consegue corrigir isso. Anote a frase secreta em outro lugar.
 - Digitar a frase secreta para o backup automático é necessário em cada dispositivo. Em um novo dispositivo, digite-a mais uma vez.
 - Refaça um backup manual quando adicionar identidades ou trocar de dispositivo.
+- O histórico de chamadas não faz parte de um backup. Quando você troca de dispositivo, o histórico de chamadas não é transferido para o novo dispositivo.
 
 ---
 

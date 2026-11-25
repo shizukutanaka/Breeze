@@ -75,7 +75,7 @@ Jika orang lain juga membuka aplikasinya, Anda terhubung langsung dan dapat berb
 - **Daftar kontak**: Waktu terakhir Anda berbicara ditampilkan sebagai jam untuk hari ini, "Kemarin" untuk kemarin, bulan/tanggal untuk tahun ini, dan tahun/bulan/tanggal untuk yang lebih lama. Kontak dengan pesan yang belum dibaca nama dan waktunya ditonjolkan.
 - **Nama untuk kontak**: Buka "Info kontak" (di menu klik kanan pada sebuah kontak, atau menu "⋮" pada percakapan) dan Anda dapat menetapkan nama Anda sendiri untuk kontak itu (nama panggilan). Nama panggilan hanya disimpan di perangkat ini dan tidak pernah dikirim ke kontak atau server relay. Ketika Anda menetapkan nama panggilan, nama yang ditetapkan kontak itu untuk dirinya sendiri juga ditampilkan di sampingnya dengan warna yang redup. Anda dapat mematikan nama kedua itu dengan "Tampilkan juga nama yang ditetapkan setiap kontak untuk dirinya sendiri" di bagian "Privasi" pada pengaturan.
 - **Kartu Anda sendiri**: Di bagian atas daftar ada kartu profil Anda sendiri; tekan untuk membuka profil Anda. Kartu itu ikut bergulir bersama daftar.
-- **Tab bawah di ponsel**: Pada lebar ponsel, tab "Kontak" dan "Pengaturan" muncul di bagian bawah layar.
+- **Tab bawah di ponsel**: Pada lebar ponsel, lima tab muncul di bagian bawah layar: "Obrolan", "Panggilan", "Kontak", "Kartu saya", dan "Pengaturan". Tab mana yang ditampilkan dapat Anda pilih satu per satu di "Tab bawah" dalam pengaturan (Obrolan selalu ditampilkan. Meskipun Anda menyembunyikan tab Pengaturan, Anda tetap dapat membuka pengaturan dari tombol roda gigi di layar).
 - **Kepala percakapan**: Dari ikon pencarian Anda dapat mencari di dalam percakapan. Dari menu "⋮" Anda dapat memeriksa nomor keamanan, membisukan notifikasi, menyematkan, membuat jajak pendapat, dan lainnya.
 
 ### Perintah
@@ -99,6 +99,9 @@ Beberapa operasi, seperti pengaturan dan penautan perangkat, dilakukan melalui p
 - Panggilan suara dan video satu lawan satu dapat dilakukan. Ada juga panggilan grup (maksimal 8 orang).
 - **Kode verifikasi panggilan**: Sebuah kode verifikasi ditampilkan di layar panggilan. Bacakan dengan lantang bersama orang lain dan periksa apakah kode itu cocok di kedua layar. Jika tidak cocok, mungkin ada seseorang yang mendengarkan di tengah jalan. Dalam kasus itu, putuskan panggilan.
 - Panggilan grup mungkin tidak dapat dimulai kecuali aplikasi semua orang berada pada versi terbaru.
+- **Riwayat panggilan**: Panggilan satu lawan satu meninggalkan riwayat hanya di perangkat ini (orang lain, apakah panggilan itu keluar / masuk / tak terjawab, waktunya, dan durasi panggilan. Tidak ada satu pun dari yang dikatakan disimpan). Riwayat tidak pernah dikirim ke server atau ke orang lain. Hingga 200 entri disimpan, dengan yang terlama dihapus terlebih dahulu. Panggilan grup tidak muncul dalam riwayat.
+- Buka riwayat di ponsel dari tab "Panggilan". Ketika ada panggilan tak terjawab yang belum Anda lihat, lencana angka muncul di tab Panggilan, dan hilang saat Anda membuka riwayat. Dari baris riwayat Anda dapat membuka percakapan dengan orang itu atau meneleponnya kembali. Anda dapat menghapus seluruh riwayat dengan tombol di layar.
+- **Riwayat panggilan bukan bagian dari cadangan.** Di perangkat baru, riwayat mulai kosong. Jika Anda tidak ingin riwayat disimpan, matikan "Simpan riwayat panggilan di perangkat ini" di bagian "Privasi" pada pengaturan, dan perekaman itu sendiri berhenti.
 
 ---
 
@@ -121,6 +124,8 @@ Pengaturan terbuka sebagai layarnya sendiri. Di ponsel, buka dari tab "Pengatura
 - **Frasa sandi kunci**: Anda dapat melindungi kunci di dalam perangkat Anda dengan membungkusnya dalam frasa sandi. Anda akan diminta memasukkannya ketika membuka aplikasi.
 - **Tampilkan juga nama yang ditetapkan setiap kontak untuk dirinya sendiri**: Di bagian "Privasi". Untuk kontak yang telah Anda beri nama panggilan, Anda dapat memilih apakah nama mereka sendiri ditampilkan di sampingnya (bab 3).
 - **Memblokir**: Anda dapat memblokir orang yang mengganggu. Pesan dari orang yang diblokir tidak akan sampai.
+- **Apakah riwayat panggilan disimpan**: Dengan "Simpan riwayat panggilan di perangkat ini" di bagian "Privasi", Anda dapat menghentikan perekaman riwayat panggilan (bab 5).
+- **Visibilitas tab bawah**: Di bagian "Tab bawah" Anda dapat menampilkan atau menyembunyikan tab bawah ponsel (Panggilan / Kontak / Kartu saya / Pengaturan) satu per satu. Obrolan selalu ditampilkan.
 
 ---
 
@@ -187,6 +192,7 @@ Tidak perlu kabel atau penyerahan file.
 - **Jika Anda lupa frasa sandi, pemulihan tidak mungkin dilakukan.** Pembuatnya pun tidak dapat memperbaikinya. Tuliskan frasa sandi di tempat terpisah.
 - Memasukkan frasa sandi untuk cadangan otomatis diperlukan di setiap perangkat. Di perangkat baru, masukkan sekali lagi.
 - Buat ulang cadangan manual ketika identitas Anda bertambah atau ketika Anda mengganti perangkat.
+- Riwayat panggilan bukan bagian dari cadangan. Saat Anda berganti perangkat, riwayat panggilan tidak berpindah ke perangkat baru.
 
 ---
 

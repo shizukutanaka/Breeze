@@ -41,6 +41,7 @@ Escrevemos também o alcance, com honestidade. Para fazer a entrega, o servidor 
 
 - Conversas individuais e em grupo (até 1.000 pessoas)
 - Chamadas de voz e de vídeo (chamadas em grupo com até 8 pessoas)
+- Histórico de chamadas (mantido apenas neste dispositivo: apenas a outra pessoa, a direção, a hora e a duração da chamada — nada do que foi dito. Nunca enviado a um servidor ou à outra pessoa)
 - Envio de arquivos (até 50 MB em conversas individuais. Em grupos também é possível, mas o limite de tamanho é menor)
 - Uso em vários dispositivos e com várias contas (por exemplo, trabalho e pessoal. Tanto o número de dispositivos quanto o de contas é gratuito e ilimitado)
 - Backup automático (quando algo muda, um backup criptografado é salvo automaticamente no seu próprio servidor. Em um novo dispositivo, depois que você recuperar sua identidade, um backup é encontrado automaticamente e oferecido a você. As configurações também orientam você na mudança para um novo dispositivo)
@@ -49,6 +50,7 @@ Escrevemos também o alcance, com honestidade. Para fazer a entrega, o servidor 
 - Perfil com foto, figurinhas e compartilhamento de localização
 - Comandos como `/help` (71 tipos)
 - Modos de energia de acordo com a sua bateria (automático / normal / economia de energia / emergência). À medida que a bateria diminui, as verificações de entrega são espaçadas para a bateria durar mais. Uma proteção para desastres e outras situações em que você não pode recarregar
+- Abas inferiores em um telefone (Conversas / Chamadas / Contatos / Meu cartão / Configurações. Quais abas são exibidas pode ser escolhido nas configurações)
 - Telas fáceis de ler (atenção ao contraste das cores, ao tamanho do texto e à operação apenas com o teclado)
 
 ## Diferenças para outros mensageiros

@@ -41,6 +41,7 @@ Dürüst olmak için kapsamı da yazarız. Teslimat için sunucuda kısa süreli
 
 - Bire bir konuşmalar ve grup konuşmaları (en çok 1.000 kişi)
 - Sesli aramalar ve görüntülü aramalar (en çok 8 kişilik grup aramaları)
+- Arama geçmişi (yalnızca bu cihazda tutulur: yalnızca diğer kişi, yön, saat ve arama süresi — söylenenlerden hiçbir şey yok. Hiçbir zaman bir sunucuya veya diğer kişiye gönderilmez)
 - Dosya gönderme (bire bir konuşmada en çok 50 MB. Grupta da gönderilebilir ancak boyut sınırı daha küçüktür.)
 - Birden çok cihazı ve birden çok hesabı ayrı ayrı kullanma (iş ve özel gibi; cihaz sayısı da hesap sayısı da ücretsiz ve sınırsızdır)
 - Otomatik yedekleme (bir şey değiştiğinde, şifreli bir yedek kendi sunucunuza otomatik olarak kaydedilir. Yeni bir cihazda, kimliğinizi geri getirdiğinizde bir yedek otomatik olarak bulunur ve size sunulur. Ayarlar, yeni bir cihaza geçişte de size yol gösterir)
@@ -49,6 +50,7 @@ Dürüst olmak için kapsamı da yazarız. Teslimat için sunucuda kısa süreli
 - Fotoğraflı profil, çıkartmalar, konum paylaşımı
 - `/help` gibi komutlarla kullanım (71 çeşit)
 - Pilinize uygun güç modları (otomatik / normal / güç tasarrufu / acil durum). Pil azaldıkça teslim denetimleri seyreltilir, böylece pil daha uzun dayanır. Afetler ve şarj edemediğiniz başka zamanlar için bir güvence
+- Telefonda alt sekmeler (Sohbetler / Aramalar / Kişiler / Kartım / Ayarlar. Hangi sekmelerin gösterileceği ayarlardan seçilebilir)
 - Okunaklı ekranlar (renk kontrastına, metin boyutuna ve yalnızca klavyeyle kullanıma özen gösterilir)
 
 ## Diğer mesajlaşma uygulamalarından farkları

@@ -41,6 +41,7 @@ Din onestitate, scriem și limitele. Pentru livrare, pe server există o păstra
 
 - Conversații individuale și conversații de grup (până la 1.000 de persoane)
 - Apeluri vocale și apeluri video (apeluri de grup cu până la 8 persoane)
+- Istoricul apelurilor (păstrat doar pe acest dispozitiv: doar cealaltă persoană, direcția, ora și durata apelului — nimic din ce s-a spus. Nu este trimis niciodată unui server sau celeilalte persoane)
 - Trimitere de fișiere (în conversațiile individuale până la 50 MB. Se pot trimite și în grup, dar limita de dimensiune este mai mică.)
 - Utilizarea separată a mai multor dispozitive și a mai multor conturi (de exemplu pentru serviciu și pentru uz personal; atât numărul de dispozitive, cât și numărul de conturi sunt gratuite și nelimitate)
 - Copie de rezervă automată (când ceva se schimbă, o copie de rezervă criptată este salvată automat pe propriul server. Pe un dispozitiv nou, după ce vă recuperați identitatea, o copie de rezervă este găsită automat și vă este oferită. Setările vă îndrumă și la trecerea la un dispozitiv nou)
@@ -49,6 +50,7 @@ Din onestitate, scriem și limitele. Pentru livrare, pe server există o păstra
 - Profil cu fotografie, stickere, partajarea locației
 - Operare prin comenzi, precum `/help` (71 de tipuri)
 - Moduri de alimentare adaptate bateriei dumneavoastră (automat / normal / economisire a energiei / urgență). Pe măsură ce bateria scade, verificările de livrare sunt spațiate, pentru ca bateria să țină mai mult. O protecție pentru dezastre și alte momente în care nu puteți reîncărca
+- File inferioare pe un telefon (Conversații / Apeluri / Contacte / Cardul meu / Setări. Ce file sunt afișate poate fi ales în setări)
 - Ecrane ușor de citit (atenție la contrastul culorilor, dimensiunea textului și operarea doar cu tastatura)
 
 ## Diferențe față de alte servicii de mesagerie

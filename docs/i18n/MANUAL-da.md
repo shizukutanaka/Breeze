@@ -75,7 +75,7 @@ Hvis den anden person også har appen åben, kan I forbinde jer direkte og tale 
 - **Kontaktlisten**: Tidspunktet for jeres seneste samtale vises som klokkeslæt for i dag, "I går" for i går, måned/dag for i år og år/måned/dag for alt tidligere. Kontakter med beskeder, du ikke har læst, har navn og tid fremhævet.
 - **Navne til kontakter**: Åbn "Kontaktoplysninger" (i højreklikmenuen for en kontakt eller samtalens menu "⋮"), så kan du angive dit eget navn til den kontakt (et kaldenavn). Kaldenavne gemmes kun på denne enhed og sendes aldrig til kontakten eller relæserveren. Når du angiver et kaldenavn, vises det navn, kontakten selv har angivet, også ved siden af det i en dæmpet farve. Du kan slå det andet navn fra med "Vis også det navn, hver kontakt selv har angivet" i afsnittet "Privatliv" i indstillingerne.
 - **Dit eget kort**: Øverst på listen er dit eget profilkort; tryk på det for at åbne din profil. Det ruller sammen med listen.
-- **Nederste faner på en telefon**: Ved telefonbredde vises fanerne "Kontakter" og "Indstillinger" nederst på skærmen.
+- **Nederste faner på en telefon**: Ved telefonbredde vises fem faner nederst på skærmen: »Chats«, »Opkald«, »Kontakter«, »Mit kort« og »Indstillinger«. Hvilke faner der vises, kan du vælge én ad gangen under »Nederste faner« i indstillingerne (Chats vises altid. Selv hvis du skjuler fanen Indstillinger, kan du stadig åbne indstillingerne fra tandhjulsknappen på skærmen).
 - **Samtaleoverskriften**: Fra søgeikonet kan du søge i samtalen. Fra menuen "⋮" kan du kontrollere sikkerhedsnummeret, slå notifikationer fra, fastgøre, oprette en afstemning og mere.
 
 ### Kommandoer
@@ -99,6 +99,9 @@ Nogle handlinger, som indstillinger og enhedslinkning, udføres via kommandoer.
 - Du kan have tale- og videoopkald én til én. Der findes også gruppeopkald (op til 8 personer).
 - **Bekræftelseskode til opkald**: En bekræftelseskode vises på opkaldsskærmen. Læs den højt sammen med den anden person, og kontrollér, at den stemmer på begge skærme. Hvis den ikke stemmer, kan nogen aflytte opkaldet. Læg på i så fald.
 - Gruppeopkald kan nogle gange ikke startes, hvis ikke alles apps er den nyeste version.
+- **Opkaldshistorik**: Enkeltopkald efterlader kun en historik på denne enhed (den anden person, om det var udgående / indgående / ubesvaret, tidspunktet og opkaldets varighed. Intet af det, der blev sagt, gemmes). Historikken sendes aldrig til en server eller til den anden person. Der gemmes op til 200 poster, og de ældste fjernes først. Gruppeopkald vises ikke i historikken.
+- Åbn historikken på en telefon fra fanen »Opkald«. Når der er et ubesvaret opkald, du endnu ikke har set, vises et talmærke på fanen Opkald, og det forsvinder, når du åbner historikken. Fra en række i historikken kan du åbne samtalen med den person eller ringe tilbage. Du kan slette hele historikken med en knap på skærmen.
+- **Opkaldshistorikken er ikke en del af en sikkerhedskopi.** På en ny enhed starter historikken tom. Hvis du ikke ønsker, at en historik gemmes, skal du slå »Gem en opkaldshistorik på denne enhed« fra i afsnittet »Privatliv« i indstillingerne, og selve optagelsen stopper.
 
 ---
 
@@ -121,6 +124,8 @@ Indstillinger åbnes som deres egen skærm. På en telefon åbner du dem fra fan
 - **Adgangsfrase til nøglen**: Du kan beskytte nøglen inde i din enhed ved at pakke den ind i en adgangsfrase. Du bliver bedt om at indtaste den, når du åbner appen.
 - **Vis også det navn, hver kontakt selv har angivet**: I afsnittet "Privatliv". For en kontakt, du har givet et kaldenavn, kan du vælge, om deres eget navn vises ved siden af det (kapitel 3).
 - **Blokér**: Du kan blokere besværlige personer. Beskeder fra en blokeret person når dig ikke.
+- **Om der skal gemmes en opkaldshistorik**: Med »Gem en opkaldshistorik på denne enhed« i afsnittet »Privatliv« kan du stoppe optagelsen af opkaldshistorik (kapitel 5).
+- **Synlighed af de nederste faner**: I afsnittet »Nederste faner« kan du vise eller skjule telefonens nederste faner (Opkald / Kontakter / Mit kort / Indstillinger) én ad gangen. Chats vises altid.
 
 ---
 
@@ -187,6 +192,7 @@ Der er ikke brug for kabler eller filoverdragelser.
 - **Hvis du glemmer adgangsfrasen, er gendannelse umulig.** Ikke engang skaberen kan rette det. Skriv adgangsfrasen ned et andet sted.
 - Indtastning af adgangsfrasen til automatisk sikkerhedskopi er nødvendig på hver enhed. På en ny enhed indtaster du den én gang til.
 - Lav en manuel sikkerhedskopi om, når dine identiteter bliver flere, eller når du skifter enhed.
+- Opkaldshistorikken er ikke en del af en sikkerhedskopi. Når du skifter enhed, flytter opkaldshistorikken ikke med til den nye enhed.
 
 ---
 

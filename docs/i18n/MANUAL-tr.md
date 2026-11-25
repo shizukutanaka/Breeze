@@ -75,7 +75,7 @@ Karşı taraf da uygulamayı açmışsa, doğrudan bağlanıp konuşabilirsiniz.
 - **Kişi listesi**: Son konuşmanızın zamanı bugün için saat olarak, dün için "Dün", bu yıl için ay/gün ve daha eskisi için yıl/ay/gün olarak gösterilir. Okumadığınız mesajları olan kişilerin adı ve zamanı vurgulanır.
 - **Kişiler için adlar**: "Kişi bilgileri"ni açın (bir kişinin sağ tıklama menüsünde veya konuşmanın "⋮" menüsünde); o kişi için kendi adınızı (bir takma ad) belirleyebilirsiniz. Takma adlar yalnızca bu cihazda saklanır ve kişiye ya da aktarım sunucusuna asla gönderilmez. Bir takma ad belirlediğinizde, kişinin kendisi için belirlediği ad da yanında soluk bir renkle gösterilir. Bu ikinci adı, ayarların "Gizlilik" bölümündeki "Her kişinin kendisi için belirlediği adı da göster" ile kapatabilirsiniz.
 - **Kendi kartınız**: Listenin üstünde kendi profil kartınız bulunur; profilinizi açmak için ona basın. Listeyle birlikte kayar.
-- **Telefonda alt sekmeler**: Telefon genişliğinde, ekranın altında "Kişiler" ve "Ayarlar" sekmeleri çıkar.
+- **Telefonda alt sekmeler**: Telefon genişliğinde ekranın altında beş sekme görünür: "Sohbetler", "Aramalar", "Kişiler", "Kartım" ve "Ayarlar". Hangi sekmelerin gösterileceğini ayarlardaki "Alt sekmeler" bölümünden tek tek seçebilirsiniz (Sohbetler her zaman gösterilir. Ayarlar sekmesini gizleseniz bile ayarları ekrandaki dişli düğmesinden açabilirsiniz).
 - **Konuşma başlığı**: Arama simgesinden konuşma içinde arama yapabilirsiniz. "⋮" menüsünden güvenlik numarasını denetleyebilir, bildirimleri susturabilir, sabitleyebilir, anket oluşturabilir ve daha fazlasını yapabilirsiniz.
 
 ### Komutlar
@@ -99,6 +99,9 @@ Ayarlar ve cihaz bağlama gibi bazı işlemler komutlardan yapılır.
 - Bire bir sesli arama ve görüntülü arama yapılabilir. Grup araması da vardır (en çok 8 kişi).
 - **Arama doğrulama kodu**: Arama ekranında bir doğrulama kodu gösterilir. Karşı tarafla birbirinize okuyun ve her iki ekranda da uyuşup uyuşmadığını denetleyin. Uyuşmazsa, birinin yolda dinliyor olma ihtimali vardır. Bu durumda aramayı kapatın.
 - Grup araması, herkesin uygulaması en yeni sürümde değilse başlatılamayabilir.
+- **Arama geçmişi**: Bire bir aramalar yalnızca bu cihazda bir geçmiş bırakır (diğer kişi, giden / gelen / cevapsız olduğu, saati ve arama süresi. Söylenenlerden hiçbir şey saklanmaz). Geçmiş hiçbir zaman bir sunucuya veya diğer kişiye gönderilmez. En fazla 200 kayıt tutulur ve en eskiler önce kaldırılır. Grup aramaları geçmişte görünmez.
+- Geçmişi telefonda "Aramalar" sekmesinden açın. Henüz görmediğiniz bir cevapsız arama olduğunda Aramalar sekmesinde bir sayı rozeti görünür ve geçmişi açtığınızda kaybolur. Geçmişteki bir satırdan o kişiyle olan konuşmayı açabilir veya onu geri arayabilirsiniz. Tüm geçmişi ekrandaki bir düğmeyle silebilirsiniz.
+- **Arama geçmişi bir yedeğin parçası değildir.** Yeni bir cihazda geçmiş boş başlar. Bir geçmiş tutulmasını istemiyorsanız ayarlardaki "Gizlilik" bölümünde "Bu cihazda bir arama geçmişi tut" seçeneğini kapatın; kaydın kendisi durur.
 
 ---
 
@@ -121,6 +124,8 @@ Ayarlar kendi ekranı olarak açılır. Telefonda, ekranın altındaki "Ayarlar"
 - **Anahtar parolası**: Cihazın içindeki anahtar, bir parolaya sarılarak korunabilir. Uygulamayı açarken girmeniz istenir.
 - **Her kişinin kendisi için belirlediği adı da göster**: "Gizlilik" bölümünde. Takma ad verdiğiniz bir kişi için, kendi adının da yanında gösterilip gösterilmeyeceğini seçebilirsiniz (bölüm 3).
 - **Engelleme**: Rahatsız eden kişiler engellenebilir. Engellenen kişiden iletişim gelmez.
+- **Bir arama geçmişi tutulup tutulmayacağı**: "Gizlilik" bölümündeki "Bu cihazda bir arama geçmişi tut" ile arama geçmişi kaydını durdurabilirsiniz (bölüm 5).
+- **Alt sekmelerin görünürlüğü**: "Alt sekmeler" bölümünde telefonun alt sekmelerini (Aramalar / Kişiler / Kartım / Ayarlar) tek tek gösterebilir veya gizleyebilirsiniz. Sohbetler her zaman gösterilir.
 
 ---
 
@@ -187,6 +192,7 @@ Kabloya veya dosya aktarımına gerek yoktur.
 - **Parolayı unutursanız, geri yükleme yapılamaz.** Yapan kişi de düzeltemez. Parolayı başka bir yere not edin.
 - Otomatik yedekleme için parolayı girmek her cihazda gereklidir. Yeni bir cihazda onu bir kez daha girin.
 - Kimlikleriniz çoğaldığında veya cihaz değiştirdiğinizde el ile yedeği yeniden oluşturun.
+- Arama geçmişi bir yedeğin parçası değildir. Cihaz değiştirdiğinizde arama geçmişi yeni cihaza taşınmaz.
 
 ---
 

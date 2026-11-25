@@ -41,6 +41,7 @@ We schrijven de reikwijdte er eerlijk bij. Om te bezorgen bewaart de server ding
 
 - Een-op-eengesprekken en groepsgesprekken (tot 1.000 mensen)
 - Spraak- en videogesprekken (groepsgesprekken tot 8 mensen)
+- Oproepgeschiedenis (alleen op dit apparaat bewaard: alleen de andere persoon, richting, tijd en duur van de oproep — niets van wat er is gezegd. Wordt nooit naar een server of naar de andere persoon gestuurd)
 - Bestanden verzenden (in een-op-eengesprekken tot 50 MB. In groepen kan het ook, maar de groottelimiet is kleiner)
 - Meerdere apparaten en meerdere accounts (bijv. werk en privé. Zowel het aantal apparaten als het aantal accounts is gratis en onbeperkt)
 - Automatische back-up (als er iets verandert, wordt er automatisch een versleutelde back-up op je eigen server bewaard. Op een nieuw apparaat wordt er, zodra je je identiteit hebt hersteld, automatisch een back-up gevonden en aan je aangeboden. De instellingen begeleiden je ook bij het verhuizen naar een nieuw apparaat)
@@ -49,6 +50,7 @@ We schrijven de reikwijdte er eerlijk bij. Om te bezorgen bewaart de server ding
 - Profiel met foto, stickers, locatie delen
 - Commando's zoals `/help` (71 soorten)
 - Energiemodi afgestemd op je batterij (automatisch / normaal / energiebesparing / noodgeval). Naarmate de batterij leegraakt, worden bezorgcontroles uitgespreid zodat de batterij langer meegaat. Een beveiliging voor rampen en andere tijden waarin je niet kunt opladen
+- Onderste tabbladen op een telefoon (Chats / Oproepen / Contacten / Mijn kaart / Instellingen. Welke tabbladen worden weergegeven, kan in de instellingen worden gekozen)
 - Leesbare schermen (aandacht voor kleurcontrast, tekstgrootte en bediening met alleen het toetsenbord)
 
 ## Verschillen met andere messengers
