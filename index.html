@@ -10744,7 +10744,7 @@ async function initMessenger(dbName) {
       const el = _DOM.get('msg-messages');
       el?.querySelectorAll('.msg').forEach(msg => {
         const dts = parseInt(msg.dataset.disappear || '0');
-        if (dts && dts < now) msg.remove();
+        if (dts && dts < now) { msg.classList.add('i-op0'); setTimeout(() => msg.remove(), CONFIG.FADE_OUT_MS); }
       });
     }
   }, CONFIG.DISAPPEAR_CHECK_MS));
@@ -12707,24 +12707,6 @@ async function initMessenger(dbName) {
     if (_DOM.get('lock-screen')) return; // already locked
     if (Date.now() - _idleLockLast >= mins * MS.MIN) showLockScreen();
   }, 15000));
-
-  // ===== v3.3: Disappearing message auto-cleanup (every 30s) =====
-  _intervals.push(setInterval(async () => {
-    try {
-      const allMsgs = await dbGetAll('messages');
-      const now = Date.now();
-      let cleaned = 0;
-      for (const m of allMsgs) {
-        if (m.disappearAt && m.disappearAt < now) {
-          await dbDel('messages', m.msgId);
-          const el = document.querySelector(`[data-msgid="${m.msgId}"]`);
-          if (el) { el.classList.add('i-op0'); setTimeout(() => el.remove(), CONFIG.FADE_OUT_MS); }
-          cleaned++;
-        }
-      }
-      if (cleaned > 0) _dbg(null, `Cleaned ${cleaned} disappearing messages`);
-    } catch(e) { _dbg(e, 'disappear-cleanup'); }
-  }, 30000));
 
   // ===== v3.3: Network quality tracking =====
   let _lastRtt = 0;
