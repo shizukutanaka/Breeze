@@ -105,6 +105,19 @@ describe('sw.js notificationclick — relay-controlled URL is contained to our o
   let ctx;
   beforeEach(() => { ctx = loadSW(); });
 
+  it('push cannot expose relay-supplied names, body, links or actions before consent', async () => {
+    let notification, waited;
+    ctx.self.registration.showNotification = (title, options) => { notification = { title, options }; return Promise.resolve(); };
+    ctx.handlers.push({ data: { json: () => ({ title: 'Private name', body: 'secret attachment URL', contactId: 'stranger1234', url: '/?join=evil', tag: 'private' }) }, waitUntil: p => { waited = p; } });
+    await waited;
+    expect(notification.title).toBe('Breeze');
+    expect(notification.options.body).toMatch(/New message or request|新しいメッセージまたはリクエスト/);
+    expect(notification.options.actions).toEqual([]);
+    expect(notification.options.data).toMatchObject({ url: '/', contactId: undefined });
+    expect(JSON.stringify(notification)).not.toContain('Private name');
+    expect(JSON.stringify(notification)).not.toContain('secret attachment URL');
+  });
+
   it('opens an arbitrary cross-origin push url as the app root, not the external page', async () => {
     // A malicious/compromised relay crafts a notification whose tap would phish the user.
     // Refused urls collapse to the literal '/' fallback (openWindow('/') = our app root).

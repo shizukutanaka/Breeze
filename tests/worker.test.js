@@ -5075,7 +5075,9 @@ describe('presence heartbeat ownership auth (wave 2)', () => {
     const raw = new Uint8Array(await crypto.subtle.exportKey('raw', kp.publicKey));
     await env.KV.put(`prekey:${id}`, JSON.stringify({ edIdentityKey: b64(raw), spkPub: 'x', ...bundleExtra }));
     return async (beat, ts = Date.now()) => {
-      const digest = await digest16(JSON.stringify([beat.pub || '', beat.name || '', beat.caps ?? null, beat.inst || '']));
+      const fields = [beat.pub || '', beat.name || '', beat.caps ?? null, beat.inst || ''];
+      if (beat.privatePresence === true) fields.push(true);
+      const digest = await digest16(JSON.stringify(fields));
       const sig = b64(new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, kp.privateKey,
         new TextEncoder().encode(`breeze-presence:${id}:${ts}:${digest}`))));
       return { ...beat, ts, sig };
@@ -5090,6 +5092,19 @@ describe('presence heartbeat ownership auth (wave 2)', () => {
     const j = await (await handlePresence({ id: 'siguser001', check: true }, e, req({}))).json();
     expect(j.online).toBe(true);
     expect(j.caps).toEqual(['x3dh-v5', 'pqxdh']);
+  });
+
+  it('authenticates private presence, rejects flag stripping and persists a public-to-private transition without waiting for the write throttle', async () => {
+    const e = makeEnv();
+    const sign = await beatSigner(e, 'private001');
+    const beat = { id: 'private001', pub: 'p', name: 'Private' };
+    expect((await handlePresence(await sign(beat), e, req({}))).status).toBe(200);
+    const signed = await sign({ ...beat, privatePresence: true });
+    expect((await handlePresence({ ...signed, privatePresence: false }, e, req({}))).status).toBe(403);
+    expect((await handlePresence(signed, e, req({}))).status).toBe(200);
+    expect(JSON.parse(await e.KV.get('presence:private001')).privatePresence).toBe(true);
+    const checked = await handlePresence({ id: 'private001', check: true }, e, req({}));
+    expect((await checked.json()).online).toBe(false);
   });
 
   it('rejects a forged beat and leaves the stored record untouched (no caps downgrade)', async () => {
