@@ -10,7 +10,7 @@ function un64(s) {
   return b;
 }
 export const vaultSlot = (store, key) => store === 'identity' && typeof key === 'string' &&
-  (['keys', 'signing', 'pq-priv', 'spk-priv', 'otp-priv'].includes(key) || /^(sess:|gsk:|gsk-peer:)/.test(key));
+  (['keys', 'signing', 'pq-priv', 'spk-priv', 'otp-priv'].includes(key) || /^(sess:|gsk:|gsk-peer:|verify:)/.test(key));
 const types = { Uint8Array, Uint8ClampedArray, Int8Array, Uint16Array, Int16Array, Uint32Array, Int32Array, Float32Array, Float64Array, BigInt64Array, BigUint64Array, DataView };
 function pack(v) {
   if (v === undefined) return ['undefined'];

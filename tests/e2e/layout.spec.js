@@ -221,6 +221,7 @@ test('a swiped message bubble does not snap back out after the swipe-back animat
 
   const finalState = await A.evaluate(async () => {
     const el = [...document.querySelectorAll('.msg.them')].pop();
+    await Promise.all(el.getAnimations().map(animation => animation.finished));
     const origX = el.getBoundingClientRect().x;
     const rect = el.getBoundingClientRect();
     const y = rect.y + rect.height / 2;

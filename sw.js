@@ -8,7 +8,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // (pqxdh.js → pq.js → mlkem.js/bytes.js, already listed).
   '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js',
   '/src/crypto/pqxdh.js', '/src/crypto/pq.js',
-  '/src/app/group-author.js', '/src/app/vault.js',
+  '/src/app/group-author.js', '/src/app/vault.js', '/src/app/contact-verify.js',
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.

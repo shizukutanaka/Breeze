@@ -99,6 +99,7 @@ test('/searchall result headers are keyboard-reachable and jump to the conversat
   await dialog.locator('.modal-input').fill(fakePub);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
+  await expect(A.locator('#msg-contacts .contact:not(.self-card)')).toBeVisible();
   const contactId = await A.evaluate(() => new Promise((r) => {
     const q = indexedDB.open('breeze-messenger');
     q.onsuccess = () => { q.result.transaction('contacts', 'readonly').objectStore('contacts').getAll().onsuccess = (e) => r(e.target.result[0].id); };
