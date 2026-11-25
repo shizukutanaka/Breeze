@@ -969,6 +969,19 @@ del.md-del { opacity: .6 }
   .is-mobile .sidebar.hidden { display: none }
   .is-mobile .msg { max-width: 85% }
 }
+/* ── Bottom tab bar (mobile, list view only) ──
+   Visibility is derived from the existing view state, not a parallel one:
+   the bar shows only while the sidebar (contact list) is shown — opening a
+   conversation or the settings panel hides the sidebar, which hides the bar. */
+#msg-tabbar { display: none }
+.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: var(--touch); padding: 6px 0; background: none; border: none; color: var(--t3); font: inherit; font-size: 11px; cursor: pointer }
+.tab-btn .tab-ico { font-size: 20px; line-height: 1.1 }
+.tab-btn.active { color: var(--g) }
+@media (max-width: 640px) {
+  .is-mobile #msg-tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--s1); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); border-top: 1px solid var(--b1); padding-bottom: env(safe-area-inset-bottom) }
+  .is-mobile #msg-main:has(.sidebar.hidden) #msg-tabbar { display: none }
+  .is-mobile .contact-list { padding-bottom: 72px }
+}
 /* Hide scrollbars on mobile (native momentum scroll) */
 .is-mobile ::-webkit-scrollbar { display: none }
 .is-mobile * { scrollbar-width: none }
@@ -1188,6 +1201,12 @@ del.md-del { opacity: .6 }
         </div>
       </div>
     </div>
+
+    <!-- Bottom tab bar (mobile list view only; CSS-gated, see #msg-tabbar) -->
+    <nav id="msg-tabbar" role="tablist" data-i18n-aria="ariaContacts">
+      <button class="tab-btn active" id="tab-contacts" role="tab" aria-selected="true" data-action="tab-contacts" data-i18n-aria="ariaContacts"><span class="tab-ico">👥</span><span data-i18n="ariaContacts">Contacts</span></button>
+      <button class="tab-btn" id="tab-settings" role="tab" aria-selected="false" data-action="tab-settings" data-i18n-aria="helpSettings"><span class="tab-ico">⚙</span><span data-i18n="helpSettings">Settings</span></button>
+    </nav>
   </div>
 
 </div>
@@ -13237,7 +13256,45 @@ async function initMessenger(dbName) {
     // Recovery plan step 3: the recovery kit for existing (random-key)
     // identities — phrase + passphrase wrap of the full key material.
     if (e.target.closest('[data-action="recovery-kit"]')) { createRecoveryKit(); return; }
+    // Bottom tab bar (mobile list view)
+    if (e.target.closest('[data-action="tab-contacts"]')) { _showContactsTab(); return; }
+    if (e.target.closest('[data-action="tab-settings"]')) { _showSettingsTab(); return; }
   }, { signal: _ac.signal });
+  // Bottom tab bar: two tabs over the EXISTING views — no new router. Contacts
+  // is the list view (the sidebar state the back button already restores);
+  // Settings opens the /settings panel through the same synthetic-Enter path
+  // as the ?settings shortcut (_openSettingsFromUrl). Bar visibility itself is
+  // CSS-derived from .sidebar.hidden, so JS only moves the existing state.
+  function _setActiveTab(which) {
+    const c = _DOM.get('tab-contacts'), s = _DOM.get('tab-settings');
+    if (c) { c.classList.toggle('active', which === 'contacts'); c.setAttribute('aria-selected', which === 'contacts' ? 'true' : 'false'); }
+    if (s) { s.classList.toggle('active', which === 'settings'); s.setAttribute('aria-selected', which === 'settings' ? 'true' : 'false'); }
+  }
+  function _showContactsTab() {
+    _setActiveTab('contacts');
+    _DOM.get('msg-sidebar')?.classList.remove('hidden');
+    _DOM.get('b-msg-back')?.classList.add('hidden');
+  }
+  function _showSettingsTab() {
+    _setActiveTab('settings');
+    // Reveal the chat area (the panel renders into #msg-messages) exactly as
+    // opening a conversation does on mobile: sidebar away, back button shown.
+    if (window.innerWidth <= 640) {
+      _DOM.get('msg-sidebar')?.classList.add('hidden');
+      _DOM.get('b-msg-back')?.classList.remove('hidden');
+    }
+    const input = _DOM.get('msg-input');
+    if (input) {
+      // Dispatch is synchronous, so a draft typed before the tap survives.
+      const draft = input.value;
+      input.value = '/settings';
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+      if (draft && draft !== '/settings') input.value = draft;
+    }
+  }
+  // Returning to the list (back button / browser back) re-selects Contacts.
+  _DOM.get('b-msg-back')?.addEventListener('click', () => _setActiveTab('contacts'));
+  window.addEventListener('popstate', () => { if (window.innerWidth <= 640) _setActiveTab('contacts'); }, { signal: _ac.signal });
   // S04: keyboard activation for the clickable-but-not-button message affordances
   // (retry / reply-scroll / react / vote carry role="button" tabindex="0" at their
   // render sites): Enter/Space re-dispatches a click, so the delegated click
