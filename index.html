@@ -7581,7 +7581,12 @@ async function initMessenger(dbName) {
       // setTimeout/clearTimeout instrumentation: switching accounts with focus mode on
       // left the old timer's id out of the cleared set entirely.
       if (_focusTimer) { clearTimeout(_focusTimer); _focusTimer = null; }
-      if (_readTimer) { clearTimeout(_readTimer); _readTimer = null; }
+      // A pending delayed read receipt (openConversation) can stay scheduled for
+      // ~2 minutes; it must not fire from a torn-down session after account switch.
+      if (_readTimer) {
+        clearTimeout(_readTimer);
+        _readTimer = null;
+      }
       // Discard this account's in-memory outbox. The Map is module-level and persists
       // across initMessenger calls; without clearing it here, pending P2P messages from
       // the old account would be sent under the new account's identity if both accounts
