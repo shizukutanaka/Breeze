@@ -15747,7 +15747,6 @@ if (PLATFORM === 'electron' && window.breeze) {
   // the moment this block stopped being dead code).
   setInterval(async () => {
     try {
-      const db = indexedDB.open('breeze-messenger', 2);
       // Simple approach: read unread count from contact list DOM
       const badges = document.querySelectorAll('.cbadge');
       let total = 0;
