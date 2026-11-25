@@ -20,7 +20,7 @@ Láti [ojúewé ìgbàsílẹ̀](https://github.com/shizukutanaka/Breeze/release
 - Windows: èyí tí orúkọ rẹ̀ parí pẹ̀lú `-win-x64.exe` (ó tún wà fún àwọn ẹ̀rọ ARM)
 - Mac: èyí tí orúkọ rẹ̀ parí pẹ̀lú `-mac.dmg`
 - Linux: `.AppImage` (o lè ṣiṣẹ́ ẹ tààrà) tàbí `.deb`
-- Tí o bá fẹ́ lò ó nínú aṣàwákiri, lo èyí tí o fi sí orí sáfà tìrẹ (àwọn ìgbésẹ̀ fífi sílẹ̀ wà nínú ìwé mìíràn "ìwé ìtọ́ni fífi sílẹ̀")
+- Tí o bá fẹ́ lò ó nínú aṣàwákiri, lo èyí tí o fi sí orí sáfà tìrẹ (àwọn ìgbésẹ̀ fífi sílẹ̀ wà nínú ìwé mìíràn "ìwé ìtọ́ni fífi sílẹ̀") Ìṣètò déédéé ń lo Cloudflare, nítorí náà a nílò àkáǹtì Cloudflare.
 
 Fáìlì kọ̀ọ̀kan ní nọ́mbà ìfìdímúlẹ̀ (SHA256SUMS.txt). Tí o bá ṣe àníyàn, o lè ṣàyẹ̀wò pé nọ́mbà fáìlì tí o gbà sílẹ̀ bá a mu.
 
@@ -29,20 +29,20 @@ Fáìlì kọ̀ọ̀kan ní nọ́mbà ìfìdímúlẹ̀ (SHA256SUMS.txt). Tí o
 ### Ìṣètò àkọ́kọ́
 
 1. Ṣí àpù náà.
-2. Tẹ orúkọ rẹ sí kí o sì tẹ "Ṣẹ̀dá àkáǹtì". Ìyẹn nìkan, ìmúrasílẹ̀ ti parí. Kò sí ìforúkọsílẹ̀, kò sí nọ́mbà fóònù.
+2. Tẹ "Bẹ̀rẹ̀ pẹ̀lú ID àìròtẹ́lẹ̀". Ìyẹn nìkan, ìmúrasílẹ̀ ti parí. Kò sí ìforúkọsílẹ̀, kò sí nọ́mbà fóònù.
 
-- Tí o bá fẹ́ mú ìdánimọ̀ tí o ti ṣẹ̀dá tẹ́lẹ̀ padà, ṣí "Mú àkáǹtì tí ó ti wà padà" àwọn ọ̀nà ìgbàpadà (fáìlì ìpamọ́ àfikún, gbólóhùn ìgbàpadà, àti bẹ́ẹ̀ bẹ́ẹ̀ lọ) yóò sì jáde.
+- Tí o bá tẹ "Orúkọ rẹ (orúkọ ìfihàn)" sí pápá tí ó wà lókè bọ́tìnì náà, o ó bẹ̀rẹ̀ pẹ̀lú orúkọ yẹn. O tún lè tẹ bọ́tìnì náà nígbà tí pápá náà ṣófo. O lè yí orúkọ ìfihàn padà lẹ́yìn náà, nínú abala ìdánimọ̀ ti àwọn ìṣètò.
+- Ọ̀nà mìíràn tún wà láti ṣẹ̀dá ìdánimọ̀ pẹ̀lú orúkọ àti ID Breeze tí o yàn fúnra rẹ. Ní ipò yẹn, a ó fún ọ ní gbólóhùn ìgbàpadà, a ó sì fi í hàn lórí ìbòjú. Gbólóhùn ìgbàpadà ni àwọn ọ̀rọ̀ tí ó ń jẹ́ kí o mú ìdánimọ̀ yẹn padà lórí ẹ̀rọ mìíràn. Kọ ọ́ sílẹ̀ sórí ìwé tàbí sí ibì ààbò.
+- Tí o bá fẹ́ mú ìdánimọ̀ tí o ti ṣẹ̀dá tẹ́lẹ̀ padà, ṣí "Mú àkọọ́lẹ̀ tó wà padà bọ̀" àwọn ọ̀nà ìgbàpadà (mú padà láti fáìlì àfẹ̀yìntì, gbà padà pẹ̀lú gbólóhùn ìgbàpadà, mú padà pẹ̀lú àkáǹtì + gbólóhùn ìkọ̀kọ̀) yóò sì jáde.
 - Nígbà tí ìṣẹ̀dá bá parí, káàdì kan yóò jáde tí ó ń tọ́ ọ sọ́nà láti dáàbò bo kọ́kọ́rọ́ rẹ pẹ̀lú gbólóhùn ìkọ̀kọ̀ (kò ní parẹ́ lẹ́yìn àkókò kan). Fún ìdánimọ̀ pàtàkì, tẹ̀lé ìtọ́nisọ́nà náà kí o sì fi ààbò náà kún un.
 
 Ní àkókò yìí, a ó ṣẹ̀dá "kọ́kọ́rọ́" nínú ẹ̀rọ rẹ. Òun ni ìdánimọ̀ rẹ fúnra rẹ̀.
 **Kò sí àkọsílẹ̀ àwọn àkáǹtì lórí sáfà.** Ìdánimọ̀ rẹ wà nínú ẹ̀rọ rẹ nìkan.
 Kókó yìí ṣe pàtàkì nínú orí ìpamọ́ àfikún (9).
 
-### Nípa "ìdánimọ̀ tí a lè jù sílẹ̀"
+### Nípa "ìdánimọ̀ tí a lè jù sílẹ̀" àtijọ́
 
-Tí o bá yan "ìdánimọ̀ tí a lè jù sílẹ̀" ní àkókò ìṣẹ̀dá, ìdánimọ̀ rẹ kò ní ọ̀nà ìgbàpadà rárá.
-Tí o bá pàdánù ẹ̀rọ yẹn, tàbí tí o tún un ṣètò, tàbí tí o pa dátà aṣàwákiri rẹ, ìdánimọ̀ yẹn kò ní padà mọ́ láé.
-Èyí yóò tún hàn lórí ìbòjú. Má ṣe yan án fún ìdánimọ̀ tí o ó lò fún ìgbà pípẹ́.
+"Ìdánimọ̀ tí a lè jù sílẹ̀" — ìdánimọ̀ tí kò ní ọ̀nà ìgbàpadà rárá — ti lọ. Pẹ̀lú àwọn ọ̀nà ìṣẹ̀dá ìdánimọ̀ ìsinsìnyí, ìdánimọ̀ kọ̀ọ̀kan ni a lè dáàbò bò pẹ̀lú ìpamọ́ àfikún.
 
 ---
 
@@ -73,6 +73,7 @@ Tí ẹ̀kejì náà bá tún ṣí àpù náà, ẹ ó sopọ̀ tààrà kí �
 
 - **Ipò fífi ránṣẹ́**: O lè mọ̀ láti inú àmì tí ó wà lẹ́gbẹ̀ẹ́ ìránṣẹ́ náà. ✓ túmọ̀ sí pé a ti ránṣẹ́ ẹ, ✓ nínú òrùka túmọ̀ sí pé a ti fi sí àpótí ìpamọ́, ✓✓ túmọ̀ sí pé ó ti dé ọ̀dọ̀ ẹ̀kejì, ìkàwé jẹ́ àmì aláwọ̀ búlúù, ìkùnà sì jẹ́ àmì pupa. A ń ya wọ́n sọ́tọ̀ nípa ìrísí náà, kì í ṣe àwọ̀ nìkan.
 - **Àkọsílẹ̀ àwọn olùbáṣepọ̀**: Àkókò tí o bá ara yín sọ̀rọ̀ kẹ́yìn ni a fi hàn gẹ́gẹ́ bí àkókò fún òní, "Àná" fún àná, oṣù/ọjọ́ fún ọdún yìí, àti ọdún/oṣù/ọjọ́ fún ohun gbogbo tí ó ṣáájú. Àwọn olùbáṣepọ̀ tí wọ́n ní ìránṣẹ́ tí o kò tíì kà ní orúkọ àti àkókò tí a tẹnu mọ́.
+- **Àwọn orúkọ fún àwọn olùbáṣepọ̀**: Ṣí "Ìwífún olùbáṣepọ̀" (nínú àtòjọ ọ̀tún-tẹ ti olùbáṣepọ̀, tàbí àtòjọ "⋮" ti ìjíròrò) o sì lè ṣètò orúkọ tìrẹ fún olùbáṣepọ̀ yẹn (orúkọ àbùdá). Àwọn orúkọ àbùdá ni a pa mọ́ sí orí ẹ̀rọ yìí nìkan, a kò sì fi wọ́n ránṣẹ́ sí olùbáṣepọ̀ tàbí sáfà olùgbé láé. Nígbà tí o bá ṣètò orúkọ àbùdá, orúkọ tí olùbáṣepọ̀ ṣètò fún ara rẹ̀ náà ni a ó fi hàn lẹ́gbẹ̀ẹ́ rẹ̀ ní àwọ̀ tí ó rẹ̀lẹ̀. O lè pa orúkọ kejì yẹn pẹ̀lú "Fi orúkọ tí olùbáṣepọ̀ kọ̀ọ̀kan ṣètò fún ara rẹ̀ hàn pẹ̀lú" nínú abala "Ìkọ̀kọ̀" ti àwọn ìṣètò.
 - **Káàdì tìrẹ**: Ní òkè àkọsílẹ̀ náà ni káàdì ìdánimọ̀ tìrẹ wà; tẹ ẹ láti ṣí ìdánimọ̀ rẹ. Ó ń yí papọ̀ pẹ̀lú àkọsílẹ̀ náà.
 - **Àwọn tab ìsàlẹ̀ lórí fóònù**: Ní ìbú fóònù, àwọn tab "Àwọn olùbáṣepọ̀" àti "Àwọn ìṣètò" ń jáde ní ìsàlẹ̀ ìbòjú.
 - **Orí ìjíròrò**: Láti inú àmì ìwárí, o lè ṣàwárí nínú ìjíròrò náà. Láti inú àtòjọ "⋮", o lè ṣàyẹ̀wò nọ́mbà ààbò, pa ìfitónilétí mọ́, fi sípín, ṣẹ̀dá ìdìbò, àti àwọn mìíràn.
@@ -107,6 +108,7 @@ Tí o bá tẹ `/` sí nínú pápá ìtẹ̀sí, àwọn ìmọ̀ràn àṣẹ 
 - O lè ṣẹ̀dá àwọn àkáǹtì púpọ̀ kí o sì lò wọ́n ní ọ̀nà ọ̀tọ̀ọ̀tọ̀ (bí ti iṣẹ́ àti ti ara ẹni). Iye àwọn ẹ̀rọ àti àkáǹtì ọ̀fẹ́ ni láìsí ààlà.
 - **Bí a ṣe ń ṣẹ̀dá àkáǹtì**: Tẹ bọ́tìnì "+" tí ó wà lẹ́gbẹ̀ẹ́ àwọn tab àkáǹtì ní òkè àkọsílẹ̀ àwọn olùbáṣepọ̀ jùlọ. Tẹ orúkọ sí kí o sì yan emoji àmì, àkáǹtì tuntun yóò sì ṣẹ̀dá, yóò sì yí padà sí i fúnra rẹ̀.
 - **Pípadà àkáǹtì**: Àwọn tab àkáǹtì ń hàn nígbà gbogbo ní òkè àkọsílẹ̀ àwọn olùbáṣepọ̀ jùlọ. Tẹ ọ̀kan láti yí padà (lórí kọ̀mpútà o tún lè yí padà pẹ̀lú Ctrl+1–9). Tẹ tab náà kí o sì dì í mú láti tún orúkọ rẹ̀ ṣe, yí àmì rẹ̀ padà, tàbí pa á rẹ́.
+- Àwọn olùbáṣepọ̀ àti àwọn kọ́kọ́rọ́ yàtọ̀ fún àkáǹtì kọ̀ọ̀kan. Tún ṣe pàṣípààrọ̀ àwọn olùbáṣepọ̀ fún àkáǹtì kọ̀ọ̀kan.
 - A ń yan èdè fúnra rẹ̀ láti inú èdè 51, Gẹ̀ẹ́sì náà wà nínú, gẹ́gẹ́ bí èdè ẹ̀rọ rẹ.
 
 ---
@@ -117,6 +119,7 @@ Tí o bá tẹ `/` sí nínú pápá ìtẹ̀sí, àwọn ìmọ̀ràn àṣẹ 
 
 - **Títì fúnra rẹ̀**: Ìṣètò wà tí ó ń tì fúnra rẹ̀ nígbà tí o bá yí tab padà.
 - **Gbólóhùn ìkọ̀kọ̀ kọ́kọ́rọ́**: O lè dáàbò bo kọ́kọ́rọ́ tí ó wà nínú ẹ̀rọ rẹ nípa dída a pẹ̀lú gbólóhùn ìkọ̀kọ̀. A ó béèrè ìtẹ̀sí nígbà tí o bá ṣí àpù náà.
+- **Fi orúkọ tí olùbáṣepọ̀ kọ̀ọ̀kan ṣètò fún ara rẹ̀ hàn pẹ̀lú**: Nínú abala "Ìkọ̀kọ̀". Fún olùbáṣepọ̀ tí o ti fún ní orúkọ àbùdá, o lè yan bóyá orúkọ ara rẹ̀ yóò hàn lẹ́gbẹ̀ẹ́ rẹ̀ (orí 3).
 - **Dídínà**: O lè dínà ẹni tí ó ń yọ ọ́ lẹ́nu. Ìránṣẹ́ láti ọ̀dọ̀ ẹni tí a dínà kò ní dé.
 
 ---
@@ -141,11 +144,21 @@ Lórí àwọn ẹ̀rọ tí kò lè ka ìpele bátìrì fúnra wọn (bíi aṣ
 Ìdánimọ̀ Breeze kọ́kọ́rọ́ nìkan ni tí ó wà nínú ẹ̀rọ rẹ. Kò sí àkọsílẹ̀ àwọn àkáǹtì lórí sáfà, ẹni tí ó ṣẹ̀dá á náà kò sì ní kọ́kọ́rọ́ rẹ.
 **Tí o bá pàdánù ẹ̀rọ rẹ, o ó pàdánù ìdánimọ̀ rẹ náà.** Fún ìdánimọ̀ pàtàkì, rí i dájú pé o ṣe ìpamọ́ àfikún.
 
-Ìpamọ́ àfikún àti ìgbàpadà ni a ń ṣe láti inú abala "Ìpamọ́ àfikún àti ìgbàpadà" ti àwọn ìṣètò (àwọn bọ́tìnì mẹ́ta wà: "Ṣe ìpamọ́ àfikún sí ìkùukùu", "Mú padà", àti "Mú padà láti inú fáìlì"). Ní ìgbà àkọ́kọ́ tí o bá fi olùbáṣepọ̀ kún, káàdì kan tí ó ń gba ọ́ níyànjú láti ṣe ìpamọ́ àfikún yóò jáde lẹ́ẹ̀kan ṣoṣo.
+Ìpamọ́ àfikún àti ìgbàpadà ni a ń ṣe láti inú abala "Ìpamọ́ àfikún àti ìgbàpadà" ti àwọn ìṣètò (àwọn bọ́tìnì ni "Ṣẹ̀dá Àfẹ̀yìntì", "Mú Àfẹ̀yìntì Padà", àti "Mú padà láti fáìlì"). Ní ìgbà àkọ́kọ́ tí o bá fi olùbáṣepọ̀ kún, káàdì kan tí ó ń gba ọ́ níyànjú láti ṣe ìpamọ́ àfikún yóò jáde lẹ́ẹ̀kan ṣoṣo.
 
-### Bí a ṣe ń ṣe ìpamọ́ àfikún
+### Ìpamọ́ àfikún fúnra rẹ̀
 
-1. Láti "Ìpamọ́ àfikún àti ìgbàpadà" nínú àwọn ìṣètò, yan láti ṣẹ̀dá ìpamọ́ àfikún.
+Ìṣètò "Ìpamọ́ àfikún fúnra rẹ̀" ti ṣiṣẹ́ láti ìbẹ̀rẹ̀. Nígbà tí dátà rẹ bá yípadà, a ó fi ìpamọ́ àfikún tí a fi ìpamọ́ ṣe ránṣẹ́ fúnra rẹ̀ sí sáfà olùgbé tí o fi sílẹ̀.
+
+- Kò ní ránṣẹ́ ní gbogbo ìyípadà: ó ń dúró fún ìṣẹ́jú-àáyá 30 lẹ́yìn ìyípadà ìkẹyìn, ó sì ń rán gbogbo wọn papọ̀. A ń fa àwọn ìgbìyànjú síra sí ó kéré jùlọ ìṣẹ́jú 15.
+- Nígbà tí o kò bá sí lórí ayélujára, a kò ní rán ohunkóhun; àwọn ìyípadà ni a pa mọ́, a ó sì rán wọn nígbà tí ìsopọ̀ bá padà àti nígbà tí o bá ṣí àpù náà.
+- Fún fífi ránṣẹ́ fúnra rẹ̀, o nílò láti tẹ gbólóhùn ìkọ̀kọ̀ ìpamọ́ àfikún sí lẹ́ẹ̀kan lórí ẹ̀rọ yẹn (nígbà tí a bá nílò rẹ̀, bọ́tìnì "Tẹ gbólóhùn ìkọ̀kọ̀ sí" yóò jáde nínú abala àwọn ìṣètò). **A kò pa gbólóhùn ìkọ̀kọ̀ náà mọ́.** A ń rántí rẹ̀ nìkan nígbà tí àpù náà bá ṣí, ó sì ń lọ nígbà tí o bá ti í. Fún ìdánimọ̀ ìgbàpadà rọrùn, lẹ́sẹ̀kẹsẹ̀ lẹ́yìn tí o bá tẹ gbólóhùn ìkọ̀kọ̀ sí ní àkókò ìforúkọsílẹ̀ tàbí ìmúdójúìwọ̀n, fífi ránṣẹ́ ń ṣiṣẹ́ gẹ́gẹ́ bí ó ṣe wà.
+- Tí sáfà olùgbé kò bá ṣe àtìlẹ́yìn fún pípa ìpamọ́ àfikún mọ́, ìpamọ́ àfikún fúnra rẹ̀ kò ní ṣiṣẹ́. Èyí ni a ó fi hàn nínú abala àwọn ìṣètò.
+- Ipò náà (ìgbà tí fífi ránṣẹ́ tó ṣẹ́ ṣe àṣeyọrí gbẹ̀yìn, bóyá àwọn ìyípadà ń dúró, bóyá fífi ránṣẹ́ kùnà) ni a ó fi hàn nínú abala àwọn ìṣètò.
+
+### Bí a ṣe ń ṣe ìpamọ́ àfikún (ọwọ́)
+
+1. Láti "Ìpamọ́ àfikún àti ìgbàpadà" nínú àwọn ìṣètò, yan "Ṣẹ̀dá Àfẹ̀yìntì".
 2. Ṣètò gbólóhùn ìkọ̀kọ̀ fún ìpamọ́ àfikún (lẹ́tà 6 tàbí jù bẹ́ẹ̀ lọ).
 3. Yan ibí tí o ó pa á mọ́ sí.
    - **Pa mọ́ sí fáìlì**: Pa fáìlì ìpamọ́ àfikún mọ́ lọ́wọ́ ara rẹ (a gbani nímọ̀ràn).
@@ -157,11 +170,23 @@ Ohun tí ó wà nínú ìpamọ́ àfikún wà ní ìpamọ́. Ohun tí sáfà �
 
 Lórí ẹ̀rọ tuntun, gbà á padà ní lílo fáìlì ìpamọ́ àfikún (tàbí ìpamọ́ àfikún sáfà olùgbé) àti gbólóhùn ìkọ̀kọ̀ tí o ṣètò.
 
+Tí o bá ṣẹ̀ṣẹ̀ mú ìdánimọ̀ rẹ padà pẹ̀lú gbólóhùn ìgbàpadà, tí ìpamọ́ àfikún ìdánimọ̀ yẹn bá sì wà lórí sáfà olùgbé, a ó rí i fúnra rẹ̀, a ó sì bi ọ́ pẹ̀lú "A rí ìpamọ́ àfikún". Tí o bá mú un padà, a ó fi ohun tí ó wà nínú ìpamọ́ àfikún náà rọ́pò dátà tí ó wà lórí ẹ̀rọ yìí.
+
+### Kíkó lọ sí ẹ̀rọ tuntun
+
+Tí o bá tẹ bọ́tìnì "Kó lọ sí ẹ̀rọ tuntun" nínú abala "Ìpamọ́ àfikún àti ìgbàpadà" ti àwọn ìṣètò, àwọn ìgbésẹ̀ yóò jáde.
+
+1. Lórí ẹ̀rọ rẹ ìsinsìnyí, pa ìpamọ́ àfikún mọ́ sí orí sáfà olùgbé (ìpamọ́ àfikún fúnra rẹ̀, tàbí "Ṣẹ̀dá Àfẹ̀yìntì").
+2. Lórí ẹ̀rọ tuntun, yan ọ̀nà ìgbàpadà lórí ìbòjú àkọ́kọ́, kí o sì tẹ gbólóhùn ìgbàpadà rẹ sí (tàbí orúkọ àkáǹtì rẹ àti gbólóhùn ìkọ̀kọ̀).
+3. Nígbà tí ìdánimọ̀ rẹ bá padà, a ó rí ìpamọ́ àfikún tí ó wà lórí sáfà fúnra rẹ̀, a ó sì fún ọ ní àǹfààní láti mú un padà.
+
+A kò nílò okùn tàbí fífi fáìlì lélẹ̀.
+
 ### Àkíyèsí
 
 - **Tí o bá gbàgbé gbólóhùn ìkọ̀kọ̀ náà, a kò lè gbà á padà.** Ẹni tí ó ṣẹ̀dá á náà kò lè tún un ṣe. Kọ gbólóhùn ìkọ̀kọ̀ náà sílẹ̀ ní ibì mìíràn.
-- **Ìdánimọ̀ tí a lè jù sílẹ̀ kò ní padà, yálà nípa ìpamọ́ àfikún tàbí ìgbàpadà.**
-- Tí àwọn ìdánimọ̀ bá pọ̀ sí i tàbí tí o bá yí ẹ̀rọ padà, tún ìpamọ́ àfikún náà ṣe.
+- Títẹ gbólóhùn ìkọ̀kọ̀ fún ìpamọ́ àfikún fúnra rẹ̀ ni a nílò lórí ẹ̀rọ kọ̀ọ̀kan. Lórí ẹ̀rọ tuntun, tún un tẹ sí lẹ́ẹ̀kan sí i.
+- Tún ìpamọ́ àfikún ọwọ́ ṣe nígbà tí àwọn ìdánimọ̀ rẹ bá pọ̀ sí i tàbí nígbà tí o bá yí ẹ̀rọ padà.
 
 ---
 

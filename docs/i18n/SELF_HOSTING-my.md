@@ -3,6 +3,13 @@
 **အခြားဘာသာစကားဖြင့် ဖတ်ရန်**: [English](SELF_HOSTING-en.md) · [中文（简体）](SELF_HOSTING-zh-CN.md) · [中文（繁體）](SELF_HOSTING-zh-TW.md) · [Español](SELF_HOSTING-es.md) · [Français](SELF_HOSTING-fr.md) · [Deutsch](SELF_HOSTING-de.md) · [Italiano](SELF_HOSTING-it.md) · [Português (Brasil)](SELF_HOSTING-pt-BR.md) · [Русский](SELF_HOSTING-ru.md) · [Українська](SELF_HOSTING-uk.md) · [Polski](SELF_HOSTING-pl.md) · [Nederlands](SELF_HOSTING-nl.md) · [Svenska](SELF_HOSTING-sv.md) · [Norsk](SELF_HOSTING-nb.md) · [Dansk](SELF_HOSTING-da.md) · [Suomi](SELF_HOSTING-fi.md) · [Čeština](SELF_HOSTING-cs.md) · [Magyar](SELF_HOSTING-hu.md) · [Română](SELF_HOSTING-ro.md) · [Ελληνικά](SELF_HOSTING-el.md) · [Türkçe](SELF_HOSTING-tr.md) · [العربية](SELF_HOSTING-ar.md) · [فارسی](SELF_HOSTING-fa.md) · [עברית](SELF_HOSTING-he.md) · [हिन्दी](SELF_HOSTING-hi.md) · [বাংলা](SELF_HOSTING-bn.md) · [اردو](SELF_HOSTING-ur.md) · [ਪੰਜਾਬੀ](SELF_HOSTING-pa.md) · [தமிழ்](SELF_HOSTING-ta.md) · [తెలుగు](SELF_HOSTING-te.md) · [മലയാളം](SELF_HOSTING-ml.md) · [Bahasa Indonesia](SELF_HOSTING-id.md) · [Bahasa Melayu](SELF_HOSTING-ms.md) · [Tiếng Việt](SELF_HOSTING-vi.md) · [ไทย](SELF_HOSTING-th.md) · မြန်မာ (ဤစာမျက်နှာ) · [ខ្មែរ](SELF_HOSTING-km.md) · [한국어](SELF_HOSTING-ko.md) · [Filipino](SELF_HOSTING-tl.md) · [Kiswahili](SELF_HOSTING-sw.md) · [Hausa](SELF_HOSTING-ha.md) · [Yorùbá](SELF_HOSTING-yo.md) · [Igbo](SELF_HOSTING-ig.md) · [አማርኛ](SELF_HOSTING-am.md) · [ქართული](SELF_HOSTING-ka.md) · [Azərbaycan](SELF_HOSTING-az.md) · [Қазақша](SELF_HOSTING-kk.md) · [Oʻzbek](SELF_HOSTING-uz.md) · [Српски](SELF_HOSTING-sr.md) · [Hrvatski](SELF_HOSTING-hr.md)
 
 
+> **မစတင်မီ: ပုံမှန်တပ်ဆင်မှုအတွက် Cloudflare အကောင့် လိုအပ်ပါသည်။**
+> ဤလမ်းညွှန်ရှိ ပုံမှန်တပ်ဆင်မှု — အောက်ပါ Cloudflare တပ်ဆင်ခြင်း
+> — သည် Cloudflare ပေါ်တွင် လည်ပတ်သောကြောင့် မစတင်မီ Cloudflare အကောင့်တစ်ခု
+> အသင့်ပြင်ထားပါ။ Cloudflare ကို မသုံးလိုပါက ဤလမ်းညွှန်ရှိ
+> Docker နှင့် Node တိုက်ရိုက် တပ်ဆင်မှုများအတွက်
+> Cloudflare အကောင့် မလိုအပ်ပါ။
+
 Breeze အစားထိုးပို့ဆောင်သူ (relay) ကို လည်ပတ်ရန် နည်းလမ်း နှစ်ခု ရှိပါသည်:
 
 1. **ကိုယ်တိုင်လက်ခံဆောင်ရွက်ခြင်း (Node + Docker)** — သင့်ကိုယ်ပိုင် စက် သို့မဟုတ်

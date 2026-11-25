@@ -20,7 +20,7 @@ Sa [stranice za preuzimanje](https://github.com/shizukutanaka/Breeze/releases/la
 - Windows: ono čije ime završava na `-win-x64.exe` (postoji i za ARM uređaje)
 - Mac: ono čije ime završava na `-mac.dmg`
 - Linux: `.AppImage` (može se izravno pokrenuti) ili `.deb`
-- Ako koristite u pregledniku, koristite ono što ste postavili na svoj poslužitelj (koraci postavljanja nalaze se u zasebnom dokumentu, «Uputama za postavljanje»)
+- Ako koristite u pregledniku, koristite ono što ste postavili na svoj poslužitelj (koraci postavljanja nalaze se u zasebnom dokumentu, «Uputama za postavljanje»). Standardno postavljanje koristi Cloudflare, pa je potreban Cloudflare račun
 
 Svakoj je datoteci priložen broj za provjeru (SHA256SUMS.txt). Ako želite, možete provjeriti podudara li se broj preuzete datoteke.
 
@@ -29,20 +29,20 @@ Svakoj je datoteci priložen broj za provjeru (SHA256SUMS.txt). Ako želite, mo�
 ### Prvo postavljanje
 
 1. Otvorite aplikaciju.
-2. Unesite ime i pritisnite «Napravi račun». Time je priprema gotova. Ne treba ni registracija ni broj telefona.
+2. Pritisnite «Započni s nasumičnim ID-jem». Time je priprema gotova. Ne treba ni registracija ni broj telefona.
 
-- Ako želite vratiti identitet koji ste ranije napravili, otvorite «Vrati postojeći račun» i pojavit će se načini oporavka (datoteka sigurnosne kopije, fraza za oporavak itd.).
+- Ako u polje iznad gumba unesete «Vaše ime (ime za prikaz)», počinjete s tim imenom. Gumb možete pritisnuti i s praznim poljem. Ime za prikaz možete kasnije promijeniti u odjeljku profila u postavkama.
+- Postoji i način da se napravi identitet s imenom i Breeze ID-jem koji sami odaberete. U tom se slučaju izdaje fraza za oporavak i prikazuje na zaslonu. Fraza za oporavak riječi su koje vam omogućuju da taj identitet vratite na drugom uređaju. Zapišite je na papir ili na neko sigurno mjesto.
+- Ako želite vratiti identitet koji ste ranije napravili, otvorite «Vrati postojeći račun» i pojavit će se načini oporavka (vrati iz datoteke sigurnosne kopije, oporavi frazom za oporavak, vrati računom i zaporkom).
 - Kad se stvaranje završi, pojavljuje se kartica koja vas vodi da ključ zaštitite lozinkom (ne nestaje nakon nekog vremena). Za važan identitet slijedite uputu i dodajte zaštitu.
 
 Tada se u vašem uređaju stvara «ključ». On je sam vaš identitet.
 **Popis računa ne postoji na poslužitelju.** Identitet postoji samo u vašem uređaju.
 Ova točka postaje važna u poglavlju o sigurnosnoj kopiji (9).
 
-### O «jednokratnom identitetu»
+### O nekadašnjem «jednokratnom identitetu»
 
-Ako pri stvaranju odaberete «jednokratni identitet», nastaje identitet bez ikakvog sredstva za oporavak.
-Ako izgubite taj uređaj, vratite ga na početno stanje ili obrišete podatke preglednika, taj se identitet više nikada ne vraća.
-To se prikazuje i na zaslonu. Ne birajte ga za identitet koji ćete dugo koristiti.
+«Jednokratni identitet» — identitet bez ikakvog sredstva za oporavak — više ne postoji. Sa sadašnjim načinima izrade, svaki se identitet može zaštititi sigurnosnom kopijom.
 
 ---
 
@@ -73,6 +73,7 @@ Ako i druga strana otvori aplikaciju, možete se izravno povezati i razgovarati.
 
 - **Status slanja**: Možete ga razlikovati po znaku pored poruke. ✓ znači poslano, ✓ u krugu znači da je položeno u spremnik za čuvanje, ✓✓ znači da je stiglo drugoj strani, pročitano je plavi znak, a neuspjeh je crveni znak. Razlikuju se i po obliku, a ne samo po boji.
 - **Popis kontakata**: Vrijeme posljednjeg razgovora prikazuje se kao vrijeme za danas, «Jučer» za jučer, mjesec/dan za ovu godinu i godina/mjesec/dan za ranije. Kontakti s nepročitanim porukama imaju istaknuto ime i vrijeme.
+- **Imena za kontakte**: Otvorite «Podaci o kontaktu» (u izborniku desnog klika na kontakt ili u izborniku «⋮» razgovora) i možete postaviti svoje ime za taj kontakt (nadimak). Nadimci se čuvaju samo na ovom uređaju i nikada se ne šalju kontaktu ni relejnom poslužitelju. Kada postavite nadimak, ime koje je kontakt sam sebi postavio također se prikazuje pored njega prigušenom bojom. To drugo ime možete isključiti pomoću «Prikaži i ime koje je svaki kontakt sam sebi postavio» u odjeljku «Privatnost» u postavkama.
 - **Vaša kartica**: Na vrhu popisa je vaša profilna kartica; pritisnite je da otvorite profil. Pomiče se zajedno s popisom.
 - **Donje kartice na telefonu**: Pri širini telefona, na dnu zaslona pojavljuju se kartice «Kontakti» i «Postavke».
 - **Zaglavlje razgovora**: Od ikone pretraživanja možete pretraživati unutar razgovora. Iz izbornika «⋮» možete provjeriti sigurnosni broj, utišati obavijesti, prikvačiti, napraviti anketu i još toga.
@@ -107,6 +108,7 @@ Neke operacije, poput postavki i povezivanja uređaja, izvode se iz naredbi.
 - Račune možete napraviti više i koristiti ih odvojeno (na primjer, poslovni i privatni). I broj uređaja i broj računa besplatni su i neograničeni.
 - **Kako napraviti račun**: Pritisnite gumb «+» pored kartica računa na samom vrhu popisa kontakata. Unesite ime i odaberite emoji ikonu, i novi će račun biti napravljen i automatski prebačen na njega.
 - **Promjena računa**: Kartice računa uvijek se prikazuju na samom vrhu popisa kontakata. Pritisnite jednu da biste se prebacili (na računalu se možete prebaciti i s Ctrl+1–9). Pritisnite i držite karticu da biste joj promijenili ime, promijenili ikonu ili je obrisali.
+- Kontakti i ključevi odvojeni su za svaki račun. Za svaki račun ponovno razmijenite kontakte.
 - Jezik se automatski bira iz 51 jezika, uključujući engleski, prema jeziku vašeg uređaja.
 
 ---
@@ -117,6 +119,7 @@ Postavke se otvaraju kao poseban zaslon. Na telefonu ih otvorite s kartice «Pos
 
 - **Automatsko zaključavanje**: Postoji postavka za automatsko zaključavanje pri promjeni kartice.
 - **Lozinka za ključ**: Ključ u uređaju možete zaštititi omotavanjem lozinkom. Pri otvaranju aplikacije traži se unos.
+- **Prikaži i ime koje je svaki kontakt sam sebi postavio**: U odjeljku «Privatnost». Za kontakt kojem ste dali nadimak možete odabrati prikazuje li se pored njega i njegovo vlastito ime (poglavlje 3).
 - **Blokiranje**: Možete blokirati dosadne osobe. Od blokiranih osoba ne stiže nikakva veza.
 
 ---
@@ -141,11 +144,21 @@ Na uređajima koji ne mogu automatski očitati razinu baterije (kao što je preg
 Identitet Breezea samo je ključ u vašem uređaju. Na poslužitelju ne postoji popis računa, a ni autor nema vaš ključ.
 **Ako izgubite uređaj, gubite i identitet.** Za važne identitete obavezno napravite sigurnosnu kopiju.
 
-Sigurnosna kopija i oporavak rade se iz odjeljka «Sigurnosna kopija i oporavak» u postavkama (postoje tri gumba: «Sigurnosna kopija u oblak», «Vrati» i «Vrati iz datoteke»). Kad prvi put dodate kontakt, jednom se pojavljuje kartica koja vas potiče da napravite sigurnosnu kopiju.
+Sigurnosna kopija i oporavak rade se iz odjeljka «Sigurnosna kopija i oporavak» u postavkama (gumbi su «Izradi sigurnosnu kopiju», «Vrati sigurnosnu kopiju» i «Vrati iz datoteke»). Kad prvi put dodate kontakt, jednom se pojavljuje kartica koja vas potiče da napravite sigurnosnu kopiju.
 
-### Kako napraviti sigurnosnu kopiju
+### Automatska sigurnosna kopija
 
-1. Iz «Sigurnosne kopije i oporavka» u postavkama odaberite da napravite sigurnosnu kopiju.
+Postavka «Automatska sigurnosna kopija» uključena je od početka. Kada se vaši podaci promijene, šifrirana sigurnosna kopija automatski se šalje na relejni poslužitelj koji sami hostate.
+
+- Ne šalje se pri svakoj promjeni: čeka 30 sekundi nakon posljednje promjene i sve šalje zajedno. Pokušaji su razmaknuti najmanje 15 minuta.
+- Dok ste izvan mreže, ništa se ne šalje; promjene se zadržavaju i šalju kada se veza vrati i kada otvorite aplikaciju.
+- Za automatsko slanje potrebno je zaporku sigurnosne kopije unijeti jednom na tom uređaju (kada je potrebno, u odjeljku postavki pojavljuje se gumb «Unesi zaporku»). **Zaporka se ne pohranjuje.** Pamti se samo dok je aplikacija otvorena i nestaje kada je zatvorite. Za identitet s jednostavnim oporavkom, odmah nakon što unesete zaporku pri registraciji ili ažuriranju, slanje radi kako jest.
+- Ako relejni poslužitelj ne podržava pohranu sigurnosnih kopija, automatska sigurnosna kopija ne radi. To se prikazuje u odjeljku postavki.
+- Stanje (kada je bilo posljednje uspješno slanje, čekaju li promjene, je li slanje nije uspjelo) prikazuje se u odjeljku postavki.
+
+### Kako napraviti sigurnosnu kopiju (ručno)
+
+1. Iz «Sigurnosne kopije i oporavka» u postavkama odaberite «Izradi sigurnosnu kopiju».
 2. Postavite lozinku za sigurnosnu kopiju (6 znakova ili više).
 3. Odaberite mjesto čuvanja.
    - **Čuvanje u datoteku**: Datoteku sigurnosne kopije čuvajte kod sebe (preporučeno).
@@ -157,11 +170,23 @@ Sadržaj sigurnosne kopije je šifriran. Poslužitelj na mjestu čuvanja radi sa
 
 Na novom uređaju oporavite koristeći datoteku sigurnosne kopije (ili sigurnosnu kopiju na relejnom poslužitelju) i lozinku koju ste postavili.
 
+Ako ste upravo vratili identitet frazom za oporavak, a sigurnosna kopija tog identiteta nalazi se na relejnom poslužitelju, automatski se pronalazi i pita vas se s «Pronađena sigurnosna kopija». Ako je vratite, podaci na tom uređaju bit će zamijenjeni sadržajem sigurnosne kopije.
+
+### Prelazak na novi uređaj
+
+Pritisnite gumb «Prelazak na novi uređaj» u odjeljku «Sigurnosna kopija i oporavak» u postavkama i koraci će biti prikazani.
+
+1. Na trenutačnom uređaju sačuvajte sigurnosnu kopiju na relejnom poslužitelju (automatska sigurnosna kopija ili «Izradi sigurnosnu kopiju»).
+2. Na novom uređaju odaberite način oporavka na prvom zaslonu i unesite frazu za oporavak (ili naziv računa i zaporku).
+3. Kada se identitet vrati, sigurnosna kopija na poslužitelju automatski se pronalazi i nudi se vraćanje.
+
+Nisu potrebni kabeli ni predaja datoteka.
+
 ### Napomene
 
 - **Ako zaboravite lozinku, oporavak nije moguć.** Ni autor to ne može popraviti. Lozinku zapišite na drugom mjestu.
-- **Jednokratni identiteti ne vraćaju se ni sigurnosnom kopijom ni oporavkom.**
-- Sigurnosnu kopiju ponovno napravite kad se identiteti dodaju ili kad promijenite uređaj.
+- Unos zaporke za automatsku sigurnosnu kopiju potreban je na svakom uređaju. Na novom je uređaju unesite još jednom.
+- Ručnu sigurnosnu kopiju ponovno napravite kada se broj identiteta poveća ili kada promijenite uređaj.
 
 ---
 

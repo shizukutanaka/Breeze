@@ -20,7 +20,7 @@ Dari [halaman unduhan](https://github.com/shizukutanaka/Breeze/releases/latest),
 - Windows: yang namanya berakhiran `-win-x64.exe` (ada juga untuk mesin ARM)
 - Mac: yang namanya berakhiran `-mac.dmg`
 - Linux: `.AppImage` (dapat langsung dijalankan) atau `.deb`
-- Untuk menggunakannya di browser, gunakan versi yang dihosting di server Anda sendiri (langkah pemasangan ada di dokumen terpisah "Panduan Pemasangan")
+- Untuk menggunakannya di browser, gunakan versi yang dihosting di server Anda sendiri (langkah pemasangan ada di dokumen terpisah "Panduan Pemasangan"). Penyiapan standar menggunakan Cloudflare, jadi akun Cloudflare diperlukan
 
 Setiap file disertai nilai untuk verifikasi (SHA256SUMS.txt). Jika Anda mau, Anda dapat memeriksa apakah nilai file yang Anda unduh cocok.
 
@@ -29,20 +29,20 @@ Setiap file disertai nilai untuk verifikasi (SHA256SUMS.txt). Jika Anda mau, And
 ### Pengaturan pertama
 
 1. Buka aplikasinya.
-2. Masukkan nama Anda dan tekan "Buat akun". Hanya itu — Anda siap. Tanpa pendaftaran, tanpa nomor telepon.
+2. Tekan "Mulai dengan ID acak". Hanya itu — Anda siap. Tanpa pendaftaran, tanpa nomor telepon.
 
-- Jika Anda ingin mengembalikan identitas yang pernah Anda buat sebelumnya, buka "Pulihkan akun yang sudah ada" dan cara-cara pemulihan (file cadangan, frasa pemulihan, dan sebagainya) akan muncul.
+- Jika Anda memasukkan "Nama Anda (nama tampilan)" di kolom di atas tombol, Anda mulai dengan nama itu. Anda juga dapat menekan tombol dengan kolom dibiarkan kosong. Anda dapat mengubah nama tampilan nanti, di bagian profil pada pengaturan.
+- Ada juga cara untuk membuat identitas dengan nama dan Breeze ID yang Anda pilih sendiri. Dalam hal itu, frasa pemulihan diterbitkan dan ditampilkan di layar. Frasa pemulihan adalah kata-kata yang memungkinkan Anda mengembalikan identitas itu di perangkat lain. Tuliskan di kertas atau di tempat yang aman.
+- Jika Anda ingin mengembalikan identitas yang pernah Anda buat sebelumnya, buka "Pulihkan akun yang sudah ada" dan cara-cara pemulihan (pulihkan dari berkas cadangan, pulihkan dengan frasa pemulihan, pulihkan dengan akun + frasa sandi) akan muncul.
 - Ketika pembuatan selesai, sebuah kartu muncul yang memandu Anda untuk melindungi kunci Anda dengan frasa sandi (kartu itu tidak hilang setelah beberapa saat). Untuk identitas yang penting, ikuti panduan tersebut dan tambahkan perlindungannya.
 
 Pada saat ini, sebuah "kunci" dibuat di dalam perangkat Anda. Itulah identitas Anda.
 **Tidak ada daftar akun di server.** Identitas Anda hanya ada di dalam perangkat Anda.
 Hal ini menjadi penting dalam bab cadangan (9).
 
-### Tentang "identitas sekali pakai"
+### Tentang "identitas sekali pakai" yang dulu ada
 
-Jika Anda memilih "identitas sekali pakai" saat membuatnya, Anda akan mendapatkan identitas yang sama sekali tidak memiliki cara untuk dipulihkan.
-Jika Anda kehilangan perangkat itu, mengaturnya ulang, atau menghapus data browser Anda, identitas itu tidak akan pernah kembali.
-Hal ini juga dinyatakan di layar. Jangan memilih ini untuk identitas yang berencana Anda gunakan dalam jangka panjang.
+"Identitas sekali pakai" — identitas yang sama sekali tidak memiliki cara untuk dipulihkan — sudah tidak ada. Dengan cara-cara pembuatan identitas saat ini, setiap identitas dapat dilindungi dengan cadangan.
 
 ---
 
@@ -73,6 +73,7 @@ Jika orang lain juga membuka aplikasinya, Anda terhubung langsung dan dapat berb
 
 - **Status pengiriman**: Dapat diketahui dari tanda di samping pesan. ✓ berarti terkirim, ✓ di dalam lingkaran berarti telah dititipkan di kotak surat, ✓✓ berarti telah sampai ke orang lain, sudah dibaca adalah tanda biru, dan gagal adalah tanda merah. Tanda-tanda itu dibedakan dari bentuknya selain dari warnanya.
 - **Daftar kontak**: Waktu terakhir Anda berbicara ditampilkan sebagai jam untuk hari ini, "Kemarin" untuk kemarin, bulan/tanggal untuk tahun ini, dan tahun/bulan/tanggal untuk yang lebih lama. Kontak dengan pesan yang belum dibaca nama dan waktunya ditonjolkan.
+- **Nama untuk kontak**: Buka "Info kontak" (di menu klik kanan pada sebuah kontak, atau menu "⋮" pada percakapan) dan Anda dapat menetapkan nama Anda sendiri untuk kontak itu (nama panggilan). Nama panggilan hanya disimpan di perangkat ini dan tidak pernah dikirim ke kontak atau server relay. Ketika Anda menetapkan nama panggilan, nama yang ditetapkan kontak itu untuk dirinya sendiri juga ditampilkan di sampingnya dengan warna yang redup. Anda dapat mematikan nama kedua itu dengan "Tampilkan juga nama yang ditetapkan setiap kontak untuk dirinya sendiri" di bagian "Privasi" pada pengaturan.
 - **Kartu Anda sendiri**: Di bagian atas daftar ada kartu profil Anda sendiri; tekan untuk membuka profil Anda. Kartu itu ikut bergulir bersama daftar.
 - **Tab bawah di ponsel**: Pada lebar ponsel, tab "Kontak" dan "Pengaturan" muncul di bagian bawah layar.
 - **Kepala percakapan**: Dari ikon pencarian Anda dapat mencari di dalam percakapan. Dari menu "⋮" Anda dapat memeriksa nomor keamanan, membisukan notifikasi, menyematkan, membuat jajak pendapat, dan lainnya.
@@ -107,6 +108,7 @@ Beberapa operasi, seperti pengaturan dan penautan perangkat, dilakukan melalui p
 - Anda dapat membuat banyak akun dan menggunakannya untuk tujuan yang berbeda (misalnya untuk pekerjaan dan pribadi). Jumlah perangkat dan akun gratis dan tidak terbatas.
 - **Cara membuat akun**: Tekan tombol "+" di samping tab akun di bagian paling atas daftar kontak. Masukkan nama dan pilih emoji ikon, maka akun baru dibuat dan otomatis beralih ke akun itu.
 - **Beralih akun**: Tab akun selalu ditampilkan di bagian paling atas daftar kontak. Tekan salah satu untuk beralih (di komputer Anda juga dapat beralih dengan Ctrl+1–9). Tekan dan tahan sebuah tab untuk mengganti namanya, mengubah ikonnya, atau menghapusnya.
+- Kontak dan kunci terpisah untuk setiap akun. Tukarkan kontak lagi untuk setiap akun.
 - Bahasa dipilih secara otomatis dari 51 bahasa, termasuk Inggris, disesuaikan dengan bahasa perangkat Anda.
 
 ---
@@ -117,6 +119,7 @@ Pengaturan terbuka sebagai layarnya sendiri. Di ponsel, buka dari tab "Pengatura
 
 - **Kunci otomatis**: Ada pengaturan yang mengunci secara otomatis ketika Anda berpindah tab.
 - **Frasa sandi kunci**: Anda dapat melindungi kunci di dalam perangkat Anda dengan membungkusnya dalam frasa sandi. Anda akan diminta memasukkannya ketika membuka aplikasi.
+- **Tampilkan juga nama yang ditetapkan setiap kontak untuk dirinya sendiri**: Di bagian "Privasi". Untuk kontak yang telah Anda beri nama panggilan, Anda dapat memilih apakah nama mereka sendiri ditampilkan di sampingnya (bab 3).
 - **Memblokir**: Anda dapat memblokir orang yang mengganggu. Pesan dari orang yang diblokir tidak akan sampai.
 
 ---
@@ -141,11 +144,21 @@ Pada perangkat yang tidak dapat membaca tingkat baterai secara otomatis (seperti
 Di Breeze, identitas Anda hanyalah kunci di dalam perangkat Anda. Tidak ada daftar akun di server, dan pembuatnya pun tidak memiliki kunci Anda.
 **Jika Anda kehilangan perangkat Anda, Anda juga kehilangan identitas Anda.** Selalu buat cadangan untuk identitas yang penting bagi Anda.
 
-Pencadangan dan pemulihan dilakukan dari bagian "Cadangan dan pemulihan" pada pengaturan (ada tiga tombol: "Cadangkan ke cloud", "Pulihkan", dan "Pulihkan dari file"). Pertama kali Anda menambahkan kontak, sebuah kartu yang menganjurkan Anda membuat cadangan muncul satu kali saja.
+Pencadangan dan pemulihan dilakukan dari bagian "Cadangan dan pemulihan" pada pengaturan (tombol-tombolnya adalah "Buat Cadangan", "Pulihkan Cadangan", dan "Pulihkan dari file"). Pertama kali Anda menambahkan kontak, sebuah kartu yang menganjurkan Anda membuat cadangan muncul satu kali saja.
 
-### Cara membuat cadangan
+### Cadangan otomatis
 
-1. Dari "Cadangan dan pemulihan" di pengaturan, pilih untuk membuat cadangan.
+Pengaturan "Cadangan otomatis" aktif sejak awal. Ketika data Anda berubah, cadangan terenkripsi dikirim secara otomatis ke server relay yang Anda hosting.
+
+- Cadangan tidak dikirim pada setiap perubahan: cadangan menunggu 30 detik setelah perubahan terakhir dan mengirim semuanya bersamaan. Upaya pengiriman diberi jarak setidaknya 15 menit.
+- Selagi Anda offline, tidak ada yang dikirim; perubahan ditahan dan dikirim ketika koneksi kembali dan ketika Anda membuka aplikasi.
+- Untuk pengiriman otomatis, Anda perlu memasukkan frasa sandi cadangan satu kali di perangkat itu (ketika diperlukan, tombol "Masukkan frasa sandi" muncul di bagian pengaturan). **Frasa sandi tidak disimpan.** Frasa sandi hanya diingat selagi aplikasi terbuka, dan hilang ketika Anda menutupnya. Untuk identitas pemulihan sederhana, tepat setelah Anda memasukkan frasa sandi saat pendaftaran atau pembaruan, pengiriman bekerja apa adanya.
+- Jika server relay tidak mendukung penyimpanan cadangan, cadangan otomatis tidak berjalan. Hal itu ditampilkan di bagian pengaturan.
+- Keadaannya (kapan pengiriman terakhir yang berhasil, apakah ada perubahan yang menunggu, apakah pengiriman gagal) ditampilkan di bagian pengaturan.
+
+### Cara membuat cadangan (manual)
+
+1. Dari "Cadangan dan pemulihan" di pengaturan, pilih "Buat Cadangan".
 2. Tetapkan frasa sandi untuk cadangan (6 karakter atau lebih).
 3. Pilih tujuannya.
    - **Simpan ke file**: Simpan file cadangan pada diri Anda sendiri (disarankan).
@@ -157,11 +170,23 @@ Isi cadangan terenkripsi. Server penyimpanan hanya menangani teks sandi (ciphert
 
 Pada perangkat baru, pulihkan menggunakan file cadangan (atau cadangan di server relay) dan frasa sandi yang Anda tetapkan.
 
+Jika Anda baru saja mengembalikan identitas Anda dengan frasa pemulihan, dan cadangan identitas itu ada di server relay, cadangan itu ditemukan secara otomatis dan Anda ditanya dengan "Cadangan ditemukan". Jika Anda memulihkannya, data di perangkat itu digantikan oleh isi cadangan.
+
+### Pindah ke perangkat baru
+
+Tekan tombol "Pindah ke perangkat baru" di bagian "Cadangan dan pemulihan" pada pengaturan dan langkah-langkahnya ditampilkan.
+
+1. Di perangkat Anda saat ini, simpan cadangan di server relay (cadangan otomatis, atau "Buat Cadangan").
+2. Di perangkat baru, pilih cara pemulihan di layar pertama dan masukkan frasa pemulihan Anda (atau nama akun dan frasa sandi Anda).
+3. Ketika identitas Anda kembali, cadangan di server ditemukan secara otomatis dan pemulihan ditawarkan.
+
+Tidak perlu kabel atau penyerahan file.
+
 ### Catatan
 
 - **Jika Anda lupa frasa sandi, pemulihan tidak mungkin dilakukan.** Pembuatnya pun tidak dapat memperbaikinya. Tuliskan frasa sandi di tempat terpisah.
-- **Identitas sekali pakai tidak dapat dikembalikan, baik dengan cadangan maupun pemulihan.**
-- Buat ulang cadangan Anda ketika Anda menambah identitas atau mengganti perangkat.
+- Memasukkan frasa sandi untuk cadangan otomatis diperlukan di setiap perangkat. Di perangkat baru, masukkan sekali lagi.
+- Buat ulang cadangan manual ketika identitas Anda bertambah atau ketika Anda mengganti perangkat.
 
 ---
 

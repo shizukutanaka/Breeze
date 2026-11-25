@@ -20,7 +20,7 @@ Bu təlimat istifadəyə başlayanlar üçün bələdçidir.
 - Windows: adı `-win-x64.exe` ilə bitən (ARM cihazları üçün də var)
 - Mac: adı `-mac.dmg` ilə bitən
 - Linux: `.AppImage` (birbaşa icra oluna bilər) və ya `.deb`
-- Brauzerdə istifadə edirsinizsə, öz serverinizə yerləşdirdiyinizdən istifadə edin (yerləşdirmə addımları ayrıca sənəddə, «Yerləşdirmə təlimatı»nda verilib)
+- Brauzerdə istifadə edirsinizsə, öz serverinizə yerləşdirdiyinizdən istifadə edin (yerləşdirmə addımları ayrıca sənəddə, «Yerləşdirmə təlimatı»nda verilib) Standart quraşdırma Cloudflare-dan istifadə edir, buna görə Cloudflare hesabı tələb olunur.
 
 Hər fayla yoxlama rəqəmi (SHA256SUMS.txt) əlavə olunub. İstəsəniz, yüklədiyiniz faylın rəqəminin uyğun gəlib-gəlmədiyini yoxlaya bilərsiniz.
 
@@ -29,20 +29,20 @@ Hər fayla yoxlama rəqəmi (SHA256SUMS.txt) əlavə olunub. İstəsəniz, yükl
 ### İlkin quraşdırma
 
 1. Tətbiqi açın.
-2. Adınızı daxil edin və «Hesab yarat» düyməsini basın. Hazırlıq bununla bitir. Nə qeydiyyat, nə də telefon nömrəsi lazımdır.
+2. «Təsadüfi ID ilə başla» düyməsini basın. Hazırlıq bununla bitir. Nə qeydiyyat, nə də telefon nömrəsi lazımdır.
 
-- Əvvəllər yaratdığınız şəxsiyyəti geri qaytarmaq istəyirsinizsə, «Mövcud hesabı bərpa et» bölməsini açın və bərpa üsulları (ehtiyat nüsxə faylı, bərpa ifadəsi və s.) görünəcək.
+- Düymənin üstündəki sahəyə «Adınız (göstərilən ad)» daxil etsəniz, həmin adla başlayırsınız. Sahəni boş qoyub düyməni də basa bilərsiniz. Göstərilən adı sonra parametrlərin profil bölməsində dəyişə bilərsiniz.
+- Özünüz seçdiyiniz ad və Breeze ID-si ilə şəxsiyyət yaratmağın da yolu var. Bu halda bərpa ifadəsi verilir və ekranda göstərilir. Bərpa ifadəsi həmin şəxsiyyəti başqa cihazda geri qaytarmağa imkan verən sözlərdir. Onu kağıza və ya təhlükəsiz yerə yazın.
+- Əvvəllər yaratdığınız şəxsiyyəti geri qaytarmaq istəyirsinizsə, «Mövcud hesabı bərpa et» bölməsini açın və bərpa üsulları (ehtiyat nüsxə faylından bərpa et, bərpa ifadəsi ilə bərpa et, hesab + parol ifadəsi ilə bərpa et) görünəcək.
 - Yaratma bitəndə açarınızı parol ifadəsi ilə qorumağa yönəldən kart görünür (bir müddət sonra yox olmur). Vacib şəxsiyyət üçün təlimata əməl edin və qorumanı əlavə edin.
 
 Bu zaman cihazınızın içində «açar» yaradılır. O, sizin şəxsiyyətinizin özüdür.
 **Hesabların siyahısı serverdə yoxdur.** Şəxsiyyət yalnız sizin cihazınızdadır.
 Bu məqam ehtiyat nüsxə fəslində (9) vacib olacaq.
 
-### «Birdəfəlik şəxsiyyət» haqqında
+### Keçmiş «birdəfəlik şəxsiyyət» haqqında
 
-Yaradarkən «birdəfəlik şəxsiyyət» seçsəniz, heç bir bərpa vasitəsi olmayan şəxsiyyət yaranır.
-Həmin cihazı itirsəniz, sıfırlasanız və ya brauzer məlumatlarını silsəniz, o şəxsiyyət bir daha geri qayıtmır.
-Bu, ekranda da göstərilir. Uzun müddət istifadə edəcəyiniz şəxsiyyət üçün seçməyin.
+«Birdəfəlik şəxsiyyət» — heç bir bərpa vasitəsi olmayan şəxsiyyət — artıq yoxdur. Hazırkı şəxsiyyət yaratma üsulları ilə hər şəxsiyyət ehtiyat nüsxə ilə qoruna bilər.
 
 ---
 
@@ -73,6 +73,7 @@ Qarşı tərəf də tətbiqi açıbsa, birbaşa qoşulub söhbət edə bilərsin
 
 - **Göndərmə vəziyyəti**: Mesajın yanındakı işarədən anlaya bilərsiniz. ✓ göndərilib deməkdir, dairə içindəki ✓ saxlama qutusuna qoyulub deməkdir, ✓✓ qarşı tərəfə çatıb deməkdir, oxunub mavi işarədir, uğursuzluq isə qırmızı işarədir. Onlar rənglə yanaşı forma ilə də fərqlənir.
 - **Kontakt siyahısı**: Son danışdığınız vaxt bu gün üçün saat kimi, dünən üçün «Dünən», bu il üçün ay/gün, daha əvvəlkilər üçün il/ay/gün kimi göstərilir. Oxunmamış mesajları olan kontaktların adı və vaxtı vurğulanır.
+- **Kontaktlar üçün adlar**: «Kontakt məlumatı»nı açın (kontaktın sağ klik menyusunda və ya söhbətin «⋮» menyusunda) və həmin kontakt üçün öz adınızı təyin edə bilərsiniz (ləqəb). Ləqəblər yalnız bu cihazda saxlanılır və heç vaxt kontakta və ya ötürücü serverə göndərilmir. Ləqəb təyin edəndə kontaktın özü üçün təyin etdiyi ad da yanında solğun rənglə göstərilir. Həmin ikinci adı parametrlərin «Məxfilik» bölməsindəki «Hər kontaktın özü üçün təyin etdiyi adı da göstər» ilə söndürə bilərsiniz.
 - **Öz kartınız**: Siyahının yuxarısında öz profil kartınız var; profilinizi açmaq üçün ona basın. Siyahı ilə birlikdə sürüşür.
 - **Telefonda alt vərəqlər**: Telefon enində ekranın alt hissəsində «Kontaktlar» və «Parametrlər» vərəqləri görünür.
 - **Söhbət başlığı**: Axtarış nişanından söhbət daxilində axtarış edə bilərsiniz. «⋮» menyusundan təhlükəsizlik nömrəsini yoxlaya, bildirişləri susdura, bərkidə, sorğu yarada və daha çoxunu edə bilərsiniz.
@@ -107,6 +108,7 @@ Parametrlər və cihazların əlaqələndirilməsi kimi bəzi əməliyyatlar əm
 - Hesabları bir neçə yaradıb ayrı-ayrı istifadə etmək olar (məsələn, iş və şəxsi). Həm cihaz sayı, həm də hesab sayı pulsuz və limitsizdir.
 - **Hesab necə yaradılır**: Kontakt siyahısının ən yuxarısındakı hesab vərəqlərinin yanındakı «+» düyməsini basın. Ad daxil edib emoji nişanı seçin, yeni hesab yaradılacaq və avtomatik ona keçiləcək.
 - **Hesabları dəyişmək**: Hesab vərəqləri həmişə kontakt siyahısının ən yuxarısında göstərilir. Keçmək üçün birinə basın (kompüterdə Ctrl+1–9 ilə də keçə bilərsiniz). Vərəqi basıb saxlayaraq adını dəyişə, nişanını dəyişə və ya silə bilərsiniz.
+- Kontaktlar və açarlar hər hesab üçün ayrıdır. Hər hesab üçün kontaktları yenidən mübadilə edin.
 - Dil ingilis dili daxil olmaqla 51 dildən cihazınızın dilinə uyğun avtomatik seçilir.
 
 ---
@@ -117,6 +119,7 @@ Parametrlər öz ekranı kimi açılır. Telefonda onları ekranın alt hissəsi
 
 - **Avtomatik kilid**: Vərəqi dəyişəndə avtomatik kilidləyən parametr var.
 - **Açar parol ifadəsi**: Cihazın içindəki açarı parol ifadəsi ilə sarıyıb qorumaq olar. Tətbiqi açanda daxil etməyiniz istənilir.
+- **Hər kontaktın özü üçün təyin etdiyi adı da göstər**: «Məxfilik» bölməsində. Ləqəb verdiyiniz kontakt üçün onun öz adının yanında göstərilib-göstərilməməsini seçə bilərsiniz (fəsil 3).
 - **Bloklama**: Narahat edən şəxsləri bloklamaq olar. Bloklanmış şəxslərdən əlaqə gəlmir.
 
 ---
@@ -141,11 +144,21 @@ Batareya səviyyəsini avtomatik oxuya bilməyən cihazlarda (iPhone brauzeri ki
 Breeze şəxsiyyəti yalnız cihazınızdakı açardır. Serverdə hesabların siyahısı yoxdur və yaradanın da sizin açarınız yoxdur.
 **Cihazı itirsəniz, şəxsiyyəti də itirirsiniz.** Vacib şəxsiyyətlər üçün mütləq ehtiyat nüsxə yaradın.
 
-Ehtiyat nüsxə və bərpa parametrlərin «Ehtiyat nüsxə və bərpa» bölməsindən edilir (üç düymə var: «Buluda ehtiyat nüsxə», «Bərpa et» və «Fayldan bərpa et»). Kontaktı ilk dəfə əlavə edəndə ehtiyat nüsxə yaratmağa çağıran kart yalnız bir dəfə görünür.
+Ehtiyat nüsxə və bərpa parametrlərin «Ehtiyat nüsxə və bərpa» bölməsindən edilir (düymələr «Ehtiyat nüsxə yarat», «Ehtiyat nüsxəni bərpa et» və «Fayldan bərpa et»dir). Kontaktı ilk dəfə əlavə edəndə ehtiyat nüsxə yaratmağa çağıran kart yalnız bir dəfə görünür.
 
-### Ehtiyat nüsxə yaratmaq
+### Avtomatik ehtiyat nüsxə
 
-1. Parametrlərdəki «Ehtiyat nüsxə və bərpa» bölməsindən ehtiyat nüsxə yaratmağı seçin.
+«Avtomatik ehtiyat nüsxə» parametri əvvəldən açıqdır. Məlumatlarınız dəyişəndə şifrələnmiş ehtiyat nüsxə avtomatik olaraq yerləşdirdiyiniz ötürücü serverə göndərilir.
+
+- Hər dəyişiklikdə göndərmir: son dəyişiklikdən sonra 30 saniyə gözləyir və hamısını birlikdə göndərir. Cəhdlər ən azı 15 dəqiqə ara ilə edilir.
+- Oflayn olanda heç nə göndərilmir; dəyişikliklər saxlanılır və bağlantı qayıdanda və tətbiqi açanda göndərilir.
+- Avtomatik göndərmə üçün ehtiyat nüsxə parol ifadəsini həmin cihazda bir dəfə daxil etməlisiniz (lazım olanda parametrlər bölməsində «Parol ifadəsini daxil et» düyməsi görünür). **Parol ifadəsi saxlanılmır.** Yalnız tətbiq açıq olanda yadda qalır, bağlayanda yox olur. Sadə bərpa şəxsiyyəti üçün qeydiyyat və ya yeniləmə zamanı parol ifadəsini daxil etdikdən dərhal sonra göndərmə olduğu kimi işləyir.
+- Ötürücü server ehtiyat nüsxələri saxlamağı dəstəkləmirsə, avtomatik ehtiyat nüsxə işləmir. Bu, parametrlər bölməsində göstərilir.
+- Vəziyyət (son uğurlu göndərmənin vaxtı, dəyişikliklərin gözləyib-gözləmədiyi, göndərmənin uğursuz olub-olmadığı) parametrlər bölməsində göstərilir.
+
+### Ehtiyat nüsxə yaratmaq (əl ilə)
+
+1. Parametrlərdəki «Yedəkləmə və bərpa» bölməsindən «Ehtiyat nüsxə yarat» seçin.
 2. Ehtiyat nüsxə üçün parol ifadəsi təyin edin (6 simvol və ya daha çox).
 3. Saxlama yerini seçin.
    - **Fayla saxlamaq**: Ehtiyat nüsxə faylını özünüzdə saxlayın (tövsiyə olunur).
@@ -157,11 +170,23 @@ Ehtiyat nüsxənin məzmunu şifrələnib. Saxlama yerindəki serverin işlədiy
 
 Yeni cihazda ehtiyat nüsxə faylından (və ya ötürücü serverdəki ehtiyat nüsxədən) və təyin etdiyiniz parol ifadəsindən istifadə edərək bərpa edin.
 
+Şəxsiyyətinizi bərpa ifadəsi ilə indicə geri qaytarmısınızsa və həmin şəxsiyyətin ehtiyat nüsxəsi ötürücü serverdədirsə, o avtomatik tapılır və «Ehtiyat nüsxə tapıldı» ilə soruşulur. Onu bərpa etsəniz, bu cihazda olan məlumatlar ehtiyat nüsxənin məzmunu ilə əvəz olunur.
+
+### Yeni cihaza keçmək
+
+Parametrlərin «Yedəkləmə və bərpa» bölməsində «Yeni cihaza keç» düyməsini bassanız, addımlar göstərilir.
+
+1. Hazırkı cihazınızda ehtiyat nüsxəni ötürücü serverdə saxlayın (avtomatik ehtiyat nüsxə və ya «Ehtiyat nüsxə yarat»).
+2. Yeni cihazda ilk ekranda bərpa üsulunu seçin və bərpa ifadənizi daxil edin (və ya hesab adınızı və parol ifadənizi).
+3. Şəxsiyyətiniz geri qayıdanda serverdəki ehtiyat nüsxə avtomatik tapılır və bərpa təklif olunur.
+
+Heç bir kabel və ya fayl ötürməsi lazım deyil.
+
 ### Qeydlər
 
 - **Parol ifadəsini unutsanız, bərpa mümkün deyil.** Yaradan da düzəldə bilməz. Parol ifadəsini başqa yerdə yazıb saxlayın.
-- **Birdəfəlik şəxsiyyətlər nə ehtiyat nüsxə ilə, nə də bərpa ilə geri qayıtmır.**
-- Şəxsiyyətlər əlavə olunanda və ya cihaz dəyişəndə ehtiyat nüsxəni yenidən yaradın.
+- Avtomatik ehtiyat nüsxə üçün parol ifadəsini daxil etmək hər cihazda lazımdır. Yeni cihazda onu bir dəfə də daxil edin.
+- Şəxsiyyətləriniz artanda və ya cihaz dəyişəndə əl ilə ehtiyat nüsxəni yenidən yaradın.
 
 ---
 

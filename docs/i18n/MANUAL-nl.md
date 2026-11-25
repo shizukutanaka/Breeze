@@ -20,7 +20,7 @@ Kies op de [downloadpagina](https://github.com/shizukutanaka/Breeze/releases/lat
 - Windows: het bestand waarvan de naam eindigt op `-win-x64.exe` (er zijn er ook voor ARM-machines)
 - Mac: het bestand waarvan de naam eindigt op `-mac.dmg`
 - Linux: `.AppImage` (kan zo worden uitgevoerd) of `.deb`
-- Om het in de browser te gebruiken, gebruik je de versie die op je eigen server staat (de installatieprocedure staat in een apart document, de “installatiehandleiding”)
+- Om het in de browser te gebruiken, gebruik je de versie die op je eigen server staat (de installatieprocedure staat in een apart document, de “installatiehandleiding”). De standaardinstallatie gebruikt Cloudflare, dus er is een Cloudflare-account nodig.
 
 Bij elk bestand horen controlewaarden (SHA256SUMS.txt). Wie wil, kan controleren of de waarden van het gedownloade bestand overeenkomen.
 
@@ -29,20 +29,20 @@ Bij elk bestand horen controlewaarden (SHA256SUMS.txt). Wie wil, kan controleren
 ### Eerste instelling
 
 1. Open de app.
-2. Voer je naam in en druk op “Account aanmaken”. Daarmee is de voorbereiding klaar. Geen registratie en geen telefoonnummer nodig.
+2. Druk op “Start met een willekeurige ID”. Daarmee is de voorbereiding klaar. Geen registratie en geen telefoonnummer nodig.
 
-- Als je een eerder gemaakte identiteit wilt terughalen, open dan “Een bestaand account herstellen” en de herstelmethoden (een back-upbestand, een herstelzin enzovoort) verschijnen.
+- Als je in het veld boven de knop “Je naam (weergavenaam)” invoert, begin je met die naam. Je kunt ook op de knop drukken terwijl het veld leeg is. De weergavenaam kun je later wijzigen, in het profielgedeelte van de instellingen.
+- Er is ook een manier om een identiteit aan te maken met een naam en een Breeze-ID die je zelf kiest. In dat geval wordt er een herstelzin uitgegeven en op het scherm weergegeven. De herstelzin zijn de woorden waarmee je die identiteit op een ander apparaat kunt terughalen. Schrijf hem op papier of ergens veilig op.
+- Als je een eerder gemaakte identiteit wilt terughalen, open dan “Een bestaand account herstellen” en de herstelmethoden (herstellen vanuit een back-upbestand, herstellen met een herstelzin, herstellen met account + wachtwoordzin) verschijnen.
 - Als het aanmaken klaar is, verschijnt er een kaart die je begeleidt om je sleutel met een wachtwoordzin te beschermen (deze verdwijnt niet na een tijdje). Volg voor een belangrijke identiteit de begeleiding en voeg de bescherming toe.
 
 Op dat moment wordt er in je apparaat een “sleutel” gemaakt. Die is je identiteit zelf.
 **Er is geen lijst met accounts op de server.** Je identiteit bevindt zich alleen in je apparaat.
 Dit punt wordt belangrijk in het hoofdstuk over back-up (9).
 
-### Over de “wegwerpidentiteit”
+### Over de voormalige “wegwerpidentiteit”
 
-Als je bij het aanmaken “wegwerpidentiteit” kiest, wordt het een identiteit zonder enig middel tot herstel.
-Als je dat apparaat verliest, het terugzet naar fabrieksinstellingen of de browsergegevens wist, komt die identiteit nooit meer terug.
-Dat wordt ook op het scherm weergegeven. Kies dit niet voor een identiteit die je lang wilt gebruiken.
+De “wegwerpidentiteit” — een identiteit zonder enig middel tot herstel — is verdwenen. Met de huidige manieren om een identiteit aan te maken, kan elke identiteit met een back-up worden beschermd.
 
 ---
 
@@ -73,6 +73,7 @@ Als de andere persoon de app ook open heeft, maak je rechtstreeks verbinding en 
 
 - **Verzendstatus**: je ziet hem aan het teken naast een bericht. ✓ betekent verzonden, een ✓ in een cirkel betekent dat het in de wachtbak is gedeponeerd, ✓✓ betekent dat het de andere persoon heeft bereikt, gelezen is een blauw teken en mislukt is een rood teken. Ze worden zowel door vorm als door kleur onderscheiden.
 - **De contactenlijst**: de tijd van het laatste gesprek wordt weergegeven als de tijd voor vandaag, “Gisteren” voor gisteren, maand/dag voor dit jaar en jaar/maand/dag voor alles daarvoor. Contacten met ongelezen berichten hebben hun naam en tijd benadrukt.
+- **Namen voor contacten**: Open “Contactinfo” (in het rechtsklikmenu van een contact, of het menu “⋮” van het gesprek) en je kunt je eigen naam voor dat contact instellen (een bijnaam). Bijnamen worden alleen op dit apparaat bewaard en nooit naar het contact of de relayserver gestuurd. Als je een bijnaam instelt, wordt de naam die het contact zelf heeft ingesteld er ook naast weergegeven in een gedempte kleur. Je kunt die tweede naam uitzetten met “Toon ook de naam die elk contact zelf heeft ingesteld” in de sectie “Privacy” van de instellingen.
 - **Je eigen kaart**: bovenaan de lijst staat je eigen profielkaart; druk erop om je profiel te openen. Deze scrollt mee met de lijst.
 - **Onderste tabbladen op een telefoon**: bij telefoonbreedte verschijnen onderaan het scherm de tabbladen “Contacten” en “Instellingen”.
 - **De gespreksbovenkant**: via het zoekpictogram kun je binnen het gesprek zoeken. Via het menu “⋮” kun je het veiligheidsnummer controleren, meldingen dempen, vastzetten, een peiling maken en meer.
@@ -107,6 +108,7 @@ Sommige handelingen, zoals instellingen en het koppelen van apparaten, doe je me
 - Je kunt meerdere accounts aanmaken en apart gebruiken (bijv. werk en privé). Zowel het aantal apparaten als het aantal accounts is gratis en onbeperkt.
 - **Een account aanmaken**: druk op de knop “+” naast de accounttabbladen helemaal bovenaan de contactenlijst. Voer een naam in en kies een pictogram-emoji, en er wordt een nieuw account aangemaakt waar automatisch naartoe wordt overgeschakeld.
 - **Van account wisselen**: de accounttabbladen worden altijd helemaal bovenaan de contactenlijst weergegeven. Druk op een tabblad om te wisselen (op een computer kun je ook wisselen met Ctrl+1–9). Druk lang op een tabblad om het te hernoemen, het pictogram te wijzigen of het te verwijderen.
+- Contacten en sleutels zijn voor elk account apart. Wissel voor elk account opnieuw contacten uit.
 - De taal wordt automatisch gekozen uit 51 talen, waaronder Engels, afgestemd op de taal van je apparaat.
 
 ---
@@ -117,6 +119,7 @@ Instellingen openen als een eigen scherm. Open ze op een telefoon via het tabbla
 
 - **Automatisch vergrendelen**: er is een instelling om automatisch te vergrendelen bij het wisselen van tabblad.
 - **Wachtwoordzin voor de sleutel**: je kunt de sleutel in je apparaat beschermen met een wachtwoordzin. Bij het openen van de app wordt erom gevraagd.
+- **Toon ook de naam die elk contact zelf heeft ingesteld**: in de sectie “Privacy”. Voor een contact waaraan je een bijnaam hebt gegeven, kun je kiezen of hun eigen naam ernaast wordt weergegeven (hoofdstuk 3).
 - **Blokkeren**: je kunt vervelende personen blokkeren. Berichten van geblokkeerde personen komen niet aan.
 
 ---
@@ -141,11 +144,21 @@ Op apparaten die het batterijniveau niet automatisch kunnen lezen (zoals een iPh
 De identiteit van Breeze is alleen de sleutel in je apparaat. Er is geen lijst met accounts op de server, en ook de maker heeft jouw sleutel niet.
 **Als je je apparaat verliest, verlies je ook je identiteit.** Maak voor belangrijke identiteiten altijd een back-up.
 
-Back-up en herstel doe je vanuit de sectie “Back-up en herstel” van de instellingen (er zijn drie knoppen: “Back-up naar de cloud”, “Herstellen” en “Herstellen uit een bestand”). De eerste keer dat je een contact toevoegt, verschijnt er één keer een kaart die je aanspoort een back-up te maken.
+Back-up en herstel doe je vanuit de sectie “Back-up & herstel” van de instellingen (de knoppen zijn “Back-up maken”, “Back-up herstellen” en “Herstellen vanuit bestand”). De eerste keer dat je een contact toevoegt, verschijnt er één keer een kaart die je aanspoort een back-up te maken.
 
-### Een back-up maken
+### Automatische back-up
 
-1. Kies in “Back-up en herstel” in de instellingen voor het maken van een back-up.
+De instelling “Automatische back-up” staat vanaf het begin aan. Als je gegevens veranderen, wordt er automatisch een versleutelde back-up naar de relayserver gestuurd die je zelf host.
+
+- Hij stuurt niet bij elke verandering: hij wacht 30 seconden na de laatste verandering en stuurt alles samen. Pogingen worden minstens 15 minuten uit elkaar geplaatst.
+- Terwijl je offline bent, wordt er niets gestuurd; de veranderingen worden bewaard en gestuurd zodra de verbinding terug is en je de app opent.
+- Voor automatisch sturen moet je de wachtwoordzin voor de back-up één keer op dat apparaat invoeren (als dat nodig is, verschijnt er een knop “Wachtwoordzin invoeren” in de sectie van de instellingen). **De wachtwoordzin wordt niet bewaard.** Hij wordt alleen onthouden zolang de app open is, en is weg zodra je hem sluit. Bij een identiteit met eenvoudig herstel werkt het sturen meteen nadat je de wachtwoordzin bij registratie of bijwerken hebt ingevoerd.
+- Als de relayserver het bewaren van back-ups niet ondersteunt, werkt de automatische back-up niet. Dat wordt in de sectie van de instellingen weergegeven.
+- De status (wanneer de laatste geslaagde verzending was, of er veranderingen wachten, of een verzending is mislukt) wordt in de sectie van de instellingen weergegeven.
+
+### Een back-up maken (handmatig)
+
+1. Kies in “Back-up & herstel” in de instellingen voor “Back-up maken”.
 2. Stel een wachtwoordzin voor de back-up in (6 tekens of meer).
 3. Kies waar je hem opslaat.
    - **Opslaan in een bestand**: bewaar het back-upbestand bij jezelf (aanbevolen).
@@ -157,11 +170,23 @@ De inhoud van de back-up is versleuteld. De server waar hij wordt bewaard, heeft
 
 Herstel op een nieuw apparaat met het back-upbestand (of de back-up op de relayserver) en de wachtwoordzin die je hebt ingesteld.
 
+Als je je identiteit net hebt teruggehaald met een herstelzin, en er staat een back-up van die identiteit op de relayserver, wordt die automatisch gevonden en wordt je gevraagd met “Back-up gevonden”. Als je hem herstelt, worden de gegevens op dat apparaat vervangen door de inhoud van de back-up.
+
+### Verhuizen naar een nieuw apparaat
+
+Druk op de knop “Verhuizen naar een nieuw apparaat” in de sectie “Back-up & herstel” van de instellingen en de stappen worden weergegeven.
+
+1. Bewaar op je huidige apparaat een back-up op de relayserver (automatische back-up, of “Back-up maken”).
+2. Kies op het nieuwe apparaat op het eerste scherm een herstelmethode en voer je herstelzin in (of je accountnaam en wachtwoordzin).
+3. Als je identiteit terug is, wordt de back-up op de server automatisch gevonden en wordt herstel aangeboden.
+
+Er zijn geen kabels of bestandsoverdrachten nodig.
+
 ### Let op
 
 - **Als je de wachtwoordzin vergeet, is herstel niet mogelijk.** Ook de maker kan dat niet herstellen. Schrijf de wachtwoordzin ergens anders op.
-- **Wegwerpidentiteiten komen niet terug, ook niet via back-up of herstel.**
-- Maak de back-up opnieuw wanneer je identiteiten toevoegt of van apparaat wisselt.
+- De wachtwoordzin voor de automatische back-up moet op elk apparaat worden ingevoerd. Voer hem op een nieuw apparaat nog een keer in.
+- Maak een handmatige back-up opnieuw wanneer je identiteiten toenemen of wanneer je van apparaat wisselt.
 
 ---
 

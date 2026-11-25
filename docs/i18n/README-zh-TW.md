@@ -16,7 +16,7 @@
 
 Breeze 沒有「營運公司的伺服器」。**使用時，你要自己準備放置的地方（伺服器），把 Breeze 放在那裡。這才是正式的使用方式。**
 
-- 放置的地方用免費額度就夠了。在 Cloudflare 的免費額度內運作，也不需要信用卡。步驟在[安裝指南](SELF_HOSTING-zh-TW.md)裡（其他語言版本可從指南開頭選擇）。
+- 標準安裝使用 Cloudflare，因此**需要一個 Cloudflare 帳號**。步驟在[安裝指南](SELF_HOSTING-zh-TW.md)裡（其他語言版本可從指南開頭選擇）。
 - 應用程式（Windows / Mac / Linux / Android / iPhone）從[下載頁面](https://github.com/shizukutanaka/Breeze/releases/latest)取得，連接到自己的伺服器使用。
 - **關於範例安裝（誠實的說明）**: 放了一個用於確認運作的範例（https://breeze-469.pages.dev/）。放的是同一套軟體，但實際使用請在自己的伺服器上。範例可能會在沒有預告的情況下變更或停止。放在自己伺服器上的不受範例停止的影響。
 
@@ -24,7 +24,7 @@ Breeze 沒有「營運公司的伺服器」。**使用時，你要自己準備�
 
 ## 使用方法（3步）
 
-1. 打開放在自己伺服器上的 Breeze（或安裝的人告訴你的地址），輸入名字。這樣就準備完成了（不需要註冊，也不需要電話號碼）。這時裝置內部會產生「金鑰」，它就是你的身分。
+1. 打開放在自己伺服器上的 Breeze（或安裝的人告訴你的地址），按「使用隨機 ID 開始」（如果願意，也可以輸入名字）。這樣就準備完成了（不需要註冊，也不需要電話號碼）。這時裝置內部會產生「金鑰」，它就是你的身分。
 2. 把自己的 ID 或 QR 碼交給想對話的人。
 3. 對方也打開應用程式時，可以直接連接對話。對方沒打開時，會以加密狀態放在「保管箱」裡，對方打開時送達。搬運保管箱的伺服器讀不了內容。一直沒送達的信件最多 7 天後自動消失。
 
@@ -43,6 +43,8 @@ Breeze 沒有「營運公司的伺服器」。**使用時，你要自己準備�
 - 語音通話和視訊通話（群組通話最多 8 人）
 - 檔案傳送（一對一最大 50MB。群組也能傳，但大小上限較小）
 - 多台裝置、多個帳號分別使用（如工作用和私人用。台數和帳號數都免費且無限制）
+- 自動備份（有變化時，加密備份會自動保存到你自己的伺服器上。在新裝置上，復原身分後，會自動找到備份並向你提供。設定裡也會引導你移到新裝置）
+- 給每個聯絡人取一個你選的名字（你可以給每個聯絡人改名，只保存在這台裝置上。也可以選擇是否顯示對方自己設定的名字）
 - 51 種語言（英語加上 50 個語言檔案），根據裝置的語言自動選擇
 - 帶照片的個人資料、貼圖、位置資訊共享
 - `/help` 等指令操作（71 種）
@@ -114,7 +116,7 @@ npm test          # 執行測試
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## 授權
 

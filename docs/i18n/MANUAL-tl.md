@@ -20,7 +20,7 @@ Mula sa [pahina ng download](https://github.com/shizukutanaka/Breeze/releases/la
 - Windows: ang pangalan ay nagtatapos sa `-win-x64.exe` (mayroon din para sa mga ARM na makina)
 - Mac: ang pangalan ay nagtatapos sa `-mac.dmg`
 - Linux: `.AppImage` (maaaring patakbuhin agad) o `.deb`
-- Kung gagamit sa browser, gamitin ang inilagay mo sa sarili mong server (ang mga hakbang sa pag-install ay nasa hiwalay na dokumento, ang "gabay sa pag-install")
+- Kung gagamit sa browser, gamitin ang inilagay mo sa sarili mong server (ang mga hakbang sa pag-install ay nasa hiwalay na dokumento, ang "gabay sa pag-install") Ang karaniwang setup ay gumagamit ng Cloudflare, kaya kailangan ng Cloudflare account.
 
 Bawat file ay may kasamang mga numerong pangtapat (SHA256SUMS.txt). Kung nag-aalala ka, maaari mong tiyakin kung tumutugma ang mga numero ng na-download mong file.
 
@@ -29,20 +29,20 @@ Bawat file ay may kasamang mga numerong pangtapat (SHA256SUMS.txt). Kung nag-aal
 ### Unang pag-set up
 
 1. Buksan ang app.
-2. Ilagay ang iyong pangalan at pindutin ang "Gumawa ng account". Iyon lang, handa na. Walang rehistro, walang numero ng telepono.
+2. Pindutin ang "Magsimula gamit ang random na ID". Iyon lang, handa na. Walang rehistro, walang numero ng telepono.
 
-- Kung gusto mong ibalik ang pagkakakilanlang ginawa mo noon, buksan ang "Ibalik ang umiiral na account" at lalabas ang mga paraan ng pagbawi (backup na file, recovery phrase, at iba pa).
+- Kung ilalagay mo ang "Ang iyong pangalan (display name)" sa field sa itaas ng button, magsisimula ka sa pangalang iyon. Maaari mo ring pindutin ang button na walang laman ang field. Maaari mong baguhin ang display name mamaya, sa seksyon ng profile ng mga setting.
+- Mayroon ding paraan para gumawa ng pagkakakilanlan gamit ang pangalan at Breeze ID na ikaw mismo ang pumili. Sa ganoong kaso, may ibibigay na recovery phrase at ipapakita ito sa screen. Ang recovery phrase ay ang mga salitang magbabalik ng pagkakakilanlang iyon sa ibang device. Isulat ito sa papel o sa ligtas na lugar.
+- Kung gusto mong ibalik ang pagkakakilanlang ginawa mo noon, buksan ang "I-restore ang umiiral na account" at lalabas ang mga paraan ng pagbawi (i-restore mula sa backup file, i-recover gamit ang recovery phrase, i-restore gamit ang account + passphrase).
 - Kapag natapos ang paggawa, may lalabas na card na gagabay sa iyo para protektahan ang iyong susi gamit ang passphrase (hindi ito nawawala pagkalipas ng ilang panahon). Para sa mahalagang pagkakakilanlan, sundin ang gabay at idagdag ang proteksyon.
 
 Sa oras na ito, isang "susi" ang ginagawa sa loob ng device. Iyon ang mismong pagkakakilanlan mo.
 **Walang listahan ng mga account sa server.** Ang pagkakakilanlan mo ay nasa loob lamang ng iyong device.
 Mahalaga ang puntong ito sa kabanata ng backup (9).
 
-### Tungkol sa "pansamantalang pagkakakilanlan"
+### Tungkol sa dating "pansamantalang pagkakakilanlan"
 
-Kung pipiliin mo ang "pansamantalang pagkakakilanlan" sa paggawa, magiging pagkakakilanlan ito na walang anumang paraan ng pagbawi.
-Kung mawala mo ang device na iyon, i-reset ito, o burahin ang data ng browser, hindi na kailanman maibabalik ang pagkakakilanlang iyon.
-Ipinapakita rin ito sa screen. Huwag itong piliin para sa pagkakakilanlang matagal mong gagamitin.
+Ang "pansamantalang pagkakakilanlan" — isang pagkakakilanlang walang anumang paraan ng pagbawi — ay wala na. Sa kasalukuyang mga paraan ng paggawa ng pagkakakilanlan, ang bawat pagkakakilanlan ay mapoprotektahan ng backup.
 
 ---
 
@@ -73,6 +73,7 @@ Kung bukas din ang app ng kausap, maaari kayong direktang kumonekta at mag-usap.
 
 - **Katayuan ng pagpapadala**: Makikilala mo ito sa marka sa tabi ng mensahe. Ang ✓ ay nangangahulugang naipadala, ang ✓ sa loob ng bilog ay nangangahulugang nadeposito ito sa kahon ng imbakan, ang ✓✓ ay nangangahulugang nakarating ito sa kausap, ang nabasa ay asul na marka, at ang pagkabigo ay pulang marka. Pinag-iiba rin ang mga ito sa hugis, hindi lang sa kulay.
 - **Listahan ng mga contact**: Ang oras ng huling pag-uusap ay ipinapakita bilang oras para sa ngayon, "Kahapon" para sa kahapon, buwan/araw para sa taong ito, at taon/buwan/araw para sa mas maaga pa. Ang mga contact na may mensaheng hindi mo pa nababasa ay may diin sa pangalan at oras.
+- **Mga pangalan para sa mga contact**: Buksan ang "Impormasyon ng contact" (sa right-click menu ng isang contact, o sa menu na "⋮" ng usapan) at maaari kang magtakda ng sarili mong pangalan para sa contact na iyon (isang palayaw). Ang mga palayaw ay nakaimbak lamang sa device na ito at hindi kailanman ipinapadala sa contact o sa relay server. Kapag nagtakda ka ng palayaw, ipinapakita rin sa tabi nito, sa mapusyaw na kulay, ang pangalang itinakda ng contact para sa sarili. Maaari mong i-off ang pangalawang pangalang iyon gamit ang "Ipakita rin ang pangalang itinakda ng bawat contact para sa sarili" sa seksyong "Privacy" ng mga setting.
 - **Sarili mong card**: Sa itaas ng listahan ay ang sarili mong profile card; pindutin ito para buksan ang iyong profile. Gumagalaw ito kasama ng listahan.
 - **Mga tab sa ibaba sa telepono**: Sa lapad ng telepono, lalabas sa ibaba ng screen ang mga tab na "Mga contact" at "Mga setting".
 - **Header ng usapan**: Mula sa icon ng paghahanap, maaari kang maghanap sa loob ng usapan. Mula sa menu na "⋮", maaari mong tingnan ang safety number, i-mute ang mga notification, i-pin, gumawa ng poll, at iba pa.
@@ -107,6 +108,7 @@ Ang ilang operasyon, tulad ng mga setting at pag-link ng device, ay ginagawa sa 
 - Maaari kang gumawa ng maraming account at paghiwalayin ang gamit (para sa trabaho at personal, halimbawa). Walang limitasyon sa bilang ng device at account, at libre.
 - **Paano gumawa ng account**: Pindutin ang button na "+" sa tabi ng mga tab ng account sa pinakatuktok ng listahan ng mga contact. Maglagay ng pangalan at pumili ng emoji ng icon, at may bagong account na magagawa at awtomatikong lilipat dito.
 - **Pagpapalit ng account**: Ang mga tab ng account ay palaging ipinapakita sa pinakatuktok ng listahan ng mga contact. Pindutin ang isa para lumipat (sa computer, maaari ring lumipat gamit ang Ctrl+1–9). Pindutin nang matagal ang tab para palitan ang pangalan nito, baguhin ang icon nito, o burahin ito.
+- Hiwalay ang mga contact at susi para sa bawat account. Makipagpalitan ulit ng mga contact para sa bawat account.
 - Ang wika ay awtomatikong pinipili mula sa 51 wika, kasama ang Ingles, ayon sa wika ng iyong device.
 
 ---
@@ -117,6 +119,7 @@ Ang mga setting ay bumubukas bilang sarili nitong screen. Sa telepono, buksan it
 
 - **Awtomatikong pag-lock**: May setting na awtomatikong nagla-lock kapag lumipat ka ng tab.
 - **Passphrase ng susi**: Maaari mong balutin ng passphrase ang susi sa loob ng device para protektahan ito. Hihingin itong ilagay kapag binuksan mo ang app.
+- **Ipakita rin ang pangalang itinakda ng bawat contact para sa sarili**: Nasa seksyong "Privacy". Para sa contact na binigyan mo ng palayaw, maaari mong piliin kung ipapakita ang sarili nilang pangalan sa tabi nito (kabanata 3).
 - **Pag-block**: Maaari mong i-block ang mga nakakainis na kausap. Hindi darating ang mga mensahe mula sa mga naka-block na kausap.
 
 ---
@@ -141,11 +144,21 @@ Sa mga device na hindi awtomatikong makabasa ng antas ng baterya (tulad ng brows
 Ang pagkakakilanlan mo sa Breeze ay ang susi lamang sa loob ng iyong device. Walang listahan ng mga account sa server, at wala rin sa gumawa ang iyong susi.
 **Kung mawala mo ang device, mawawala rin ang pagkakakilanlan mo.** Para sa mahahalagang pagkakakilanlan, siguraduhing gumawa ng backup.
 
-Ang backup at pagbawi ay ginagawa mula sa seksyong "Backup at pagbawi" ng mga setting (may tatlong button: "I-back up sa cloud", "Ibalik", at "Ibalik mula sa file"). Sa unang beses na magdagdag ka ng contact, may lalabas na card na humihimok sa iyo na gumawa ng backup, isang beses lang.
+Ang backup at pagbawi ay ginagawa mula sa seksyong "Pag-backup at pag-restore" ng mga setting (ang mga button ay "Gumawa ng Backup", "I-restore ang Backup", at "📂 I-restore mula sa file"). Sa unang beses na magdagdag ka ng contact, may lalabas na card na humihimok sa iyo na gumawa ng backup, isang beses lang.
 
-### Paano gumawa ng backup
+### Awtomatikong backup
 
-1. Mula sa "Backup at pagbawi" sa mga setting, piliing gumawa ng backup.
+Ang setting na "Awtomatikong backup" ay naka-on mula sa simula. Kapag nagbago ang iyong data, awtomatikong ipinapadala ang naka-encrypt na backup sa relay server na ikaw ang nagho-host.
+
+- Hindi ito nagpapadala sa bawat pagbabago: naghihintay ito ng 30 segundo pagkatapos ng huling pagbabago at ipinapadala ang lahat nang sabay. Ang mga pagtatangka ay may pagitan na hindi bababa sa 15 minuto.
+- Habang offline ka, walang ipinapadala; ang mga pagbabago ay hinahawakan at ipinapadala kapag bumalik ang koneksyon at kapag binuksan mo ang app.
+- Para sa awtomatikong pagpapadala, kailangan mong ilagay ang backup passphrase nang isang beses sa device na iyon (kapag kailangan, may lalabas na button na "Ilagay ang passphrase" sa seksyon ng mga setting). **Hindi iniimbak ang passphrase.** Naaalala lang ito habang bukas ang app, at nawawala kapag isinara mo ito. Para sa pagkakakilanlang may simpleng pagbawi, pagkatapos mong ilagay ang passphrase sa rehistro o update, gumagana na agad ang pagpapadala.
+- Kung hindi sinusuportahan ng relay server ang pag-iimbak ng mga backup, hindi gagana ang awtomatikong backup. Ipinapakita iyon sa seksyon ng mga setting.
+- Ang estado (kung kailan ang huling matagumpay na pagpapadala, kung may mga pagbabagong naghihintay, kung nabigo ang pagpapadala) ay ipinapakita sa seksyon ng mga setting.
+
+### Paano gumawa ng backup (manu-mano)
+
+1. Mula sa "Pag-backup at pag-restore" sa mga setting, piliin ang "Gumawa ng Backup".
 2. Magtakda ng passphrase para sa backup (6 na karakter o higit pa).
 3. Piliin ang lugar ng pag-iimbak.
    - **I-save sa file**: Itago ang backup na file sa sarili mong mga kamay (inirerekomenda).
@@ -157,11 +170,23 @@ Naka-encrypt ang nilalaman ng backup. Ang hinahawakan lang ng server ng pag-iimb
 
 Sa bagong device, ibalik gamit ang backup na file (o ang backup sa relay server) at ang itinakda mong passphrase.
 
+Kung kababalik mo lang ng iyong pagkakakilanlan gamit ang recovery phrase, at may backup ng pagkakakilanlang iyon sa relay server, awtomatiko itong mahahanap at tatanungin ka ng "May nakitang backup." Kung ibabalik mo ito, ang data sa device na iyon ay papalitan ng nilalaman ng backup.
+
+### Paglipat sa bagong device
+
+Pindutin ang button na "Lumipat sa bagong device" sa seksyong "Pag-backup at pag-restore" ng mga setting at ipapakita ang mga hakbang.
+
+1. Sa kasalukuyan mong device, magtago ng backup sa relay server (awtomatikong backup, o "Gumawa ng Backup").
+2. Sa bagong device, pumili ng paraan ng pag-restore sa unang screen at ilagay ang iyong recovery phrase (o ang pangalan ng iyong account at passphrase).
+3. Kapag bumalik na ang iyong pagkakakilanlan, awtomatikong mahahanap ang backup sa server at iaalok ang pag-restore.
+
+Hindi kailangan ng mga cable o paglilipat ng file.
+
 ### Mga paalala
 
 - **Kung makalimutan mo ang passphrase, hindi na maibabalik.** Hindi rin ito maaayos ng gumawa. Isulat ang passphrase sa ibang lugar.
-- **Ang pansamantalang pagkakakilanlan ay hindi maibabalik sa pamamagitan ng backup o pagbawi.**
-- Gumawa ulit ng backup kapag dumami ang mga pagkakakilanlan o nagpalit ka ng device.
+- Ang paglalagay ng passphrase para sa awtomatikong backup ay kailangan sa bawat device. Sa bagong device, ilagay ito ulit nang isang beses.
+- Gumawa ulit ng manu-manong backup kapag dumami ang mga pagkakakilanlan o nagpalit ka ng device.
 
 ---
 

@@ -20,7 +20,7 @@ Vælg den fil på [downloadsiden](https://github.com/shizukutanaka/Breeze/releas
 - Windows: filer med navne, der slutter med `-win-x64.exe` (findes også til ARM-maskiner)
 - Mac: filer med navne, der slutter med `-mac.dmg`
 - Linux: `.AppImage` (kan køres direkte) eller `.deb`
-- Hvis du vil bruge den i browseren, bruger du den version, du har placeret på din egen server (installationsfremgangsmåden findes i det separate dokument "Installationsvejledningen")
+- Hvis du vil bruge den i browseren, bruger du den version, du har placeret på din egen server (installationsfremgangsmåden findes i det separate dokument "Installationsvejledningen"). Standardopsætningen bruger Cloudflare, så der kræves en Cloudflare-konto.
 
 Hver fil leveres med en kontrolsum (SHA256SUMS.txt). Hvis du er bekymret, kan du kontrollere, at summen for den fil, du har downloadet, stemmer.
 
@@ -29,20 +29,20 @@ Hver fil leveres med en kontrolsum (SHA256SUMS.txt). Hvis du er bekymret, kan du
 ### Første opsætning
 
 1. Åbn appen.
-2. Indtast dit navn, og tryk på "Opret konto". Så er du klar. Ingen registrering, intet telefonnummer nødvendigt.
+2. Tryk på "Start med et tilfældigt ID". Så er du klar. Ingen registrering, intet telefonnummer nødvendigt.
 
-- Hvis du vil gendanne en identitet, du har oprettet før, skal du åbne "Gendan en eksisterende konto", så vises gendannelsesmetoderne (en sikkerhedskopifil, en gendannelsesfrase osv.).
+- Hvis du indtaster "Dit navn (visningsnavn)" i feltet over knappen, starter du med det navn. Du kan også trykke på knappen, mens feltet er tomt. Du kan ændre visningsnavnet senere i profilafsnittet i indstillingerne.
+- Der findes også en måde at oprette en identitet med et navn og et Breeze-ID, som du selv vælger. I så fald udstedes der en gendannelsesfrase, som vises på skærmen. Gendannelsesfrasen er de ord, der lader dig hente den identitet tilbage på en anden enhed. Skriv den ned på papir eller et sikkert sted.
+- Hvis du vil gendanne en identitet, du har oprettet før, skal du åbne "Gendan en eksisterende konto", så vises gendannelsesmetoderne (gendan fra en sikkerhedskopifil, gendan med en gendannelsesfrase, gendan med konto + adgangsfrase).
 - Når oprettelsen er færdig, vises et kort, der vejleder dig til at beskytte din nøgle med en adgangsfrase (det forsvinder ikke efter et stykke tid). Følg vejledningen og tilføj beskyttelsen til en vigtig identitet.
 
 På det tidspunkt oprettes der en "nøgle" inde i din enhed. Den er selve din identitet.
 **Der findes ingen liste over konti på serveren.** Din identitet findes kun inde i din enhed.
 Dette bliver vigtigt i kapitlet om sikkerhedskopiering (9).
 
-### Om "engangsidentitet"
+### Om den tidligere "engangsidentitet"
 
-Hvis du vælger "engangsidentitet" ved oprettelsen, får du en identitet, der ikke kan gendannes på nogen måde.
-Hvis du mister enheden, nulstiller den eller sletter browserens data, er identiteten væk for altid.
-Det vises også på skærmen. Vælg det ikke til en identitet, du vil bruge i lang tid.
+"Engangsidentiteten" — en identitet uden nogen mulighed for gendannelse — er væk. Med de nuværende måder at oprette en identitet på kan hver identitet beskyttes med en sikkerhedskopi.
 
 ---
 
@@ -73,6 +73,7 @@ Hvis den anden person også har appen åben, kan I forbinde jer direkte og tale 
 
 - **Afsendelsesstatus**: Du kan se det på mærket ved siden af en besked. ✓ betyder sendt, et ✓ i en cirkel betyder, at den er lagt i postkassen, ✓✓ betyder, at den nåede den anden person, læst er et blåt mærke, og fejl er et rødt mærke. De adskilles også ved form, ikke kun farve.
 - **Kontaktlisten**: Tidspunktet for jeres seneste samtale vises som klokkeslæt for i dag, "I går" for i går, måned/dag for i år og år/måned/dag for alt tidligere. Kontakter med beskeder, du ikke har læst, har navn og tid fremhævet.
+- **Navne til kontakter**: Åbn "Kontaktoplysninger" (i højreklikmenuen for en kontakt eller samtalens menu "⋮"), så kan du angive dit eget navn til den kontakt (et kaldenavn). Kaldenavne gemmes kun på denne enhed og sendes aldrig til kontakten eller relæserveren. Når du angiver et kaldenavn, vises det navn, kontakten selv har angivet, også ved siden af det i en dæmpet farve. Du kan slå det andet navn fra med "Vis også det navn, hver kontakt selv har angivet" i afsnittet "Privatliv" i indstillingerne.
 - **Dit eget kort**: Øverst på listen er dit eget profilkort; tryk på det for at åbne din profil. Det ruller sammen med listen.
 - **Nederste faner på en telefon**: Ved telefonbredde vises fanerne "Kontakter" og "Indstillinger" nederst på skærmen.
 - **Samtaleoverskriften**: Fra søgeikonet kan du søge i samtalen. Fra menuen "⋮" kan du kontrollere sikkerhedsnummeret, slå notifikationer fra, fastgøre, oprette en afstemning og mere.
@@ -107,6 +108,7 @@ Nogle handlinger, som indstillinger og enhedslinkning, udføres via kommandoer.
 - Du kan oprette flere konti og bruge dem til forskellige formål (f.eks. arbejde og privat). Både antal enheder og konti er gratis og ubegrænsede.
 - **Sådan opretter du en konto**: Tryk på knappen "+" ved siden af kontofanerne allerøverst på kontaktlisten. Indtast et navn, og vælg en ikon-emoji, så oprettes en ny konto, og der skiftes automatisk til den.
 - **Skift af konto**: Kontofanerne vises altid allerøverst på kontaktlisten. Tryk på en for at skifte (på en computer kan du også skifte med Ctrl+1–9). Tryk og hold på en fane for at omdøbe den, ændre dens ikon eller slette den.
+- Kontakter og nøgler er adskilte for hver konto. Udveksl kontakter igen for hver konto.
 - Sproget vælges automatisk blandt 51 sprog, herunder engelsk, så det passer til din enheds sprog.
 
 ---
@@ -117,6 +119,7 @@ Indstillinger åbnes som deres egen skærm. På en telefon åbner du dem fra fan
 
 - **Automatisk lås**: Der findes en indstilling, der låser automatisk, når du skifter fane.
 - **Adgangsfrase til nøglen**: Du kan beskytte nøglen inde i din enhed ved at pakke den ind i en adgangsfrase. Du bliver bedt om at indtaste den, når du åbner appen.
+- **Vis også det navn, hver kontakt selv har angivet**: I afsnittet "Privatliv". For en kontakt, du har givet et kaldenavn, kan du vælge, om deres eget navn vises ved siden af det (kapitel 3).
 - **Blokér**: Du kan blokere besværlige personer. Beskeder fra en blokeret person når dig ikke.
 
 ---
@@ -141,11 +144,21 @@ På enheder, der ikke automatisk kan aflæse batteriniveauet (som en iPhone-brow
 Din Breeze-identitet er kun nøglen inde i din enhed. Der findes ingen liste over konti på serveren, og skaberen har heller ikke din nøgle.
 **Hvis du mister din enhed, mister du din identitet.** Lav altid en sikkerhedskopi til en vigtig identitet.
 
-Sikkerhedskopiering og gendannelse sker fra afsnittet "Sikkerhedskopiering og gendannelse" i indstillingerne (der er tre knapper: "Sikkerhedskopiér til skyen", "Gendan" og "Gendan fra en fil"). Første gang du tilføjer en kontakt, vises et kort, der opfordrer dig til at lave en sikkerhedskopi, kun én gang.
+Sikkerhedskopiering og gendannelse sker fra afsnittet "Sikkerhedskopi & gendannelse" i indstillingerne (knapperne er "Opret sikkerhedskopi", "Gendan sikkerhedskopi" og "Gendan fra fil"). Første gang du tilføjer en kontakt, vises et kort, der opfordrer dig til at lave en sikkerhedskopi, kun én gang.
 
-### Lav en sikkerhedskopi
+### Automatisk sikkerhedskopi
 
-1. Vælg at lave en sikkerhedskopi fra "Sikkerhedskopiering og gendannelse" i indstillingerne.
+Indstillingen "Automatisk sikkerhedskopi" er slået til fra starten. Når dine data ændrer sig, sendes en krypteret sikkerhedskopi automatisk til den relæserver, du selv hoster.
+
+- Den sender ikke ved hver ændring: den venter 30 sekunder efter den seneste ændring og sender alt samlet. Forsøg foretages med mindst 15 minutters mellemrum.
+- Mens du er offline, sendes der ingenting; ændringerne holdes tilbage og sendes, når forbindelsen vender tilbage, og når du åbner appen.
+- Til automatisk afsendelse skal du indtaste adgangsfrasen til sikkerhedskopien én gang på den enhed (når det er nødvendigt, vises en knap "Indtast adgangsfrase" i indstillingsafsnittet). **Adgangsfrasen gemmes ikke.** Den huskes kun, mens appen er åben, og er væk, når du lukker den. For en identitet med enkel gendannelse fungerer afsendelsen, som den er, lige efter du har indtastet adgangsfrasen ved registrering eller opdatering.
+- Hvis relæserveren ikke understøtter lagring af sikkerhedskopier, kører den automatiske sikkerhedskopi ikke. Det vises i indstillingsafsnittet.
+- Tilstanden (hvornår den seneste vellykkede afsendelse var, om ændringer venter, om en afsendelse mislykkedes) vises i indstillingsafsnittet.
+
+### Lav en sikkerhedskopi (manuelt)
+
+1. Vælg "Opret sikkerhedskopi" i "Sikkerhedskopi & gendannelse" i indstillingerne.
 2. Angiv en adgangsfrase til sikkerhedskopien (mindst 6 tegn).
 3. Vælg, hvor den skal gemmes.
    - **Gem i en fil**: Opbevar sikkerhedskopifilen hos dig selv (anbefales).
@@ -157,11 +170,23 @@ Sikkerhedskopiens indhold er krypteret. Serveren, hvor den gemmes, håndterer ku
 
 På en ny enhed gendanner du med sikkerhedskopifilen (eller sikkerhedskopien på relæserveren) og den adgangsfrase, du angav.
 
+Hvis du lige har hentet din identitet tilbage med en gendannelsesfrase, og der findes en sikkerhedskopi af den identitet på relæserveren, bliver den fundet automatisk, og du bliver spurgt med "Sikkerhedskopi fundet". Hvis du gendanner den, erstattes dataene på den enhed med sikkerhedskopiens indhold.
+
+### Flyt til en ny enhed
+
+Tryk på knappen "Flyt til en ny enhed" i afsnittet "Sikkerhedskopi & gendannelse" i indstillingerne, så vises trinnene.
+
+1. På din nuværende enhed skal du sørge for, at der findes en sikkerhedskopi på relæserveren (automatisk sikkerhedskopi eller "Opret sikkerhedskopi").
+2. På den nye enhed vælger du en gendannelsesmetode på den første skærm og indtaster din gendannelsesfrase (eller dit kontonavn og din adgangsfrase).
+3. Når din identitet er tilbage, findes sikkerhedskopien på serveren automatisk, og en gendannelse tilbydes.
+
+Der er ikke brug for kabler eller filoverdragelser.
+
 ### Bemærk
 
 - **Hvis du glemmer adgangsfrasen, er gendannelse umulig.** Ikke engang skaberen kan rette det. Skriv adgangsfrasen ned et andet sted.
-- **En engangsidentitet kan ikke gendannes, hverken med sikkerhedskopi eller gendannelse.**
-- Lav sikkerhedskopien om, når du tilføjer identiteter eller skifter enhed.
+- Indtastning af adgangsfrasen til automatisk sikkerhedskopi er nødvendig på hver enhed. På en ny enhed indtaster du den én gang til.
+- Lav en manuel sikkerhedskopi om, når dine identiteter bliver flere, eller når du skifter enhed.
 
 ---
 

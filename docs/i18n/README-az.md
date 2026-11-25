@@ -16,7 +16,7 @@ Bu, veb-səhifə deyil, quraşdırıb istifadə olunan proqram təminatıdır (W
 
 Breeze-in «operator şirkət serveri» yoxdur. **İstifadə etmək üçün yerləşdirmə yerini (serveri) özünüz təmin edib Breeze-i ora yerləşdirirsiniz. Rəsmi istifadə qaydası budur.**
 
-- Pulsuz limit kifayətdir. Cloudflare-ın pulsuz planında işləyir və kredit kartı tələb olunmur. Addımlar [yerləşdirmə təlimatında](SELF_HOSTING-az.md) (digər dilləri təlimatın əvvəlindən seçə bilərsiniz) verilib.
+- Standart quraşdırma Cloudflare-dan istifadə edir, buna görə **Cloudflare hesabı tələb olunur**. Addımlar [yerləşdirmə təlimatında](SELF_HOSTING-az.md) (digər dilləri təlimatın əvvəlindən seçə bilərsiniz) verilib.
 - Tətbiqləri (Windows / Mac / Linux / Android / iPhone) [yükləmə səhifəsindən](https://github.com/shizukutanaka/Breeze/releases/latest) götürüb öz serverinizə qoşularaq istifadə edirsiniz.
 - **Nümunə yerləşdirmə haqqında (dürüst bildiriş)**: İşləkliyini yoxlamaq üçün bir nümunə (https://breeze-469.pages.dev/) yerləşdirilib. Orada da eyni proqram təminatıdır, lakin real istifadə üçün öz serverinizdən istifadə edin. Nümunə xəbərdarlıq edilmədən dəyişə və ya dayana bilər. Öz serverinizə yerləşdirdiyiniz, nümunənin dayanmasından təsirlənmir.
 
@@ -24,7 +24,7 @@ Breeze-in «operator şirkət serveri» yoxdur. **İstifadə etmək üçün yerl
 
 ## İstifadə qaydası (3 addım)
 
-1. Öz serverinizə yerləşdirdiyiniz Breeze-i (və ya onu yerləşdirən şəxsdən öyrəndiyiniz ünvanı) açın və adınızı daxil edin. Hazırlıq bununla bitir (nə qeydiyyat, nə də telefon nömrəsi lazımdır). Bu zaman cihazınızın içində «açar» yaradılır və o, sizin şəxsiyyətiniz olur.
+1. Öz serverinizə yerləşdirdiyiniz Breeze-i (və ya onu yerləşdirən şəxsdən öyrəndiyiniz ünvanı) açın və «Təsadüfi ID ilə başla» düyməsini basın (istəsəniz ad daxil edə bilərsiniz). Hazırlıq bununla bitir (nə qeydiyyat, nə də telefon nömrəsi lazımdır). Bu zaman cihazınızın içində «açar» yaradılır və o, sizin şəxsiyyətiniz olur.
 2. Öz ID-nizi və ya QR kodunuzu danışmaq istədiyiniz şəxsə verin.
 3. Qarşı tərəf də tətbiqi açıbsa, birbaşa qoşulub söhbət edə bilərsiniz. Qarşı tərəf açmayıbsa, məktub şifrələnmiş halda «saxlama qutusuna» qoyulur və o, tətbiqi açanda çatdırılır. Saxlama qutusunu daşıyan server məzmunu oxuya bilməz. Çatdırıla bilməyən məktublar ən geci 7 günə avtomatik silinir.
 
@@ -43,6 +43,8 @@ Dürüstcəsinə əhatə dairəsini də yazırıq. Çatdırılma üçün serverd
 - Səsli zənglər və videozənglər (qrup zəngləri ən çox 8 nəfər)
 - Fayl göndərmə (təkbətəkdə ən çox 50MB. Qruplarda da göndərmək olur, lakin ölçü limiti daha kiçikdir)
 - Bir neçə cihaz və bir neçə hesabdan istifadə (məsələn, iş və şəxsi. Həm cihaz sayı, həm də hesab sayı pulsuz və limitsizdir)
+- Avtomatik ehtiyat nüsxə (bir şey dəyişəndə şifrələnmiş ehtiyat nüsxə avtomatik olaraq öz serverinizə saxlanılır. Yeni cihazda şəxsiyyətinizi bərpa edən kimi ehtiyat nüsxə avtomatik tapılır və sizə təklif olunur. Parametrlər yeni cihaza keçməyinizə də kömək edir)
+- Hər kontakt üçün seçdiyiniz ad (hər kontaktın adını dəyişə bilərsiniz, yalnız bu cihazda saxlanılır. Hər kontaktın özü üçün təyin etdiyi adın göstərilib-göstərilməməsini də seçə bilərsiniz)
 - 51 dil (ingilis dili və 50 dil faylı), cihazınızın dilinə uyğun avtomatik seçilir
 - Şəkilli profil, stikerlər, məkan paylaşımı
 - `/help` kimi əmr əməliyyatları (71 növ)
@@ -114,7 +116,7 @@ Xəta hesabatları [Issue səhifəsinə](https://github.com/shizukutanaka/Breeze
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Lisenziya
 

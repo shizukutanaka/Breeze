@@ -20,7 +20,7 @@ Site na [ibe nbudata](https://github.com/shizukutanaka/Breeze/releases/latest), 
 - Windows: nke aha ya gwụchara na `-win-x64.exe` (enwekwara nke ngwaọrụ ARM)
 - Mac: nke aha ya gwụchara na `-mac.dmg`
 - Linux: `.AppImage` (ị nwere ike ịgba ya ozugbo) ma ọ bụ `.deb`
-- Ọ bụrụ na ị ga-eji ya na ihe nchọgharị, jiri nke ị tinyere na sava nke gị (usoro nwụnye dị n'akwụkwọ ọzọ "akwụkwọ nduzi nwụnye")
+- Ọ bụrụ na ị ga-eji ya na ihe nchọgharị, jiri nke ị tinyere na sava nke gị (usoro nwụnye dị n'akwụkwọ ọzọ "akwụkwọ nduzi nwụnye") Ntọala ọkọlọtọ na-eji Cloudflare, ya mere a chọrọ akaụntụ Cloudflare.
 
 Faịlụ ọ bụla nwere nọmba nkwado (SHA256SUMS.txt). Ọ bụrụ na ị na-echegbu onwe gị, ị nwere ike ịlele ma nọmba faịlụ ị budatara dabara.
 
@@ -29,20 +29,20 @@ Faịlụ ọ bụla nwere nọmba nkwado (SHA256SUMS.txt). Ọ bụrụ na ị 
 ### Nhazi mbụ
 
 1. Mepee ngwa ahụ.
-2. Tinye aha gị ma pịa "Mepụta akaụntụ". Naanị ya, nkwadebe agwụla. Enweghị ndebanye aha, enweghị nọmba ekwentị.
+2. Pịa "Malite na ID enweghị usoro". Naanị ya, nkwadebe agwụla. Enweghị ndebanye aha, enweghị nọmba ekwentị.
 
-- Ọ bụrụ na ịchọrọ iweghachi njirimara ị mepụtara na mbụ, mepee "Weghachite akaụntụ dị adị" ụzọ mgbake (faịlụ nkwado, nkebiokwu mgbake, na ndị ọzọ) ga-apụta.
+- Ọ bụrụ na itinye "Aha gị (aha ngosi)" n'ubi dị n'elu bọtịnụ ahụ, ị ga-amalite na aha ahụ. Ị nwekwara ike pịa bọtịnụ ahụ mgbe ubi ahụ tọgbọrọ chakoo. Ị nwere ike ịgbanwe aha ngosi ma emechaa, na ngalaba profaịlụ nke ntọala.
+- Enwekwara ụzọ isi mepụta njirimara na aha na Breeze ID ị họọrọ n'onwe gị. N'ọnọdụ ahụ, a na-enye nkebiokwu mgbake ma gosi ya na ihuenyo. Nkebiokwu mgbake bụ okwu ndị na-eme ka ị weghachi njirimara ahụ na ngwaọrụ ọzọ. Detuo ya na akwụkwọ ma ọ bụ ebe nchekwa.
+- Ọ bụrụ na ịchọrọ iweghachi njirimara ị mepụtara na mbụ, mepee "Weghachite akaụntụ dị adị" ụzọ mgbake (weghachite site na faịlụ ndabere, weghachite na ahịrịokwu mgbake, weghachite na akaụntụ + ahịrị nzuzo) ga-apụta.
 - Mgbe mmepụta gwụchara, kaadị ga-apụta nke na-eduzi gị ichekwa igodo gị na nkebiokwu nzuzo (ọ naghị apụ mgbe oge gachara). Maka njirimara dị mkpa, soro nduzi ahụ ma tinye nchebe ahụ.
 
 N'oge a, a na-emepụta "igodo" n'ime ngwaọrụ gị. Ọ bụ njirimara gị n'onwe ya.
 **Enweghị ndepụta akaụntụ na sava.** Njirimara gị dị naanị n'ime ngwaọrụ gị.
 Isi a dị mkpa na isi nke nkwado (9).
 
-### Banyere "njirimara a na-atụfu"
+### Banyere "njirimara a na-atụfu" mbụ
 
-Ọ bụrụ na ị họrọ "njirimara a na-atụfu" n'oge mmepụta, njirimara gị agaghị enwe ụzọ mgbake ma ọlị.
-Ọ bụrụ na ị tufuo ngwaọrụ ahụ, ma ọ bụ tọgharịa ya, ma ọ bụ hichapụ data ihe nchọgharị, njirimara ahụ agaghị alaghachi ọzọ.
-A na-egosikwa nke a na ihuenyo. Ahọrọla ya maka njirimara ị ga-eji ogologo oge.
+"Njirimara a na-atụfu" — njirimara na-enweghị ụzọ mgbake ma ọlị — apụọla. Site n'ụzọ mmepụta njirimara ugbu a, enwere ike ichekwa njirimara ọ bụla na nkwado.
 
 ---
 
@@ -73,6 +73,7 @@ A na-egosi ID nke gị n'ụdị ya zuru oke mgbe ị mepere profaịlụ nke g�
 
 - **Ọnọdụ iziga**: Ị nwere ike ịmata ya site na akara dị n'akụkụ ozi. ✓ pụtara ezigara ya, ✓ n'ime okirikiri pụtara etinyela ya n'igbe nchekwa, ✓✓ pụtara ọ ruterela onye nke ọzọ, agụrụ ya bụ akara na-acha anụnụ anụnụ, ọdịda bụ akara na-acha uhie. A na-ejikwa ọdịdị ha mata ha, ọ bụghị naanị agba.
 - **Ndepụta kọntaktị**: A na-egosi oge ikpeazụ unu kwuru dịka oge maka taa, "Nyaahụ" maka nyaahụ, ọnwa/ụbọchị maka afọ a, na afọ/ọnwa/ụbọchị maka ihe ọ bụla tupu nke ahụ. Kọntaktị nwere ozi ị na-agụbeghị nwere aha na oge e mesiri ike.
+- **Aha maka kọntaktị**: Mepee "Ozi kọntaktị" (na menu ịpị aka nri nke kọntaktị, ma ọ bụ menu "⋮" nke mkparịta ụka) ị nwere ike ịtọ aha nke gị maka kọntaktị ahụ (aha nnọchi). Aha nnọchi na-echekwa naanị na ngwaọrụ a, anaghị ezigakwa ya na kọntaktị ma ọ bụ sava nnyefe. Mgbe ị tọrọ aha nnọchi, a na-egosikwa aha kọntaktị ahụ tọrọ maka onwe ya n'akụkụ ya na agba dị nro. Ị nwere ike ịgbanyụ aha nke abụọ ahụ na "Gosikwa aha kọntaktị ọ bụla tọrọ maka onwe ya" na ngalaba "Nzuzo" nke ntọala.
 - **Kaadị nke gị**: N'elu ndepụta ahụ ka kaadị profaịlụ nke gị dị; pịa ya imepe profaịlụ gị. Ọ na-agagharị na ndepụta ahụ.
 - **Taabụ dị n'ala na ekwentị**: Na obosara ekwentị, taabụ "Kọntaktị" na "Ntọala" na-apụta n'ala ihuenyo.
 - **Isi mkparịta ụka**: Site na akara ngosi ọchụchọ ị nwere ike ịchọ n'ime mkparịta ụka. Site na menu "⋮" ị nwere ike ịlele nọmba nchekwa, mechie ọkwa, pịnye, mepụta ntuli aka, na ndị ọzọ.
@@ -107,6 +108,7 @@ A na-eme ụfọdụ ọrụ, dịka nhazi na ijikọ ngwaọrụ, site na iwu.
 - Ị nwere ike ịmepụta ọtụtụ akaụntụ ma jiri ha n'ụzọ dị iche iche (dịka maka ọrụ na nke onwe). Ọnụọgụ ngwaọrụ na akaụntụ bụ n'efu na-enweghị oke.
 - **Otu esi emepụta akaụntụ**: Pịa bọtịnụ "+" dị n'akụkụ taabụ akaụntụ n'elu ndepụta kọntaktị kpamkpam. Tinye aha ma họrọ emoji akara ngosi, a ga-emepụta akaụntụ ọhụrụ ma gbanwee gaa na ya na-akpaghị aka.
 - **Ịgbanwe akaụntụ**: A na-egosi taabụ akaụntụ mgbe niile n'elu ndepụta kọntaktị kpamkpam. Pịa otu ịgbanwe (na kọmputa ị nwekwara ike ịgbanwe na Ctrl+1–9). Pịa ma jide taabụ iji degharịa aha ya, gbanwee akara ngosi ya, ma ọ bụ hichapụ ya.
+- Kọntaktị na igodo dị iche maka akaụntụ ọ bụla. Gbanwee kọntaktị ọzọ maka akaụntụ ọ bụla.
 - A na-ahọrọ asụsụ na-akpaghị aka site na asụsụ 51, gụnyere Bekee, ka o kwekọọ n'asụsụ ngwaọrụ gị.
 
 ---
@@ -117,6 +119,7 @@ Ntọala na-emepe dịka ihuenyo nke ha. Na ekwentị, mepee ha site na taabụ 
 
 - **Mkpọchi na-akpaghị aka**: Enwere ntọala nke na-akpọchi na-akpaghị aka mgbe ị gbanwere taabụ.
 - **Okwuntughe igodo**: Ị nwere ike ichekwa igodo dị n'ime ngwaọrụ gị site na ikpuchi ya na okwuntughe. A ga-ajụ ntinye mgbe ị mepere ngwa ahụ.
+- **Gosikwa aha kọntaktị ọ bụla tọrọ maka onwe ya**: Na ngalaba "Nzuzo". Maka kọntaktị ị nyere aha nnọchi, ị nwere ike ịhọrọ ma a ga-egosi aha nke ya n'akụkụ ya (isi 3).
 - **Mgbochi**: Ị nwere ike igbochi onye na-enye nsogbu. Ozi sitere n'aka onye a gbochiri agaghị erute.
 
 ---
@@ -141,11 +144,21 @@ Na ngwaọrụ ndị na-enweghị ike ịgụ ọkwa batrị na-akpaghị aka (d
 Njirimara Breeze bụ naanị igodo dị n'ime ngwaọrụ gị. Enweghị ndepụta akaụntụ na sava, onye mepụtara enweghịkwa igodo gị.
 **Ọ bụrụ na ị tufuo ngwaọrụ gị, ị ga-atufu njirimara gị kwa.** Maka njirimara dị mkpa, mee nkwado n'ezie.
 
-A na-eme nkwado na mgbake site na ngalaba "Nkwado na mgbake" nke ntọala (enwere bọtịnụ atọ: "Kwadoo na igwe ojii", "Weghachite", na "Weghachite site na faịlụ"). Oge mbụ ị tinyere kọntaktị, kaadị na-agba gị ume ime nkwado ga-apụta otu ugboro naanị.
+A na-eme nkwado na mgbake site na ngalaba "Nkwado na mgbake" nke ntọala (bọtịnụ ndị a bụ "Mepụta Ndabere", "Weghachite Ndabere", na "Weghachite site na faịlụ"). Oge mbụ ị tinyere kọntaktị, kaadị na-agba gị ume ime nkwado ga-apụta otu ugboro naanị.
 
-### Otu esi eme nkwado
+### Nkwado na-akpaghị aka
 
-1. Site na "Nkwado na mgbake" na ntọala, họrọ imepụta nkwado.
+Ntọala "Nkwado na-akpaghị aka" na-agba site na mbido. Mgbe data gị gbanwere, a na-eziga nkwado ezoro ezo na-akpaghị aka na sava nnyefe ị kwadoro.
+
+- Ọ naghị eziga na mgbanwe ọ bụla: ọ na-eche sekọnd 30 mgbe mgbanwe ikpeazụ gasịrị ma ziga ha niile ọnụ. A na-eme ka mgbalị dịkarịa ala nkeji 15 kewaa.
+- Mgbe ị nọghị n'ịntanetị, ọ dịghị ihe a na-eziga; a na-ejide mgbanwe ndị ahụ ma ziga ha mgbe njikọ laghachiri na mgbe ị mepere ngwa ahụ.
+- Maka iziga na-akpaghị aka, ịkwesịrị itinye okwuntughe nkwado otu ugboro na ngwaọrụ ahụ (mgbe achọrọ ya, bọtịnụ "Tinye okwuntughe" na-apụta na ngalaba ntọala). **A naghị echekwa okwuntughe ahụ.** A na-echeta ya naanị mgbe ngwa ahụ meghere, ọ na-apụkwa mgbe ị mechiri ya. Maka njirimara mgbake dị mfe, ozugbo itinyechara okwuntughe na ndebanye aha ma ọ bụ mmelite, iziga na-arụ ọrụ dịka ọ dị.
+- Ọ bụrụ na sava nnyefe anaghị akwado ichekwa nkwado, nkwado na-akpaghị aka anaghị arụ ọrụ. A na-egosi nke a na ngalaba ntọala.
+- A na-egosi ọnọdụ (mgbe iziga ikpeazụ gara nke ọma, ma mgbanwe na-eche, ma iziga dara) na ngalaba ntọala.
+
+### Otu esi eme nkwado (aka)
+
+1. Site na "Nkwado na mgbake" na ntọala, họrọ "Mepụta Ndabere".
 2. Tọọ okwuntughe nkwado (mkpụrụedemede 6 ma ọ bụ karịa).
 3. Họrọ ebe ị ga-echekwa.
    - **Chekwaa na faịlụ**: Debe faịlụ nkwado n'aka gị (a na-akwado ya).
@@ -157,11 +170,23 @@ Ihe dị n'ime nkwado ezoro ezo. Ihe sava nchekwa na-ejizi bụ naanị ederede 
 
 Na ngwaọrụ ọhụrụ, weghachite site n'iji faịlụ nkwado (ma ọ bụ nkwado sava nnyefe) na okwuntughe ị tọrọ.
 
+Ọ bụrụ na i ji nkebiokwu mgbake weghachi njirimara gị, ma nkwado nke njirimara ahụ dị na sava nnyefe, a na-achọta ya na-akpaghị aka ma jụọ gị na "Achọtara nkwado." Ọ bụrụ na i weghachite ya, a ga-eji ihe dị n'ime nkwado dochie data dị na ngwaọrụ a.
+
+### Ịkwaga na ngwaọrụ ọhụrụ
+
+Pịa bọtịnụ "Gaa na ngwaọrụ ọhụrụ" na ngalaba "Nkwado na mgbake" nke ntọala, a ga-egosikwa usoro ndị ahụ.
+
+1. Na ngwaọrụ gị ugbu a, debe nkwado na sava nnyefe (nkwado na-akpaghị aka, ma ọ bụ "Mepụta Ndabere").
+2. Na ngwaọrụ ọhụrụ, họrọ ụzọ mgbake na ihuenyo mbụ ma tinye nkebiokwu mgbake gị (ma ọ bụ aha akaụntụ gị na okwuntughe).
+3. Mgbe njirimara gị laghachiri, a na-achọta nkwado dị na sava na-akpaghị aka ma nye gị mgbake.
+
+Enweghị eriri ma ọ bụ nnyefe faịlụ achọrọ.
+
 ### Ntị
 
 - **Ọ bụrụ na ị chefuo okwuntughe, enweghị ike iweghachi.** Onye mepụtara enweghịkwa ike idozi ya. Detuo okwuntughe n'ebe ọzọ.
-- **Njirimara a na-atụfu anaghị alaghachi, ma ọ bụ site na nkwado ma ọ bụ mgbake.**
-- Mgbe njirimara mụbara ma ọ bụ mgbe ị gbanwere ngwaọrụ, megharịa nkwado ahụ.
+- Ịtinye okwuntughe maka nkwado na-akpaghị aka dị mkpa na ngwaọrụ ọ bụla. Na ngwaọrụ ọhụrụ, tinye ya ọzọ otu ugboro.
+- Megharịa nkwado aka mgbe njirimara gị mụbara ma ọ bụ mgbe ị gbanwere ngwaọrụ.
 
 ---
 

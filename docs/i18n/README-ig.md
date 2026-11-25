@@ -16,7 +16,7 @@ Nke a abụghị ibe weebụ; ọ bụ ngwanrọ a na-etinye ma na-eji (Windows 
 
 Breeze enweghị "sava ụlọ ọrụ". **Iji jiri ya, gị onwe gị ga-enye ebe nchekwa (sava) ma tinye Breeze n'ebe ahụ. Nke a bụ ụzọ eji ya n'ụzọ gọọmentị.**
 
-- Ebe nchekwa n'ime oke n'efu ezuola. Ọ na-arụ ọrụ n'ime oke n'efu Cloudflare, ọ dịghịkwa kaadị banki achọrọ. Usoro ndị a dị n'ime [akwụkwọ nduzi nwụnye](SELF_HOSTING-ig.md) (ị nwere ike ịhọrọ asụsụ ndị ọzọ site na mbido akwụkwọ nduzi ahụ).
+- Ntọala ọkọlọtọ na-eji Cloudflare, ya mere **a chọrọ akaụntụ Cloudflare**. Usoro ndị a dị n'ime [akwụkwọ nduzi nwụnye](SELF_HOSTING-ig.md) (ị nwere ike ịhọrọ asụsụ ndị ọzọ site na mbido akwụkwọ nduzi ahụ).
 - Were ngwa ahụ (Windows / Mac / Linux / Android / iPhone) site na [ibe nbudata](https://github.com/shizukutanaka/Breeze/releases/latest), jikọọ ya na sava nke gị, ma jiri ya.
 - **Banyere ihe atụ ngosi (ọkwa eziokwu)**: Anyị etinyela ihe atụ ngosi (https://breeze-469.pages.dev/) maka nnwale ọrụ. Ihe dị n'ime ya bụ otu ngwanrọ ahụ, mana maka ojiji n'ezie, biko jiri sava nke gị. Ihe atụ ahụ nwere ike ịgbanwe ma ọ bụ kwụsị na-enweghị ọkwa mbụ. Ihe ị tinyere na sava nke gị agaghị emetụta site na nkwụsị ihe atụ ahụ.
 
@@ -24,7 +24,7 @@ Nkọwa ojiji zuru oke dị n'ime [akwụkwọ ntuziaka](MANUAL-ig.md) (ị nwer
 
 ## Otu esi eji ya (usoro 3)
 
-1. Mepee Breeze ị tinyere na sava nke gị (ma ọ bụ adreesị onye tinyere ya gwara gị), ma tinye aha. Naanị ya, nkwadebe agwụla (enweghị ndebanye aha, enweghị nọmba ekwentị). N'oge a, a na-emepụta "igodo" n'ime ngwaọrụ gị, ọ bụkwa njirimara gị.
+1. Mepee Breeze ị tinyere na sava nke gị (ma ọ bụ adreesị onye tinyere ya gwara gị), ma pịa "Malite na ID enweghị usoro" (ị nwere ike itinye aha ma ọ bụrụ na ịchọrọ). Naanị ya, nkwadebe agwụla (enweghị ndebanye aha, enweghị nọmba ekwentị). N'oge a, a na-emepụta "igodo" n'ime ngwaọrụ gị, ọ bụkwa njirimara gị.
 2. Nye onye ị chọrọ ịgwa okwu ID gị ma ọ bụ koodu QR gị.
 3. Ọ bụrụ na onye nke ọzọ emepela ngwa ahụ, unu ga-ejikọ ozugbo ma kwurịta okwu. Ọ bụrụ na o meghereghị ya, ozi ahụ na-anọ n'ime "igbe nchekwa" n'ezoro ezo, ọ ga-erukwa ya mgbe o meghere ya. Sava na-ebu igbe nchekwa ahụ enweghị ike ịgụ ihe dị n'ime ya. Akwụkwọ ozi ndị na-erughị na-ehichapụ onwe ha mgbe ụbọchị 7 gachara na kacha.
 
@@ -43,6 +43,8 @@ Anyị ga-edekwa oke ya n'eziokwu. Iji ziga, sava na-echekwa ozi ruo nwa oge (en
 - Oku olu na oku vidiyo (oku otu ruo mmadụ 8)
 - Iziga faịlụ (ruo 50MB na mkparịta ụka otu-na-otu. Enwere ike iziga na otu kwa, mana oke nha pere mpe)
 - Iji ọtụtụ ngwaọrụ na ọtụtụ akaụntụ (dịka maka ọrụ na nke onwe. Ọnụọgụ ngwaọrụ na akaụntụ bụ n'efu na-enweghị oke)
+- Nkwado na-akpaghị aka (mgbe ihe gbanwere, a na-echekwa nkwado ezoro ezo na-akpaghị aka na sava nke gị. Na ngwaọrụ ọhụrụ, ozugbo i weghachitere njirimara gị, a na-achọta nkwado na-akpaghị aka ma nye gị ya. Ntọala na-eduzikwa gị ịkwaga na ngwaọrụ ọhụrụ)
+- Aha ị họọrọ maka kọntaktị ọ bụla (ị nwere ike ịdegharị aha kọntaktị ọ bụla, nke echekwara naanị na ngwaọrụ a. Ị nwekwara ike ịhọrọ ma a ga-egosi aha kọntaktị ọ bụla tọrọ maka onwe ya)
 - Asụsụ 51 (Bekee na faịlụ asụsụ 50), a na-ahọrọ ya na-akpaghị aka ka o kwekọọ n'asụsụ ngwaọrụ gị
 - Profaịlụ nwere foto, stika, ikesa ọnọdụ
 - Ọrụ iwu dịka `/help` (ụdị 71)
@@ -114,7 +116,7 @@ Akụkọ ntụpọ gaa na [ibe Issue](https://github.com/shizukutanaka/Breeze/i
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [docs/i18n/README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [docs/COMPARISON.md](../COMPARISON.md).
 
 ## Akwụkwọ ikike
 

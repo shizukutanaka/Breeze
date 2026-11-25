@@ -20,7 +20,7 @@ Välj den fil som passar din enhet på [nedladdningssidan](https://github.com/sh
 - Windows: filer vars namn slutar med `-win-x64.exe` (det finns även för ARM-enheter)
 - Mac: filer vars namn slutar med `-mac.dmg`
 - Linux: `.AppImage` (kan köras direkt) eller `.deb`
-- Om du vill använda den i webbläsaren använder du den version du har placerat på din egen server (installationsanvisningarna finns i det separata dokumentet "Installationsguiden")
+- Om du vill använda den i webbläsaren använder du den version du har placerat på din egen server (installationsanvisningarna finns i det separata dokumentet "Installationsguiden"). Standardinstallationen använder Cloudflare, så ett Cloudflare-konto krävs.
 
 Varje fil levereras med en kontrollsumma (SHA256SUMS.txt). Om du är orolig kan du kontrollera att summan för den fil du laddade ner stämmer.
 
@@ -29,20 +29,20 @@ Varje fil levereras med en kontrollsumma (SHA256SUMS.txt). Om du är orolig kan 
 ### Första inställningarna
 
 1. Öppna appen.
-2. Ange ditt namn och tryck på "Skapa konto". Det är allt – du är redo. Ingen registrering, inget telefonnummer behövs.
+2. Tryck på "Börja med ett slumpmässigt ID". Det är allt – du är redo. Ingen registrering, inget telefonnummer behövs.
 
-- Om du vill ta tillbaka en identitet som du har skapat tidigare öppnar du "Återställ ett befintligt konto", så visas återställningsmetoderna (en säkerhetskopiefil, en återställningsfras och så vidare).
+- Om du anger "Ditt namn (visningsnamn)" i fältet ovanför knappen börjar du med det namnet. Du kan också trycka på knappen med fältet tomt. Du kan ändra visningsnamnet senare, i profilavsnittet i inställningarna.
+- Det finns också ett sätt att skapa en identitet med ett namn och ett Breeze-ID som du väljer själv. I så fall utfärdas en återställningsfras och visas på skärmen. Återställningsfrasen är orden som låter dig ta tillbaka den identiteten på en annan enhet. Skriv ner den på papper eller någonstans säkert.
+- Om du vill ta tillbaka en identitet som du har skapat tidigare öppnar du "Återställ ett befintligt konto", så visas återställningsmetoderna (återställ från en säkerhetskopia, återställ med en återställningsfras, återställ med konto + lösenfras).
 - När skapandet är klart visas ett kort som vägleder dig att skydda din nyckel med en lösenfras (det försvinner inte efter en stund). Följ vägledningen och lägg till skyddet för en viktig identitet.
 
 Då skapas en "nyckel" inuti din enhet. Den är din identitet i sig.
 **Det finns ingen lista över konton på servern.** Din identitet finns bara inuti din enhet.
 Detta blir viktigt i kapitlet om säkerhetskopiering (9).
 
-### Om "engångsidentitet"
+### Om den tidigare "engångsidentiteten"
 
-Om du väljer "engångsidentitet" vid skapandet får du en identitet som inte kan återställas på något sätt.
-Om du tappar den enheten, återställer den eller raderar webbläsarens data försvinner identiteten för alltid.
-Det visas också på skärmen. Välj det inte för en identitet du tänker använda länge.
+"Engångsidentiteten" — en identitet som inte kan återställas på något sätt — är borta. Med de nuvarande sätten att skapa en identitet kan varje identitet skyddas med en säkerhetskopia.
 
 ---
 
@@ -73,6 +73,7 @@ Om den andra personen också har appen öppen kan ni ansluta direkt och prata.
 
 - **Sändningsstatus**: Du ser den på märket bredvid ett meddelande. ✓ betyder skickat, ett ✓ i en cirkel betyder att det har lagts i brevlådan, ✓✓ betyder att det nådde den andra personen, läst är ett blått märke och misslyckande är ett rött märke. De skiljs åt genom form såväl som färg.
 - **Kontaktlistan**: Tiden för det senaste samtalet visas som tiden för i dag, "I går" för i går, månad/dag för i år och år/månad/dag för allt tidigare. Kontakter med meddelanden som du inte har läst har namn och tid framhävda.
+- **Namn på kontakter**: Öppna "Kontaktinfo" (i högerklicksmenyn för en kontakt, eller konversationens meny "⋮") så kan du ange ett eget namn för den kontakten (ett smeknamn). Smeknamn lagras bara på den här enheten och skickas aldrig till kontakten eller reläservern. När du anger ett smeknamn visas också namnet som kontakten själv har ställt in bredvid det i en dämpad färg. Du kan stänga av det andra namnet med "Visa också namnet som varje kontakt själv har ställt in" i avsnittet "Integritet" i inställningarna.
 - **Ditt eget kort**: Överst i listan finns ditt eget profilkort; tryck på det för att öppna din profil. Det rullar tillsammans med listan.
 - **Nedre flikar på en telefon**: Vid telefonbredd visas flikarna "Kontakter" och "Inställningar" längst ned på skärmen.
 - **Konversationens rubrik**: Från sökikonen kan du söka i konversationen. Från menyn "⋮" kan du kontrollera säkerhetsnumret, tysta aviseringar, fästa, skapa en omröstning och mer.
@@ -107,6 +108,7 @@ Vissa åtgärder, som inställningar och enhetslänkning, görs via kommandon.
 - Du kan skapa flera konton och använda dem för olika ändamål (till exempel arbete och privat). Både antal enheter och konton är gratis och obegränsade.
 - **Så här skapar du ett konto**: Tryck på knappen "+" bredvid kontoflikarna högst upp i kontaktlistan. Ange ett namn och välj en ikon-emoji, så skapas ett nytt konto och växlas till automatiskt.
 - **Byta konton**: Kontoflikarna visas alltid högst upp i kontaktlistan. Tryck på en för att byta (på en dator kan du också byta med Ctrl+1–9). Tryck och håll på en flik för att byta namn på den, ändra dess ikon eller ta bort den.
+- Kontakter och nycklar är separata för varje konto. Byt kontakter på nytt för varje konto.
 - Språket väljs automatiskt bland 51 språk, inklusive engelska, anpassat till enhetens språk.
 
 ---
@@ -117,6 +119,7 @@ Inställningar öppnas som en egen skärm. Öppna dem på en telefon från flike
 
 - **Automatiskt lås**: Det finns en inställning som låser automatiskt när du byter flik.
 - **Nyckelns lösenfras**: Du kan skydda nyckeln inuti din enhet genom att slå in den i en lösenfras. Du ombeds ange den när du öppnar appen.
+- **Visa också namnet som varje kontakt själv har ställt in**: I avsnittet "Integritet". För en kontakt som du har gett ett smeknamn kan du välja om deras eget namn visas bredvid det (kapitel 3).
 - **Blockera**: Du kan blockera besvärliga personer. Meddelanden från en blockerad person når dig inte.
 
 ---
@@ -141,11 +144,21 @@ På enheter som inte kan läsa batterinivån automatiskt (som en iPhone-webbläs
 Din Breeze-identitet är bara nyckeln inuti din enhet. Det finns ingen lista över konton på servern, och skaparen har inte din nyckel heller.
 **Om du tappar din enhet tappar du din identitet.** Skapa alltid en säkerhetskopia för en viktig identitet.
 
-Säkerhetskopiering och återställning görs från avsnittet "Säkerhetskopiering och återställning" i inställningarna (det finns tre knappar: "Säkerhetskopiera till molnet", "Återställ" och "Återställ från en fil"). Första gången du lägger till en kontakt visas ett kort som uppmanar dig att göra en säkerhetskopia, bara en gång.
+Säkerhetskopiering och återställning görs från avsnittet "Säkerhetskopiering & återställning" i inställningarna (knapparna är "Skapa säkerhetskopia", "Återställ säkerhetskopia" och "Återställ från fil"). Första gången du lägger till en kontakt visas ett kort som uppmanar dig att göra en säkerhetskopia, bara en gång.
 
-### Skapa en säkerhetskopia
+### Automatisk säkerhetskopiering
 
-1. Välj att skapa en säkerhetskopia från "Säkerhetskopiering och återställning" i inställningarna.
+Inställningen "Automatisk säkerhetskopiering" är på från början. När dina data ändras skickas en krypterad säkerhetskopia automatiskt till den reläserver du själv driver.
+
+- Den skickar inte vid varje ändring: den väntar 30 sekunder efter den sista ändringen och skickar allt tillsammans. Försök görs med minst 15 minuters mellanrum.
+- Medan du är offline skickas ingenting; ändringarna hålls kvar och skickas när anslutningen kommer tillbaka och när du öppnar appen.
+- För automatisk sändning behöver du ange lösenfrasen för säkerhetskopian en gång på den enheten (när det behövs visas en knapp "Ange lösenfras" i inställningsavsnittet). **Lösenfrasen lagras inte.** Den koms bara ihåg medan appen är öppen och är borta när du stänger den. För en identitet med enkel återställning fungerar sändningen som den är direkt efter att du har angett lösenfrasen vid registrering eller uppdatering.
+- Om reläservern inte stöder lagring av säkerhetskopior körs inte den automatiska säkerhetskopieringen. Det visas i inställningsavsnittet.
+- Tillståndet (när den senaste lyckade sändningen var, om ändringar väntar, om en sändning misslyckades) visas i inställningsavsnittet.
+
+### Skapa en säkerhetskopia (manuellt)
+
+1. Välj "Skapa säkerhetskopia" i "Säkerhetskopiering & återställning" i inställningarna.
 2. Ställ in en lösenfras för säkerhetskopian (minst 6 tecken).
 3. Välj var den ska sparas.
    - **Spara i en fil**: Behåll säkerhetskopian hos dig själv (rekommenderas).
@@ -157,11 +170,23 @@ Säkerhetskopians innehåll är krypterat. Servern där den sparas hanterar bara
 
 På en ny enhet återställer du med säkerhetskopian (eller säkerhetskopian på reläservern) och den lösenfras du ställde in.
 
+Om du just har tagit tillbaka din identitet med en återställningsfras, och en säkerhetskopia av den identiteten finns på reläservern, hittas den automatiskt och du tillfrågas med "Säkerhetskopia hittad". Om du återställer den ersätts data på den enheten med säkerhetskopians innehåll.
+
+### Flytta till en ny enhet
+
+Tryck på knappen "Flytta till en ny enhet" i avsnittet "Säkerhetskopiering & återställning" i inställningarna, så visas stegen.
+
+1. På din nuvarande enhet, se till att det finns en säkerhetskopia på reläservern (automatisk säkerhetskopiering, eller "Skapa säkerhetskopia").
+2. På den nya enheten väljer du en återställningsmetod på den första skärmen och anger din återställningsfras (eller ditt kontonamn och lösenfras).
+3. När din identitet är tillbaka hittas säkerhetskopian på servern automatiskt och en återställning erbjuds.
+
+Inga kablar eller filöverlämningar behövs.
+
 ### Observera
 
 - **Om du glömmer lösenfrasen går det inte att återställa.** Inte ens skaparen kan fixa det. Skriv ner lösenfrasen någon annanstans.
-- **En engångsidentitet kan inte återställas, varken via säkerhetskopia eller återställning.**
-- Gör om säkerhetskopian när du lägger till identiteter eller byter enhet.
+- Att ange lösenfrasen för automatisk säkerhetskopiering behövs på varje enhet. På en ny enhet anger du den en gång till.
+- Gör om en manuell säkerhetskopia när dina identiteter blir fler eller när du byter enhet.
 
 ---
 

@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Číst v jiných jazycích**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · [Norsk](README-nb.md) · [Dansk](README-da.md) · [Suomi](README-fi.md) · Čeština (tato stránka) · [Magyar](README-hu.md) · [Română](README-ro.md) · [Ελληνικά](README-el.md) · [Türkçe](README-tr.md) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@ Nejedná se o webovou stránku, ale o software, který si nainstalujete a použ�
 
 Breeze nemá "server provozující společnosti". **Abyste jej mohli používat, zajistíte si sami místo (server) a Breeze tam umístíte. To je oficiální způsob používání.**
 
-- Místo se vejde do bezplatné úrovně. Běží v bezplatné úrovni Cloudflare a není potřeba kreditní karta. Postup je v [průvodci instalací](SELF_HOSTING-cs.md) (verze v jiných jazycích lze vybrat na začátku průvodce).
+- Standardní nastavení používá Cloudflare, takže **je vyžadován účet Cloudflare**. Postup je v [průvodci instalací](SELF_HOSTING-cs.md) (verze v jiných jazycích lze vybrat na začátku průvodce).
 - Aplikaci (Windows / Mac / Linux / Android / iPhone) si stáhněte ze [stránky ke stažení](https://github.com/shizukutanaka/Breeze/releases/latest) a používejte ji připojenou k vlastnímu serveru.
 - **O ukázkové instalaci (poctivé upozornění)**: Pro ověření funkčnosti je k dispozici ukázka (https://breeze-469.pages.dev/). Je to stejný software, který je tam umístěn, ale pro skutečné používání použijte prosím vlastní server. Ukázka se může bez upozornění změnit nebo zastavit. Na Breeze umístěný na vašem vlastním serveru zastavení ukázky nemá vliv.
 
@@ -24,7 +24,7 @@ Podrobné pokyny k používání jsou v [příručce](MANUAL-cs.md) (verze v jin
 
 ## Jak používat (3 kroky)
 
-1. Otevřete Breeze, který jste umístili na vlastní server (nebo adresu, kterou vám sdělila osoba, která jej umístila), a zadejte své jméno. Tím jste připraveni (není potřeba registrace ani telefonní číslo). V tu chvíli se uvnitř vašeho zařízení vytvoří "klíč" a ten je vaší identitou.
+1. Otevřete Breeze, který jste umístili na vlastní server (nebo adresu, kterou vám sdělila osoba, která jej umístila), a stiskněte "Začít s náhodným ID" (pokud chcete, můžete zadat jméno). Tím jste připraveni (není potřeba registrace ani telefonní číslo). V tu chvíli se uvnitř vašeho zařízení vytvoří "klíč" a ten je vaší identitou.
 2. Předejte své ID nebo QR kód osobě, se kterou chcete mluvit.
 3. Pokud má i druhá osoba aplikaci otevřenou, můžete se připojit přímo a mluvit. Pokud ji otevřenou nemá, zpráva se stále zašifrovaná uloží do "schránky" a doručí se, až aplikaci otevře. Server, který schránku přepravuje, nemůže obsah číst. Dopisy, které nejsou nikdy doručeny, se automaticky smažou nejpozději po 7 dnech.
 
@@ -43,6 +43,8 @@ Poctivě píšeme i o mezích. Kvůli doručování existuje na serveru krátkod
 - Hlasové a videohovory (skupinové hovory až pro 8 lidí)
 - Posílání souborů (v konverzacích jeden na jednoho až 50MB. Posílat lze i ve skupinách, ale limit velikosti je menší)
 - Používání více zařízení a více účtů pro různé účely (například pracovní a soukromé. Počet zařízení i účtů je zdarma a neomezený)
+- Automatické zálohování (když se něco změní, zašifrovaná záloha se automaticky uloží na váš vlastní server. Na novém zařízení se po obnovení identity záloha najde automaticky a nabídne se vám. Nastavení vás také provede přechodem na nové zařízení)
+- Jméno, které si sami zvolíte pro každý kontakt (každý kontakt si můžete přejmenovat; ukládá se pouze v tomto zařízení. Můžete si také zvolit, zda se zobrazí jméno, které si každý kontakt sám nastavil)
 - 51 jazyků (angličtina plus 50 jazykových souborů), vybírá se automaticky podle jazyka vašeho zařízení
 - Profily s fotografií, samolepky, sdílení polohy
 - Příkazy jako `/help` (71 druhů)
@@ -114,7 +116,7 @@ Chyby hlaste na [stránce Issues](https://github.com/shizukutanaka/Breeze/issues
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Licence
 

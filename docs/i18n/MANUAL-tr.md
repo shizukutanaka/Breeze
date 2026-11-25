@@ -20,7 +20,7 @@ Bu kılavuz, kullanmaya başlayanlar için bir rehberdir.
 - Windows: adı `-win-x64.exe` ile biten (ARM makineler için olanı da var)
 - Mac: adı `-mac.dmg` ile biten
 - Linux: `.AppImage` (olduğu gibi çalıştırılabilir) veya `.deb`
-- Tarayıcıda kullanmak için, kendi sunucunuza kurduğunuz kopyayı kullanırsınız (kurulum yöntemi ayrı "kurulum kılavuzu" belgesindedir)
+- Tarayıcıda kullanmak için, kendi sunucunuza kurduğunuz kopyayı kullanırsınız (kurulum yöntemi ayrı "kurulum kılavuzu" belgesindedir). Standart kurulum Cloudflare kullanır, bu yüzden bir Cloudflare hesabı gereklidir
 
 Her dosyaya bir doğrulama değeri (SHA256SUMS.txt) eşlik eder. Endişe edenler, indirdiği dosyanın değerinin uyuşup uyuşmadığını denetleyebilir.
 
@@ -29,20 +29,20 @@ Her dosyaya bir doğrulama değeri (SHA256SUMS.txt) eşlik eder. Endişe edenler
 ### İlk kurulum
 
 1. Uygulamayı açın.
-2. Adınızı girin ve "Hesap oluştur"a basın. Hazırlık bununla tamamdır. Kayıt da telefon numarası da gerekmez.
+2. "Rastgele bir kimlikle başla" düğmesine basın. Hazırlık bununla tamamdır. Kayıt da telefon numarası da gerekmez.
 
-- Daha önce yaptığınız bir kimliği geri getirmek isterseniz, "Mevcut bir hesabı geri yükle"yi açın; geri getirme yolları (bir yedek dosyası, bir kurtarma parolası vb.) çıkar.
+- Düğmenin üstündeki alana "Adınız (görüntülenen ad)" yazarsanız, o adla başlarsınız. Düğmeye alan boşken de basabilirsiniz. Görüntülenen adı daha sonra ayarların profil bölümünde değiştirebilirsiniz.
+- Kendinizin seçtiği bir ad ve Breeze kimliğiyle bir kimlik oluşturma yolu da vardır. Bu durumda bir kurtarma ifadesi düzenlenir ve ekranda gösterilir. Kurtarma ifadesi, o kimliği başka bir cihazda geri getirmenizi sağlayan sözcüklerdir. Onu kâğıda veya güvenli bir yere not edin.
+- Daha önce yaptığınız bir kimliği geri getirmek isterseniz, "Var olan bir hesabı geri yükle"yi açın; geri getirme yolları (yedek dosyasından geri yükleme, kurtarma ifadesiyle kurtarma, hesap + parola ile geri yükleme) çıkar.
 - Oluşturma bittiğinde, anahtarınızı bir parolayla korumanıza yol gösteren bir kart çıkar (bir süre sonra kaybolmaz). Önemli bir kimlik için yol göstermeyi izleyin ve korumayı ekleyin.
 
 Bu sırada cihazın içinde bir "anahtar" oluşturulur. Kimliğinizin ta kendisi budur.
 **Hesapların listesi sunucuda yoktur.** Kimlik yalnızca cihazınızın içinde bulunur.
 Bu nokta, yedekleme bölümünde (9) önemli olacaktır.
 
-### "Tek kullanımlık kimlik" hakkında
+### Eski "tek kullanımlık kimlik" hakkında
 
-Oluştururken "tek kullanımlık kimlik" seçerseniz, hiçbir geri getirme yolu olmayan bir kimlik olur.
-O cihazı kaybederseniz, sıfırlarsanız veya tarayıcı verilerini silerseniz, o kimlik bir daha geri gelmez.
-Bu, ekranda da gösterilir. Uzun süre kullanacağınız bir kimlik için seçmeyin.
+"Tek kullanımlık kimlik" — hiçbir geri getirme yolu olmayan bir kimlik — artık yoktur. Bugünkü oluşturma yollarıyla, her kimlik bir yedekle korunabilir.
 
 ---
 
@@ -73,6 +73,7 @@ Karşı taraf da uygulamayı açmışsa, doğrudan bağlanıp konuşabilirsiniz.
 
 - **Gönderim durumu**: Bir mesajın yanındaki işaretten anlaşılır. ✓ gönderildi demektir, daire içindeki ✓ emanet kutusuna bırakıldığı, ✓✓ karşı tarafa ulaştığı, okundu mavi bir işaret ve başarısızlık kırmızı bir işarettir. Yalnızca renkle değil, biçimle de ayırt edilirler.
 - **Kişi listesi**: Son konuşmanızın zamanı bugün için saat olarak, dün için "Dün", bu yıl için ay/gün ve daha eskisi için yıl/ay/gün olarak gösterilir. Okumadığınız mesajları olan kişilerin adı ve zamanı vurgulanır.
+- **Kişiler için adlar**: "Kişi bilgileri"ni açın (bir kişinin sağ tıklama menüsünde veya konuşmanın "⋮" menüsünde); o kişi için kendi adınızı (bir takma ad) belirleyebilirsiniz. Takma adlar yalnızca bu cihazda saklanır ve kişiye ya da aktarım sunucusuna asla gönderilmez. Bir takma ad belirlediğinizde, kişinin kendisi için belirlediği ad da yanında soluk bir renkle gösterilir. Bu ikinci adı, ayarların "Gizlilik" bölümündeki "Her kişinin kendisi için belirlediği adı da göster" ile kapatabilirsiniz.
 - **Kendi kartınız**: Listenin üstünde kendi profil kartınız bulunur; profilinizi açmak için ona basın. Listeyle birlikte kayar.
 - **Telefonda alt sekmeler**: Telefon genişliğinde, ekranın altında "Kişiler" ve "Ayarlar" sekmeleri çıkar.
 - **Konuşma başlığı**: Arama simgesinden konuşma içinde arama yapabilirsiniz. "⋮" menüsünden güvenlik numarasını denetleyebilir, bildirimleri susturabilir, sabitleyebilir, anket oluşturabilir ve daha fazlasını yapabilirsiniz.
@@ -107,6 +108,7 @@ Ayarlar ve cihaz bağlama gibi bazı işlemler komutlardan yapılır.
 - Hesaplar birden çok oluşturulup ayrı ayrı kullanılabilir (iş ve özel gibi). Cihaz sayısı da hesap sayısı da ücretsiz ve sınırsızdır.
 - **Hesap oluşturma yolu**: Kişi listesinin en üstündeki hesap sekmelerinin yanındaki "+" düğmesine basın. Bir ad girin ve bir simge emojisi seçin; yeni bir hesap oluşturulur ve otomatik olarak ona geçilir.
 - **Hesap değiştirme**: Hesap sekmeleri her zaman kişi listesinin en üstünde gösterilir. Geçmek için birine basın (bilgisayarda Ctrl+1–9 ile de geçebilirsiniz). Bir sekmeyi yeniden adlandırmak, simgesini değiştirmek veya silmek için basılı tutun.
+- Kişiler ve anahtarlar her hesap için ayrıdır. Her hesap için kişileri yeniden değiş tokuş edin.
 - Dil, İngilizce de dâhil 51 dil arasından, cihazınızın diline uygun olarak otomatik seçilir.
 
 ---
@@ -117,6 +119,7 @@ Ayarlar kendi ekranı olarak açılır. Telefonda, ekranın altındaki "Ayarlar"
 
 - **Otomatik kilit**: Sekme değiştirildiğinde otomatik olarak kilitleyen bir ayar vardır.
 - **Anahtar parolası**: Cihazın içindeki anahtar, bir parolaya sarılarak korunabilir. Uygulamayı açarken girmeniz istenir.
+- **Her kişinin kendisi için belirlediği adı da göster**: "Gizlilik" bölümünde. Takma ad verdiğiniz bir kişi için, kendi adının da yanında gösterilip gösterilmeyeceğini seçebilirsiniz (bölüm 3).
 - **Engelleme**: Rahatsız eden kişiler engellenebilir. Engellenen kişiden iletişim gelmez.
 
 ---
@@ -141,11 +144,21 @@ Pil düzeyini otomatik okuyamayan cihazlarda (iPhone tarayıcısı gibi), "Otoma
 Breeze'in kimliği, yalnızca cihazınızın içindeki anahtardır. Sunucuda hesap listesi yoktur ve yapan kişide de sizin anahtarınız yoktur.
 **Cihazı kaybederseniz, kimlik de kaybolur.** Önemli bir kimlik için mutlaka yedek alın.
 
-Yedekleme ve geri getirme, ayarların "Yedekleme ve geri getirme" bölümünden yapılır (üç düğme vardır: "Buluta yedekle", "Geri yükle" ve "Dosyadan geri yükle"). Bir kişiyi ilk kez eklediğinizde, yedek almanızı isteyen bir kart yalnızca bir kez çıkar.
+Yedekleme ve geri getirme, ayarların "Yedekleme & geri yükleme" bölümünden yapılır (düğmeler "Yedek Oluştur", "Yedeği Geri Yükle" ve "📂 Dosyadan geri yükle"dir). Bir kişiyi ilk kez eklediğinizde, yedek almanızı isteyen bir kart yalnızca bir kez çıkar.
 
-### Yedek alma yolu
+### Otomatik yedekleme
 
-1. Ayarlardaki "Yedekleme ve geri getirme" kısmından yedek oluşturmayı seçin.
+"Otomatik yedekleme" ayarı baştan açıktır. Verileriniz değiştiğinde, şifreli bir yedek kendi barındırdığınız aktarım sunucusuna otomatik olarak gönderilir.
+
+- Her değişiklikte göndermez: son değişiklikten sonra 30 saniye bekler ve her şeyi birlikte gönderir. Denemeler en az 15 dakika arayla yapılır.
+- Çevrimdışıyken hiçbir şey gönderilmez; değişiklikler tutulur ve bağlantı geri geldiğinde ve uygulamayı açtığınızda gönderilir.
+- Otomatik gönderim için, o cihazda yedek parolasını bir kez girmeniz gerekir (gerektiğinde, ayarlar bölümünde bir "Parola gir" düğmesi çıkar). **Parola saklanmaz.** Yalnızca uygulama açıkken anımsanır ve kapattığınızda kaybolur. Basit geri getirmeli bir kimlikte, kayıtta veya güncellemede parolayı girdikten hemen sonra gönderim olduğu gibi çalışır.
+- Aktarım sunucusu yedeklerin saklanmasını desteklemiyorsa, otomatik yedekleme çalışmaz. Bu, ayarlar bölümünde gösterilir.
+- Durum (son başarılı gönderimin ne zaman olduğu, değişikliklerin bekleyip beklemediği, bir gönderimin başarısız olup olmadığı) ayarlar bölümünde gösterilir.
+
+### Yedek alma yolu (el ile)
+
+1. Ayarlardaki "Yedekleme & geri yükleme" kısmından "Yedek Oluştur"u seçin.
 2. Yedek için bir parola belirleyin (en az 6 karakter).
 3. Kaydedilecek yeri seçin.
    - **Dosyaya kaydetme**: Yedek dosyasını kendi elinizde saklayın (önerilir).
@@ -157,11 +170,23 @@ Yedeğin içeriği şifrelidir. Kaydedilecek yerin sunucusu yalnızca şifreli m
 
 Yeni cihazda, yedek dosyasını (veya aktarım sunucusundaki yedeği) ve belirlediğiniz parolayı kullanarak geri yüklersiniz.
 
+Kimliğinizi bir kurtarma ifadesiyle yeni geri getirdiyseniz ve o kimliğin bir yedeği aktarım sunucusundaysa, otomatik olarak bulunur ve size "Yedek bulundu" ile sorulur. Onu geri yüklerseniz, o cihazdaki verilerin yerini yedeğin içeriği alır.
+
+### Yeni bir cihaza geçiş
+
+Ayarların "Yedekleme & geri yükleme" bölümündeki "Yeni bir cihaza geçiş" düğmesine basın; adımlar gösterilir.
+
+1. Şimdiki cihazınızda, aktarım sunucusunda bir yedek bulundurun (otomatik yedekleme veya "Yedek Oluştur").
+2. Yeni cihazda, ilk ekranda bir geri yükleme yolu seçin ve kurtarma ifadenizi (veya hesap adınızı ve parolanızı) girin.
+3. Kimliğiniz geri geldiğinde, sunucudaki yedek otomatik olarak bulunur ve bir geri yükleme sunulur.
+
+Kabloya veya dosya aktarımına gerek yoktur.
+
 ### Uyarılar
 
 - **Parolayı unutursanız, geri yükleme yapılamaz.** Yapan kişi de düzeltemez. Parolayı başka bir yere not edin.
-- **Tek kullanımlık kimlik, yedekle de geri getirmeyle de geri gelmez.**
-- Kimlikler çoğaldığında veya cihaz değiştirdiğinizde yedeği yeniden oluşturun.
+- Otomatik yedekleme için parolayı girmek her cihazda gereklidir. Yeni bir cihazda onu bir kez daha girin.
+- Kimlikleriniz çoğaldığında veya cihaz değiştirdiğinizde el ile yedeği yeniden oluşturun.
 
 ---
 

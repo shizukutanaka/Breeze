@@ -1,8 +1,8 @@
 # Breeze Messenger — Detailed Specification
 
-**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09); total codebase figure re-measured 2026-11-22 (S06); header figures, §1.2, §2.1, §3, §4.3–§4.5, §5, §9, §10.5, §11 and §12 re-measured against the current code 2026-11-25
+**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09); total codebase figure re-measured 2026-11-22 (S06); header figures, §1.2, §2.1, §3, §4.3–§4.5, §5, §9, §10.5, §11 and §12 re-measured against the current code 2026-11-25; §4.5 and the header / §1.2 / §3.1 / §4.3 / §9 / §10 / §11 figures updated again the same day for the first-run, automatic-backup and contact-name changes (PR #531–#533)
 **Status**: Living reference. Originally written for v3.6.0; the sections named above were re-measured against the current codebase (CONFIG VERSION 3.8.0, main as of 2026-11-25). Other sections describe the design as of v3.6.0 and may lag the code — where this document and the code disagree, the code and its tests win.
-**Total codebase**: 15,770 (index.html) + 12,998 (src/ modules) + 5,213 (_worker.js) + 245 (SW) = 34,226 lines (plus the Node self-host under `server/`: 1,037 lines, not part of the historical formula)
+**Total codebase**: 15,973 (index.html) + 13,291 (src/ modules) + 5,213 (_worker.js) + 245 (SW) = 34,722 lines (plus the Node self-host under `server/`: 1,037 lines, not part of the historical formula)
 
 ---
 
@@ -18,11 +18,11 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 | Clean architecture, SOLID | Robert C. Martin | Single-responsibility functions, DRY helpers (postAPIRaw, _signal, _autoHeight) |
 | Simplicity, composition | Rob Pike | Single-file client plus ES modules, no build step, no framework, no external AI dependency |
 
-### 1.2 File Inventory (596 tracked files)
+### 1.2 File Inventory (599 tracked files)
 
 | File | Size | Purpose |
 |------|------|---------|
-| index.html | 894 KB | Client: UI + CSS + JS (single file) |
+| index.html | 908 KB | Client: UI + CSS + JS (single file) |
 | _worker.js | 305 KB | Cloudflare Worker: API + signals |
 | server/* | — | Node self-host relay (same handler, SQLite state) |
 | sw.js | 12 KB | Service Worker: offline cache + push |
@@ -123,7 +123,7 @@ Sender                          Server                         Receiver
      │                                             │
   ┌──┴──┐          WebRTC P2P            ┌────────┴┐
   │User A│◄═════════════════════════════►│ User B  │
-  │(15.8K)│   DataChannel (encrypted)     │(15.8K)  │
+  │(16.0K)│   DataChannel (encrypted)     │(16.0K)  │
   └──────┘                               └─────────┘
 ```
 
@@ -253,7 +253,7 @@ Instance counts are literal call-pattern occurrences in `index.html`, grep-measu
 
 | Helper | Replaces | Instances |
 |--------|----------|-----------|
-| `_DOM.get(id)` | `document.getElementById(id)` | 255 calls (memoized) |
+| `_DOM.get(id)` | `document.getElementById(id)` | 254 calls (memoized) |
 | `_H` | `{ 'Content-Type': 'application/json' }` | constant, used for all JSON posts |
 | `MS.*` | Time magic numbers (86400000 etc.) | throughout |
 | `postAPIRaw(path, body)` | `fetchT(API + path, { method: 'POST', headers: _H, body: ... })` | 34 calls |
@@ -331,6 +331,48 @@ WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
   in `auto` the mode follows `navigator.getBattery()` (>50% normal,
   20–50% saver, ≤20% emergency; charging steps one level back). Listening
   is throttled, sending never is.
+- **First-run screen**: the primary action is the one-tap "Start with a
+  random ID" button, with an optional display-name field ("Your name
+  (display name)") above it; the identity it mints carries no recovery
+  mode, so it stays eligible for backup and the recovery kit. The named
+  path (name + @alias) creates a phrase identity whose recovery phrase
+  is shown at creation, and a "Restore an existing account" expander
+  holds the three restore entries (backup file, recovery phrase,
+  account + passphrase). There is no disposable / no-recovery creation
+  mode (removed in PR #531); identities created by it earlier keep
+  `recoveryMode: 'none'` and remain refused a backup or a kit, but no
+  new one can be made. The display name is also editable later in the
+  Settings profile section, writing through the profile module's own
+  save path.
+- **Automatic backup** (`src/app/backup.js`): a Settings toggle
+  (default on) plus a status line. A hook on `dbPut` marks the backup
+  dirty when the identity / contacts / messages stores change; uploads
+  run through the same cloud / simple uploads as the manual buttons,
+  throttled by a 30 s quiet period after the last change and a 15 min
+  floor between attempts. Offline changes stay pending and flush on
+  the `online` event and at boot. The backup passphrase is never
+  persisted — it is armed for the session at simple-mode enrollment /
+  update, or via the Settings "Enter passphrase" button — and the
+  status line names the state (off / ineligible / no-server /
+  need-passphrase / error / pending / ok) instead of failing silently.
+  After a phrase / kit restore, a just-recovered marker makes the next
+  boot probe the home relays for that identity's cloud backup and
+  offer it once; nothing is written until the user confirms and the
+  payload's identity matches the recovered one. A "Move to a new
+  device" button in the same Settings section shows the migration
+  guide built on these flows (no new mechanism).
+- **Contact names**: one display-resolution path
+  (`contactDisplayName` / `contactPeerName`). The local nickname —
+  stored in `c.name` + `nameLocked`, the fields the context-menu
+  rename has always written — wins; the name the contact set for
+  themselves (`c.profileName`, kept current by profile distribution)
+  is shown alongside it in a muted span in the contact list and the
+  chat header while a nickname hides it, gated by the `showPeerName`
+  setting (Privacy section, default on). The Contact info panel
+  (contact context menu, conversation overflow menu) edits the
+  nickname and can clear it; nicknames are stored only on the device
+  and are never sent to the contact or the relay. Search matches both
+  the nickname and the contact's own name.
 
 ---
 
@@ -493,11 +535,11 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 | 2. Security | eval=0, CSP present, no API key leaks | All pass |
 | 3. i18n | Hardcoded strings < 10, toast i18n >= 95% | Met |
 | 4. Code Quality | .style.X < 25, onclick=0, DRY headers=100% | Met |
-| 5. Performance | Lines, RAF >= 2, Fragment >= 1, throttle | Met (index.html 15,770 lines, under the 16,000-line test cap) |
+| 5. Performance | Lines, RAF >= 2, Fragment >= 1, throttle | Met (index.html 15,973 lines, under the 16,000-line test cap) |
 | 6. Protocol Spec | 6 crypto features verified | Met |
 | 7. Required Files | 10 files exist | Met |
 
-**Current score: 165/171, 44 checks, 0 failures — `./validate.sh` PASSED, measured 2026-11-25 (the check count grows as gates land, so re-run rather than trust this figure). Test suite at the same date: 157 files / 2,540 tests, all passing.**
+**Current score: 165/171, 44 checks, 0 failures — `./validate.sh` PASSED, measured 2026-11-25 (the check count grows as gates land, so re-run rather than trust this figure). Test suite at the same date: 160 files / 2,586 tests, all passing.**
 
 ---
 
@@ -505,7 +547,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 | Optimization | Impact |
 |-------------|--------|
-| _DOM.get() memoized cache | 255 getElementById calls cached with isConnected validation |
+| _DOM.get() memoized cache | 254 getElementById calls cached with isConnected validation |
 | requestAnimationFrame render coalescing | 3 render paths avoid forced layout |
 | DocumentFragment batch insertion | 2 batch DOM operations |
 | renderContacts throttle (200ms) | Prevents 38+ calls/cycle jank |
@@ -551,7 +593,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ## 11. i18n
 
-- **Built-in**: English only — the inline reference table (882 keys, pure data) and runtime fallback
+- **Built-in**: English only — the inline reference table (902 keys, pure data) and runtime fallback
 - **Locale files**: 50 files, `locales/<lang>.json` for am, ar, az, bn, cs, da, de, el, es, fa, fi, fr, ha, he, hi, hr, hu, id, ig, it, ja, ka, kk, km, ko, ml, ms, my, nb, nl, pa, pl, pt-BR, ro, ru, sr, sv, sw, ta, te, th, tl, tr, uk, ur, uz, vi, yo, zh-CN, zh-TW, fetched at boot and merged over English — 51 UI languages in total including English. `node tools/i18n-check.mjs` prints the live key count and per-locale coverage; at 2026-11-25 it reports all 50 locales at 100% (core and total). The active locale is auto-detected from `navigator.language` against `FULL_LOCALES`
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
@@ -645,4 +687,4 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ---
 
-*Generated: 2026-03-15 | Last re-measured: 2026-11-25 | Breeze v3.8.0 (CONFIG VERSION) | 34,226 total lines (index.html + src/ + _worker.js + sw.js) | Tests: 157 files / 2,540 passing*
+*Generated: 2026-03-15 | Last re-measured: 2026-11-25 | Breeze v3.8.0 (CONFIG VERSION) | 34,722 total lines (index.html + src/ + _worker.js + sw.js) | Tests: 160 files / 2,586 passing*

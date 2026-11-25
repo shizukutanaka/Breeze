@@ -20,7 +20,7 @@ Bu qo'llanma foydalanishni boshlayotganlar uchun yo'riqnomadir.
 - Windows: nomi `-win-x64.exe` bilan tugaydigan (ARM qurilmalari uchun ham bor)
 - Mac: nomi `-mac.dmg` bilan tugaydigan
 - Linux: `.AppImage` (shundayicha bajarish mumkin) yoki `.deb`
-- Brauzerda ishlatsangiz, o'z serveringizga joylashtirganingizdan foydalaning (joylashtirish qadamlari alohida hujjatda, «Joylashtirish qo'llanmasi»da berilgan)
+- Brauzerda ishlatsangiz, o'z serveringizga joylashtirganingizdan foydalaning (joylashtirish qadamlari alohida hujjatda, «Joylashtirish qo'llanmasi»da berilgan). Standart joylashtirish Cloudflare'dan foydalanadi, shuning uchun Cloudflare hisobi kerak
 
 Har bir faylga tekshirish raqami (SHA256SUMS.txt) ilova qilingan. Xohlasangiz, yuklab olgan faylingizning raqami mos kelishini tekshirishingiz mumkin.
 
@@ -29,20 +29,20 @@ Har bir faylga tekshirish raqami (SHA256SUMS.txt) ilova qilingan. Xohlasangiz, y
 ### Dastlabki sozlash
 
 1. Ilovani oching.
-2. Ismingizni kiriting va «Hisob yaratish» tugmasini bosing. Tayyorgarlik shu bilan tugaydi. Ro'yxatdan o'tish ham, telefon raqami ham kerak emas.
+2. «Tasodifiy ID bilan boshlash» tugmasini bosing. Tayyorgarlik shu bilan tugaydi. Ro'yxatdan o'tish ham, telefon raqami ham kerak emas.
 
-- Avval yaratgan shaxsingizni qaytarmoqchi bo'lsangiz, «Mavjud hisobni tiklash»ni oching va tiklash usullari (zaxira nusxa fayli, tiklash iborasi va h.k.) chiqadi.
+- Tugma ustidagi maydonga «Ismingiz (ko'rsatiladigan ism)»ni kiritsangiz, shu ism bilan boshlaysiz. Maydonni bo'sh qoldirib ham tugmani bosishingiz mumkin. Ko'rsatiladigan ismni keyin sozlamalardagi profil bo'limida o'zgartirishingiz mumkin.
+- Ism va o'zingiz tanlagan Breeze ID bilan shaxs yaratish usuli ham bor. Bunday holda tiklash iborasi beriladi va ekranda ko'rsatiladi. Tiklash iborasi — shu shaxsni boshqa qurilmada qaytarish imkonini beradigan so'zlar. Uni qog'ozga yoki xavfsiz joyga yozib saqlang.
+- Avval yaratgan shaxsingizni qaytarmoqchi bo'lsangiz, «Mavjud hisobni tiklash»ni oching va tiklash usullari (zaxira faylidan tiklash, tiklash iborasi bilan tiklash, hisob + maxfiy ibora bilan tiklash) chiqadi.
 - Yaratish tugaganda kalitingizni parol iborasi bilan himoya qilishga yo'naltiruvchi karta chiqadi (u bir muddatdan keyin yo'qolmaydi). Muhim shaxs uchun ko'rsatmaga amal qiling va himoyani qo'shing.
 
 Shu payt qurilmangiz ichida «kalit» yaratiladi. U sizning shaxsingizning o'zi.
 **Hisoblar ro'yxati serverda yo'q.** Shaxs faqat sizning qurilmangizda bor.
 Bu jihat zaxira nusxa bobida (9) muhim bo'ladi.
 
-### «Bir martalik shaxs» haqida
+### Avvalgi «bir martalik shaxs» haqida
 
-Yaratishda «bir martalik shaxs»ni tanlasangiz, hech qanday tiklash vositasi bo'lmagan shaxs yaratiladi.
-Shu qurilmani yo'qotsangiz, zavod holatiga qaytarsangiz yoki brauzer ma'lumotlarini o'chirsangiz, u shaxs endi hech qachon qaytmaydi.
-Bu ekranda ham ko'rsatiladi. Uzoq ishlatadigan shaxs uchun tanlamang.
+«Bir martalik shaxs» — hech qanday tiklash vositasi bo'lmagan shaxs — endi yo'q. Hozirgi yaratish usullari bilan har bir shaxsni zaxira nusxa bilan himoya qilish mumkin.
 
 ---
 
@@ -73,6 +73,7 @@ Ikkinchi tomon ham ilovani ochgan bo'lsa, to'g'ridan-to'g'ri ulanib suhbatlasha 
 
 - **Yuborish holati**: Xabar yonidagi belgidan ajrata olasiz. ✓ yuborilgan degani, doira ichidagi ✓ saqlash qutisiga qo'yilgan degani, ✓✓ ikkinchi tomonga yetgan degani, o'qilgan ko'k belgi, muvaffaqiyatsizlik esa qizil belgidir. Ular rang bilan birga shakl bilan ham farqlanadi.
 - **Kontaktlar ro'yxati**: Oxirgi suhbatlashgan vaqtingiz bugun uchun vaqt sifatida, kecha uchun «Kecha», joriy yil uchun oy/kun, undan oldingilar uchun yil/oy/kun sifatida ko'rsatiladi. O'qilmagan xabarlari bor kontaktlarning ismi va vaqti ajratib ko'rsatiladi.
+- **Kontaktlar uchun ismlar**: «Kontakt haqida ma'lumot»ni ochsangiz (kontaktni o'ng tugma bilan bosish menyusida yoki suhbatning «⋮» menyusida), shu kontaktga o'z ismingizni (taxallus) qo'yishingiz mumkin. Taxalluslar faqat shu qurilmada saqlanadi va hech qachon kontaktga ham, uzatuvchi serverga ham yuborilmaydi. Taxallus qo'yganingizda, kontakt o'zi qo'ygan ism uning yonida xira rangda ko'rsatiladi. Shu ikkinchi ismni sozlamalarning «Maxfiylik» bo'limidagi «Har bir kontakt o'zi qo'ygan ismni ham ko'rsatish» orqali o'chirishingiz mumkin.
 - **O'z kartangiz**: Ro'yxatning yuqorisida o'z profil kartangiz bor; profilingizni ochish uchun uni bosing. U ro'yxat bilan birga aylanadi.
 - **Telefondagi pastki yorliqlar**: Telefon kengligida ekranning pastki qismida «Kontaktlar» va «Sozlamalar» yorliqlari chiqadi.
 - **Suhbat sarlavhasi**: Qidiruv belgisidan suhbat ichida qidirishingiz mumkin. «⋮» menyusidan xavfsizlik raqamini tekshirishingiz, bildirishnomalarni o'chirishingiz, mahkamlashingiz, so'rovnoma yaratishingiz va boshqalarni qilishingiz mumkin.
@@ -107,6 +108,7 @@ Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 - Hisoblarni bir nechta yaratib, alohida ishlatish mumkin (masalan, ish va shaxsiy). Qurilmalar soni ham, hisoblar soni ham bepul va cheksiz.
 - **Hisob qanday yaratiladi**: Kontaktlar ro'yxatining eng yuqorisidagi hisob yorliqlarining yonidagi «+» tugmasini bosing. Ism kiritib emoji belgisini tanlasangiz, yangi hisob yaratiladi va avtomatik unga o'tiladi.
 - **Hisoblarni almashtirish**: Hisob yorliqlari har doim kontaktlar ro'yxatining eng yuqorisida ko'rsatiladi. Almashtirish uchun birini bosing (kompyuterda Ctrl+1–9 bilan ham almashtirishingiz mumkin). Yorliqni bosib ushlab tursangiz, uning ismini o'zgartirishingiz, belgisini o'zgartirishingiz yoki o'chirishingiz mumkin.
+- Kontaktlar va kalitlar har bir hisob uchun alohida. Har bir hisob uchun kontaktlar bilan yana almashing.
 - Til ingliz tilini ham qo'shganda 51 tildan qurilmangiz tiliga mos ravishda avtomatik tanlanadi.
 
 ---
@@ -117,6 +119,7 @@ Sozlamalar o'z ekrani sifatida ochiladi. Telefonda ularni ekranning pastki qismi
 
 - **Avtomatik qulflash**: Yorliqni almashtirganda avtomatik qulflaydigan sozlama bor.
 - **Kalit parol iborasi**: Qurilma ichidagi kalitni parol iborasi bilan o'rab himoya qilish mumkin. Ilovani ochganda kiritish so'raladi.
+- **Har bir kontakt o'zi qo'ygan ismni ham ko'rsatish**: «Maxfiylik» bo'limida. Taxallus qo'ygan kontaktingiz uchun uning o'z ismi yonida ko'rsatilishini tanlashingiz mumkin (3-bob).
 - **Bloklash**: Bezovta qiluvchi odamlarni bloklash mumkin. Bloklangan odamlardan aloqa kelmaydi.
 
 ---
@@ -141,11 +144,21 @@ Batareya darajasini avtomatik o'qiy olmaydigan qurilmalarda (iPhone brauzeri kab
 Breeze shaxsi — faqat qurilmangizdagi kalit. Serverda hisoblar ro'yxati yo'q va yaratuvchida ham sizning kalitingiz yo'q.
 **Qurilmani yo'qotsangiz, shaxsni ham yo'qotasiz.** Muhim shaxslaringiz uchun albatta zaxira nusxa yarating.
 
-Zaxira nusxa va tiklash sozlamalarning «Zaxira nusxa va tiklash» bo'limidan qilinadi (uchta tugma bor: «Bulutga zaxira nusxa», «Tiklash» va «Fayldan tiklash»). Kontaktni birinchi marta qo'shganingizda zaxira nusxa yaratishga undovchi karta faqat bir marta chiqadi.
+Zaxira nusxa va tiklash sozlamalarning «Zaxira nusxa va tiklash» bo'limidan qilinadi (tugmalar: «Zaxira yaratish», «Zaxirani tiklash» va «Fayldan tiklash»). Kontaktni birinchi marta qo'shganingizda zaxira nusxa yaratishga undovchi karta faqat bir marta chiqadi.
 
-### Zaxira nusxa yaratish
+### Avtomatik zaxira nusxa
 
-1. Sozlamalardagi «Zaxira nusxa va tiklash» bo'limidan zaxira nusxa yaratishni tanlang.
+«Avtomatik zaxira nusxa» sozlamasi boshidan yoqilgan. Ma'lumotlaringiz o'zgarganda, shifrlangan zaxira nusxa o'zingiz joylashtirgan uzatuvchi serverga avtomatik yuboriladi.
+
+- Har bir o'zgarishda yuborilmaydi: oxirgi o'zgarishdan keyin 30 soniya kutadi va hammasini birga yuboradi. Urinishlar kamida 15 daqiqa oraliqda qilinadi.
+- Oflayn paytingizda hech narsa yuborilmaydi; o'zgarishlar saqlanib, ulanish qaytganda va ilovani ochganingizda yuboriladi.
+- Avtomatik yuborish uchun zaxira maxfiy iborasini shu qurilmada bir marta kiritish kerak (kerak bo'lganda sozlamalar bo'limida «Maxfiy iborani kiritish» tugmasi chiqadi). **Maxfiy ibora saqlanmaydi.** U faqat ilova ochiq turganda esda qoladi va yopilganda yo'qoladi. Oddiy tiklash shaxsi uchun ro'yxatdan o'tish yoki yangilashda maxfiy iborani kiritganingizdan keyin yuborish o'sha holda ishlaydi.
+- Uzatuvchi server zaxira nusxalarni saqlashni qo'llab-quvvatlamasa, avtomatik zaxira nusxa ishlamaydi. Bu sozlamalar bo'limida ko'rsatiladi.
+- Holat (oxirgi muvaffaqiyatli yuborish vaqti, o'zgarishlar kutayotgani, yuborish muvaffaqiyatsiz bo'lgani) sozlamalar bo'limida ko'rsatiladi.
+
+### Zaxira nusxa yaratish (qo'lda)
+
+1. Sozlamalardagi «Zaxira nusxa va tiklash» bo'limidan «Zaxira yaratish»ni tanlang.
 2. Zaxira nusxa uchun parol iborasi belgilang (6 belgi yoki undan ko'p).
 3. Saqlash joyini tanlang.
    - **Faylga saqlash**: Zaxira nusxa faylini o'zingizda saqlang (tavsiya etiladi).
@@ -157,11 +170,23 @@ Zaxira nusxaning mazmuni shifrlangan. Saqlash joyidagi server ishlaydigani — f
 
 Yangi qurilmada zaxira nusxa fayli (yoki uzatuvchi serverdagi zaxira nusxa) va belgilagan parol iborangizdan foydalanib tiklang.
 
+Shaxsingizni tiklash iborasi bilan endigina qaytargan bo'lsangiz va shu shaxsning zaxira nusxasi uzatuvchi serverda bo'lsa, u avtomatik topiladi va «Zaxira topildi» deb so'raladi. Uni tiklasangiz, shu qurilmadagi ma'lumotlar zaxira nusxa mazmuni bilan almashtiriladi.
+
+### Yangi qurilmaga ko'chirish
+
+Sozlamalarning «Zaxira nusxa va tiklash» bo'limidagi «Yangi qurilmaga ko'chirish» tugmasini bossangiz, qadamlar ko'rsatiladi.
+
+1. Joriy qurilmangizda zaxira nusxani uzatuvchi serverda saqlang (avtomatik zaxira nusxa yoki «Zaxira yaratish»).
+2. Yangi qurilmada birinchi ekranda tiklash usulini tanlang va tiklash iborangizni (yoki hisob nomingiz va maxfiy iborangizni) kiriting.
+3. Shaxsingiz qaytganda, serverdagi zaxira nusxa avtomatik topiladi va tiklash taklif qilinadi.
+
+Kabellar ham, fayllarni qo'lda topshirish ham kerak emas.
+
 ### Eslatmalar
 
 - **Parol iborasini unutsangiz, tiklash mumkin emas.** Yaratuvchi ham tuzata olmaydi. Parol iborasini boshqa joyga yozib saqlang.
-- **Bir martalik shaxslar zaxira nusxa bilan ham, tiklash bilan ham qaytmaydi.**
-- Shaxslar ko'payganda yoki qurilma almashtirganda zaxira nusxani qayta yarating.
+- Avtomatik zaxira nusxa uchun maxfiy iborani kiritish har bir qurilmada kerak. Yangi qurilmada uni yana bir marta kiriting.
+- Shaxslar ko'payganda yoki qurilma almashtirganda qo'lda zaxira nusxani qayta yarating.
 
 ---
 

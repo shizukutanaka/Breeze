@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Läs på andra språk**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · Svenska (den här sidan) · [Norsk](README-nb.md) · [Dansk](README-da.md) · [Suomi](README-fi.md) · [Čeština](README-cs.md) · [Magyar](README-hu.md) · [Română](README-ro.md) · [Ελληνικά](README-el.md) · [Türkçe](README-tr.md) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@ Det här är inte en webbsida, utan programvara som du installerar och använder
 
 Breeze har ingen "företagsserver". **För att använda Breeze tillhandahåller du själv en plats (en server) och placerar Breeze där. Det är det officiella sättet att använda den.**
 
-- Platsen ryms inom gratisnivån. Den körs på Cloudflares gratisnivå och kräver inget kreditkort. Anvisningarna finns i [installationsguiden](SELF_HOSTING-sv.md) (versioner på andra språk kan väljas i början av guiden).
+- Standardinstallationen använder Cloudflare, så **ett Cloudflare-konto krävs**. Anvisningarna finns i [installationsguiden](SELF_HOSTING-sv.md) (versioner på andra språk kan väljas i början av guiden).
 - Hämta appen (Windows / Mac / Linux / Android / iPhone) från [nedladdningssidan](https://github.com/shizukutanaka/Breeze/releases/latest) och använd den ansluten till din egen server.
 - **Om exempeldistributionen (ett ärligt meddelande)**: Det finns ett exempel för att kontrollera att det fungerar (https://breeze-469.pages.dev/). Det som är placerat där är samma programvara, men använd din egen server för verklig användning. Exemplet kan ändras eller stoppas utan förvarning. En Breeze som du har placerat på din egen server påverkas inte om exemplet stoppas.
 
@@ -24,7 +24,7 @@ Mer detaljerade anvisningar finns i [manualen](MANUAL-sv.md) (versioner på andr
 
 ## Så här använder du den (3 steg)
 
-1. Öppna den Breeze du har placerat på din egen server (eller adressen du fått av den som placerade den), och ange ditt namn. Det är allt – du är redo (ingen registrering, inget telefonnummer behövs). Då skapas en "nyckel" inuti din enhet, och den är din identitet.
+1. Öppna den Breeze du har placerat på din egen server (eller adressen du fått av den som placerade den), och tryck på "Börja med ett slumpmässigt ID" (du kan ange ett namn om du vill). Det är allt – du är redo (ingen registrering, inget telefonnummer behövs). Då skapas en "nyckel" inuti din enhet, och den är din identitet.
 2. Ge din ID eller QR-kod till den person du vill prata med.
 3. Om den andra personen också har appen öppen kan ni ansluta direkt och prata. Om de inte har den öppen placeras meddelandet, fortfarande krypterat, i en "brevlåda" och levereras när de öppnar appen. Servern som transporterar brevlådan kan inte läsa innehållet. Brev som aldrig levereras raderas automatiskt efter högst 7 dagar.
 
@@ -43,6 +43,8 @@ Vi skriver också ärligt om gränserna. För att leverera meddelanden finns det
 - Röstsamtal och videosamtal (gruppsamtal upp till 8 personer)
 - Skicka filer (upp till 50MB i chattar en mot en. Det går även i grupper, men storleksgränsen är mindre där)
 - Flera enheter och flera konton för olika ändamål (till exempel arbete och privat. Både antal enheter och konton är gratis och obegränsade)
+- Automatisk säkerhetskopiering (när något ändras sparas en krypterad säkerhetskopia automatiskt på din egen server. På en ny enhet, när du har återställt din identitet, hittas en säkerhetskopia automatiskt och erbjuds dig. Inställningarna vägleder dig också genom flytten till en ny enhet)
+- Ett namn du väljer för varje kontakt (du kan byta namn på varje kontakt, lagras bara på den här enheten. Du kan också välja om namnet som varje kontakt själv har ställt in ska visas)
 - 51 språk (engelska plus 50 språkfiler), väljs automatiskt för att matcha enhetens språk
 - Profiler med foto, klistermärken, platsdelning
 - Kommandon som `/help` (71 typer)
@@ -114,7 +116,7 @@ Rapportera buggar på [issuesidan](https://github.com/shizukutanaka/Breeze/issue
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Licens
 

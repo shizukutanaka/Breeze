@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **Başka bir dilde okuyun**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · [Norsk](README-nb.md) · [Dansk](README-da.md) · [Suomi](README-fi.md) · [Čeština](README-cs.md) · [Magyar](README-hu.md) · [Română](README-ro.md) · [Ελληνικά](README-el.md) · Türkçe (bu sayfa) · [العربية](README-ar.md) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@ Bu bir web sayfası değil, kurulup kullanılan bir yazılımdır (Windows / Mac
 
 Breeze'in bir "işletmeci şirket sunucusu" yoktur. **Kullanmak için, barındırma yerini (sunucuyu) kendiniz hazırlar ve Breeze'i oraya kurarsınız. Resmî kullanım şekli budur.**
 
-- Barındırma için ücretsiz katman yeterlidir. Cloudflare'ın ücretsiz kotası içinde çalışır, kredi kartı da gerekmez. Yöntem, [kurulum kılavuzunda](SELF_HOSTING-tr.md) yer alır (diğer dillerdeki sürümler kılavuzun başından seçilebilir).
+- Standart kurulum Cloudflare kullanır, bu yüzden **bir Cloudflare hesabı gereklidir**. Yöntem, [kurulum kılavuzunda](SELF_HOSTING-tr.md) yer alır (diğer dillerdeki sürümler kılavuzun başından seçilebilir).
 - Uygulamayı (Windows / Mac / Linux / Android / iPhone) [indirme sayfasından](https://github.com/shizukutanaka/Breeze/releases/latest) alır ve kendi sunucunuza bağlanarak kullanırsınız.
 - **Örnek kurulum hakkında (dürüst bir bilgilendirme)**: Çalışmayı kontrol etmek için bir örnek (https://breeze-469.pages.dev/) yerleştirdik. Orada aynı yazılım çalışıyor, ancak gerçek kullanım için lütfen kendi sunucunuzu kullanın. Örnek, önceden haber verilmeden değişebilir veya durabilir. Kendi sunucunuza kurduğunuz kopya, örneğin durmasından etkilenmez.
 
@@ -24,7 +24,7 @@ Ayrıntılı kullanım, [kullanım kılavuzunda](MANUAL-tr.md) yer alır (diğer
 
 ## Kullanım (3 adım)
 
-1. Kendi sunucunuza kurduğunuz Breeze'i (veya kuran kişinin size bildirdiği adresi) açın ve adınızı girin. Hazırlık bununla tamamdır (kayıt da telefon numarası da gerekmez). Bu sırada cihazın içinde, kimliğiniz olacak bir "anahtar" oluşturulur.
+1. Kendi sunucunuza kurduğunuz Breeze'i (veya kuran kişinin size bildirdiği adresi) açın ve "Rastgele bir kimlikle başla" düğmesine basın (isterseniz bir ad girebilirsiniz). Hazırlık bununla tamamdır (kayıt da telefon numarası da gerekmez). Bu sırada cihazın içinde, kimliğiniz olacak bir "anahtar" oluşturulur.
 2. Kendi kimliğinizi (ID) veya QR kodunuzu, konuşmak istediğiniz kişiye verin.
 3. Karşı taraf da uygulamayı açmışsa, doğrudan bağlanıp konuşabilirsiniz. Karşı taraf açmamışsa, mesaj şifreli olarak "emanet kutusunda" bekler ve açtığında teslim edilir. Emanet kutusunu taşıyan sunucu içeriği okuyamaz. Teslim edilemeyen mektuplar en geç 7 gün sonra otomatik olarak silinir.
 
@@ -43,6 +43,8 @@ Dürüst olmak için kapsamı da yazarız. Teslimat için sunucuda kısa süreli
 - Sesli aramalar ve görüntülü aramalar (en çok 8 kişilik grup aramaları)
 - Dosya gönderme (bire bir konuşmada en çok 50 MB. Grupta da gönderilebilir ancak boyut sınırı daha küçüktür.)
 - Birden çok cihazı ve birden çok hesabı ayrı ayrı kullanma (iş ve özel gibi; cihaz sayısı da hesap sayısı da ücretsiz ve sınırsızdır)
+- Otomatik yedekleme (bir şey değiştiğinde, şifreli bir yedek kendi sunucunuza otomatik olarak kaydedilir. Yeni bir cihazda, kimliğinizi geri getirdiğinizde bir yedek otomatik olarak bulunur ve size sunulur. Ayarlar, yeni bir cihaza geçişte de size yol gösterir)
+- Her kişi için kendinizin seçtiği bir ad (her kişiyi yeniden adlandırabilirsiniz; yalnızca bu cihazda saklanır. Her kişinin kendisi için belirlediği adın gösterilip gösterilmeyeceğini de seçebilirsiniz)
 - 51 dil (İngilizce artı 50 dil dosyası), cihazınızın diliyle eşleşecek şekilde otomatik seçilir
 - Fotoğraflı profil, çıkartmalar, konum paylaşımı
 - `/help` gibi komutlarla kullanım (71 çeşit)
@@ -114,7 +116,7 @@ Hata bildirimleri [Issues sayfasına](https://github.com/shizukutanaka/Breeze/is
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Lisans
 

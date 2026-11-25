@@ -16,7 +16,7 @@ Huu si ukurasa wa wavuti, bali ni programu inayosakinishwa na kutumika (Windows 
 
 Breeze haina "seva ya kampuni". **Ili kuitumia, wewe mwenyewe unatayarisha mahali (seva) na kuiweka Breeze hapo. Hii ndiyo njia rasmi ya kuitumia.**
 
-- Mahali panatosha ndani ya kiwango cha bure. Inafanya kazi ndani ya kiwango cha bure cha Cloudflare, na huhitaji kadi ya mkopo. Hatua ziko katika [mwongozo wa usakinishaji](SELF_HOSTING-sw.md) (matoleo ya lugha nyingine yanaweza kuchaguliwa kutoka mwanzo wa mwongozo).
+- Usanidi wa kawaida hutumia Cloudflare, kwa hiyo **akaunti ya Cloudflare inahitajika**. Hatua ziko katika [mwongozo wa usakinishaji](SELF_HOSTING-sw.md) (matoleo ya lugha nyingine yanaweza kuchaguliwa kutoka mwanzo wa mwongozo).
 - Programu (Windows / Mac / Linux / Android / iPhone) zinachukuliwa kutoka [ukurasa wa kupakua](https://github.com/shizukutanaka/Breeze/releases/latest), na kuunganishwa na seva yako mwenyewe ili kuzitumia.
 - **Kuhusu usakinishaji wa mfano (taarifa ya ukweli)**: Kuna mfano uliowekwa kwa ajili ya kuthibitisha utendaji (https://breeze-469.pages.dev/). Programu iliyowekwa ni ile ile, lakini kwa matumizi halisi, tafadhali tumia seva yako mwenyewe. Mfano unaweza kubadilika au kusimama bila taarifa. Ulichoweka kwenye seva yako mwenyewe hakiathiriwi na kusimama kwa mfano.
 
@@ -24,7 +24,7 @@ Maelezo ya kina ya matumizi yako katika [mwongozo](MANUAL-sw.md) (matoleo ya lug
 
 ## Jinsi ya kutumia (hatua 3)
 
-1. Fungua Breeze uliyoiweka kwenye seva yako mwenyewe (au anwani uliyoambiwa na aliyesakinisha), na uweke jina lako. Hiyo tu, umekuwa tayari (hakuna usajili, hakuna namba ya simu). Wakati huu, "ufunguo" unatengenezwa ndani ya kifaa, na huo unakuwa utambulisho wako.
+1. Fungua Breeze uliyoiweka kwenye seva yako mwenyewe (au anwani uliyoambiwa na aliyesakinisha), na ubonyeze "Anza na ID ya nasibu" (unaweza kuweka jina ukipenda). Hiyo tu, umekuwa tayari (hakuna usajili, hakuna namba ya simu). Wakati huu, "ufunguo" unatengenezwa ndani ya kifaa, na huo unakuwa utambulisho wako.
 2. Mpe mtu unayetaka kuzungumza naye ID yako au msimbo wa QR.
 3. Ikiwa mwenzako naye amefungua programu, mnaweza kuunganishwa moja kwa moja na kuzungumza. Ikiwa hajaifungua, hubaki imefungwa kwa usiri katika "sanduku la kuhifadhia", na humfikia atakapoifungua. Seva inayobeba sanduku haiwezi kusoma yaliyomo. Barua ambazo hazijafika hutoweka kiotomatiki baada ya siku 7 zaidi.
 
@@ -43,6 +43,8 @@ Tunaandika pia upeo kwa ukweli. Kwa ajili ya uwasilishaji, kuna uhifadhi wa muda
 - Simu za sauti na simu za video (simu za kikundi hadi watu 8)
 - Kutuma faili (kwa mtu mmoja kwa mmoja, hadi 50MB. Unaweza pia kutuma katika vikundi, lakini kikomo cha ukubwa ni kidogo zaidi)
 - Kutumia vifaa vingi na akaunti nyingi kwa madhumuni tofauti (kwa kazi na kwa binafsi, kwa mfano. Idadi ya vifaa na akaunti haina kikomo na ni bure)
+- Akiba ya kiotomatiki (kitu kinapobadilika, akiba iliyofungwa kwa usiri huhifadhiwa kiotomatiki kwenye seva yako mwenyewe. Kwenye kifaa kipya, ukisharejesha utambulisho wako, akiba hupatikana kiotomatiki na kukupendekezwa. Mipangilio pia inakuongoza kuhamia kifaa kipya)
+- Jina unalochagua kwa kila mwasiliani (unaweza kubadilisha jina la kila mwasiliani, likihifadhiwa kwenye kifaa hiki tu. Unaweza pia kuchagua kama jina ambalo kila mwasiliani amejiwekea mwenyewe lionyeshwe)
 - Lugha 51 (Kiingereza pamoja na faili 50 za lugha), huchaguliwa kiotomatiki kulingana na lugha ya kifaa chako
 - Wasifu wenye picha, stika, kushiriki eneo
 - Amri kama `/help` (aina 71)
@@ -114,7 +116,7 @@ Ripoti za kasoro ziende kwenye [ukurasa wa Issue](https://github.com/shizukutana
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## Leseni
 

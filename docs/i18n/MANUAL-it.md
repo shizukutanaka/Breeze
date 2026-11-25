@@ -20,7 +20,7 @@ Scegli dalla [pagina di download](https://github.com/shizukutanaka/Breeze/releas
 - Windows: quello il cui nome termina con `-win-x64.exe` (ce ne sono anche per macchine ARM)
 - Mac: quello il cui nome termina con `-mac.dmg`
 - Linux: `.AppImage` (si può eseguire così com'è) oppure `.deb`
-- Per usarla nel browser, si usa ciò che è installato sul proprio server (la procedura di installazione si trova nel documento separato «Guida all'installazione sul proprio server»)
+- Per usarla nel browser, si usa ciò che è installato sul proprio server (la procedura di installazione si trova nel documento separato «Guida all'installazione sul proprio server»). L'installazione standard usa Cloudflare, quindi serve un account Cloudflare
 
 Ogni file è accompagnato da un valore di controllo (SHA256SUMS.txt). Se sei preoccupato, puoi verificare che il valore del file che hai scaricato coincida.
 
@@ -29,20 +29,20 @@ Ogni file è accompagnato da un valore di controllo (SHA256SUMS.txt). Se sei pre
 ### Prima configurazione
 
 1. Apri l'app.
-2. Inserisci il tuo nome e premi «Crea account». Con questo la preparazione è completa. Nessuna registrazione, nessun numero di telefono.
+2. Premi «Inizia con un ID casuale». Con questo la preparazione è completa. Nessuna registrazione, nessun numero di telefono.
 
-- Se vuoi recuperare un'identità che hai creato in precedenza, apri «Ripristina un account esistente» e compariranno i metodi di recupero (un file di backup, una frase di recupero, ecc.).
+- Se nel campo sopra il pulsante inserisci «Il tuo nome (nome visualizzato)», inizi con quel nome. Puoi anche premere il pulsante lasciando il campo vuoto. Il nome visualizzato si può cambiare in seguito, nella sezione del profilo delle impostazioni.
+- C'è anche un modo per creare un'identità con un nome e un ID Breeze scelti da te. In quel caso, viene emessa una frase di recupero, mostrata sullo schermo. La frase di recupero è l'insieme di parole che ti permette di riportare quell'identità su un altro dispositivo. Annotala su carta o in un luogo sicuro.
+- Se vuoi recuperare un'identità che hai creato in precedenza, apri «Ripristina un account esistente» e compariranno i metodi di recupero (ripristina da un file di backup, recupera con una frase di recupero, ripristina con account + passphrase).
 - Quando la creazione finisce, compare una scheda che ti guida a proteggere la tua chiave con una frase segreta (non scompare dopo un po' di tempo). Per un'identità importante, segui la guida e aggiungi la protezione.
 
 In quel momento, dentro il tuo dispositivo viene creata una «chiave». Quella è la tua identità stessa.
 **Sul server non c'è un elenco degli account.** La tua identità esiste solo dentro il tuo dispositivo.
 Questo punto diventa importante nel capitolo sul backup (9).
 
-### Sull'«identità usa e getta»
+### Sulla precedente «identità usa e getta»
 
-Se al momento della creazione scegli «identità usa e getta», ottieni un'identità senza alcun mezzo di recupero.
-Se perdi quel dispositivo, lo reimposti o cancelli i dati del browser, quell'identità non tornerà mai più.
-Ciò è indicato anche sullo schermo. Non sceglierla per un'identità che userai a lungo.
+L'«identità usa e getta» — un'identità senza alcun mezzo di recupero — non esiste più. Con gli attuali modi di creare un'identità, ogni identità può essere protetta da un backup.
 
 ---
 
@@ -73,6 +73,7 @@ Se anche l'altra persona ha l'app aperta, vi collegate direttamente e potete par
 
 - **Stato di invio**: si può capire dalla marca accanto a un messaggio. ✓ significa inviato, un ✓ dentro un cerchio significa che è stato depositato nella casella di deposito, ✓✓ significa che è arrivato all'altra persona, letto è una marca blu e il fallimento è una marca rossa. Si distinguono per la forma oltre che per il colore.
 - **L'elenco dei contatti**: l'ora dell'ultima conversazione è mostrata come ora per oggi, «Ieri» per ieri, mese/giorno per quest'anno e anno/mese/giorno per qualsiasi data precedente. I contatti con messaggi che non hai letto hanno nome e ora messi in evidenza.
+- **Nomi per i contatti**: apri «Informazioni sul contatto» (nel menu con il tasto destro di un contatto, oppure nel menu «⋮» della conversazione) e puoi impostare un nome scelto da te per quel contatto (un soprannome). I soprannomi sono conservati solo su questo dispositivo e non vengono mai inviati al contatto né al server di inoltro. Quando imposti un soprannome, accanto ad esso viene mostrato, in un colore attenuato, anche il nome che il contatto ha impostato per sé. Puoi disattivare quel secondo nome con «Mostra anche il nome che ciascun contatto ha impostato per sé» nella sezione «Privacy» delle impostazioni.
 - **La tua scheda**: in cima all'elenco c'è la tua scheda del profilo; premila per aprire il tuo profilo. Scorre insieme all'elenco.
 - **Schede inferiori su un telefono**: con la larghezza di un telefono, in fondo allo schermo compaiono le schede «Contatti» e «Impostazioni».
 - **L'intestazione della conversazione**: dall'icona di ricerca puoi cercare all'interno della conversazione. Dal menu «⋮» puoi verificare il numero di sicurezza, silenziare le notifiche, fissare, creare un sondaggio e altro ancora.
@@ -107,6 +108,7 @@ Alcune operazioni, come le impostazioni e il collegamento dei dispositivi, si ef
 - Si possono creare più account e usarli separatamente (per esempio lavoro e uso personale). Sia il numero di dispositivi sia il numero di account sono gratuiti e illimitati.
 - **Come creare un account**: premi il pulsante «+» accanto alle schede degli account, in cima all'elenco dei contatti. Inserisci un nome e scegli un'emoji come icona, e un nuovo account verrà creato e selezionato automaticamente.
 - **Cambiare account**: le schede degli account sono sempre mostrate in cima all'elenco dei contatti. Premine una per cambiare (su un computer puoi anche cambiare con Ctrl+1–9). Tieni premuta una scheda per rinominarla, cambiarne l'icona o eliminarla.
+- I contatti e le chiavi sono separati per ciascun account. Scambia di nuovo i contatti per ciascun account.
 - La lingua viene scelta automaticamente tra 51 lingue, inglese compreso, in base alla lingua del tuo dispositivo.
 
 ---
@@ -117,6 +119,7 @@ Le impostazioni si aprono come una schermata a sé. Su un telefono, aprile dalla
 
 - **Blocco automatico**: c'è un'impostazione che blocca automaticamente quando cambi scheda.
 - **Frase segreta della chiave**: puoi proteggere la chiave dentro il tuo dispositivo avvolgendola con una frase segreta. Ti verrà chiesto di inserirla quando apri l'app.
+- **Mostra anche il nome che ciascun contatto ha impostato per sé**: nella sezione «Privacy». Per un contatto a cui hai dato un soprannome, puoi scegliere se mostrare accanto anche il suo nome (capitolo 3).
 - **Blocco**: puoi bloccare un interlocutore molesto. I messaggi di un interlocutore bloccato non ti arriveranno.
 
 ---
@@ -141,11 +144,21 @@ Sui dispositivi che non possono leggere automaticamente il livello della batteri
 L'identità di Breeze è solo la chiave dentro il tuo dispositivo. Sul server non c'è un elenco degli account, e nemmeno chi lo ha creato possiede la tua chiave.
 **Se perdi il tuo dispositivo, perdi anche la tua identità.** Per un'identità importante, crea sempre un backup.
 
-Il backup e il recupero si fanno dalla sezione «Backup e recupero» delle impostazioni (ci sono tre pulsanti: «Backup nel cloud», «Ripristina» e «Ripristina da un file»). La prima volta che aggiungi un contatto, compare una sola volta una scheda che ti esorta a fare un backup.
+Il backup e il recupero si fanno dalla sezione «Backup e ripristino» delle impostazioni (i pulsanti sono «Crea backup», «Ripristina backup» e «📂 Ripristina da file»). La prima volta che aggiungi un contatto, compare una sola volta una scheda che ti esorta a fare un backup.
 
-### Come creare un backup
+### Backup automatico
 
-1. Da «Backup e recupero» nelle impostazioni, scegli di creare un backup.
+L'impostazione «Backup automatico» è attiva fin dall'inizio. Quando i tuoi dati cambiano, un backup cifrato viene inviato automaticamente al server di inoltro che ospiti tu.
+
+- Non invia a ogni modifica: attende 30 secondi dall'ultima modifica e invia tutto insieme. I tentativi sono distanziati di almeno 15 minuti.
+- Mentre sei offline, non viene inviato nulla; le modifiche vengono conservate e inviate quando la connessione torna e quando apri l'app.
+- Per l'invio automatico, devi inserire la frase segreta del backup una volta su quel dispositivo (quando serve, nella sezione delle impostazioni compare un pulsante «Inserisci frase segreta»). **La frase segreta non viene conservata.** Viene ricordata solo mentre l'app è aperta e scompare quando la chiudi. Per un'identità con recupero semplice, subito dopo aver inserito la frase segreta alla registrazione o all'aggiornamento, l'invio funziona così com'è.
+- Se il server di inoltro non supporta la conservazione dei backup, il backup automatico non funziona. Ciò è indicato nella sezione delle impostazioni.
+- Lo stato (quando è avvenuto l'ultimo invio riuscito, se ci sono modifiche in attesa, se un invio è fallito) è mostrato nella sezione delle impostazioni.
+
+### Come creare un backup (manuale)
+
+1. Da «Backup e ripristino» nelle impostazioni, scegli «Crea backup».
 2. Imposta una frase segreta per il backup (6 caratteri o più).
 3. Scegli dove salvarlo.
    - **Salvare in un file**: conserva il file di backup nelle tue mani (consigliato).
@@ -157,11 +170,23 @@ Il contenuto del backup è cifrato. Il server della destinazione tratta solo il 
 
 Su un nuovo dispositivo, ripristina usando il file di backup (oppure il backup sul server di inoltro) e la frase segreta che hai impostato.
 
+Se hai appena riportato la tua identità con una frase di recupero e sul server di inoltro c'è un backup di quell'identità, viene trovato automaticamente e ti viene chiesto con «Backup trovato». Se lo ripristini, i dati su quel dispositivo vengono sostituiti dal contenuto del backup.
+
+### Passare a un nuovo dispositivo
+
+Premi il pulsante «Passa a un nuovo dispositivo» nella sezione «Backup e ripristino» delle impostazioni e verranno mostrati i passaggi.
+
+1. Sul tuo dispositivo attuale, conserva un backup sul server di inoltro (backup automatico, oppure «Crea backup»).
+2. Sul nuovo dispositivo, scegli un metodo di ripristino nella prima schermata e inserisci la tua frase di recupero (oppure il nome del tuo account e la frase segreta).
+3. Quando la tua identità è tornata, il backup sul server viene trovato automaticamente e ti viene proposto un ripristino.
+
+Non servono cavi né passaggi di file.
+
 ### Note
 
 - **Se dimentichi la frase segreta, il recupero è impossibile.** Nemmeno chi lo ha creato può rimediare. Annotati la frase segreta in un altro luogo.
-- **L'identità usa e getta non torna indietro, né con il backup né con il recupero.**
-- Ricrea il backup quando le tue identità aumentano o quando cambi dispositivo.
+- L'inserimento della frase segreta per il backup automatico è necessario su ciascun dispositivo. Su un nuovo dispositivo, inseriscila ancora una volta.
+- Ricrea un backup manuale quando le tue identità aumentano o quando cambi dispositivo.
 
 ---
 

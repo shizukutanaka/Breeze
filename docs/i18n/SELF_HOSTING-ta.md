@@ -3,6 +3,13 @@
 **பிற மொழிகளில் படிக்கவும் / Read in another language**: [English](../SELF_HOSTING.md) · [English](SELF_HOSTING-en.md) · [中文（简体）](SELF_HOSTING-zh-CN.md) · [中文（繁體）](SELF_HOSTING-zh-TW.md) · [Español](SELF_HOSTING-es.md) · [Français](SELF_HOSTING-fr.md) · [Deutsch](SELF_HOSTING-de.md) · [Italiano](SELF_HOSTING-it.md) · [Português (Brasil)](SELF_HOSTING-pt-BR.md) · [Русский](SELF_HOSTING-ru.md) · [Українська](SELF_HOSTING-uk.md) · [Polski](SELF_HOSTING-pl.md) · [Nederlands](SELF_HOSTING-nl.md) · [Svenska](SELF_HOSTING-sv.md) · [Norsk](SELF_HOSTING-nb.md) · [Dansk](SELF_HOSTING-da.md) · [Suomi](SELF_HOSTING-fi.md) · [Čeština](SELF_HOSTING-cs.md) · [Magyar](SELF_HOSTING-hu.md) · [Română](SELF_HOSTING-ro.md) · [Ελληνικά](SELF_HOSTING-el.md) · [Türkçe](SELF_HOSTING-tr.md) · [العربية](SELF_HOSTING-ar.md) · [فارسی](SELF_HOSTING-fa.md) · [עברית](SELF_HOSTING-he.md) · [हिन्दी](SELF_HOSTING-hi.md) · [বাংলা](SELF_HOSTING-bn.md) · [اردو](SELF_HOSTING-ur.md) · [ਪੰਜਾਬੀ](SELF_HOSTING-pa.md) · தமிழ் (இந்தப் பக்கம்) · [తెలుగు](SELF_HOSTING-te.md) · [മലയാളം](SELF_HOSTING-ml.md) · [Bahasa Indonesia](SELF_HOSTING-id.md) · [Bahasa Melayu](SELF_HOSTING-ms.md) · [Tiếng Việt](SELF_HOSTING-vi.md) · [ไทย](SELF_HOSTING-th.md) · [မြန်မာ](SELF_HOSTING-my.md) · [ខ្មែរ](SELF_HOSTING-km.md) · [한국어](SELF_HOSTING-ko.md) · [Filipino](SELF_HOSTING-tl.md) · [Kiswahili](SELF_HOSTING-sw.md) · [Hausa](SELF_HOSTING-ha.md) · [Yorùbá](SELF_HOSTING-yo.md) · [Igbo](SELF_HOSTING-ig.md) · [አማርኛ](SELF_HOSTING-am.md) · [ქართული](SELF_HOSTING-ka.md) · [Azərbaycan](SELF_HOSTING-az.md) · [Қазақша](SELF_HOSTING-kk.md) · [Oʻzbek](SELF_HOSTING-uz.md) · [Српски](SELF_HOSTING-sr.md) · [Hrvatski](SELF_HOSTING-hr.md)
 
 
+> **தொடங்குவதற்கு முன்: நிலையான அமைப்பிற்கு ஒரு Cloudflare கணக்கு தேவை.**
+> இந்த வழிகாட்டியில் உள்ள நிலையான அமைப்பு — கீழே உள்ள Cloudflare
+> பயன்படுத்தல் — Cloudflare-இல் இயங்குகிறது, எனவே நீங்கள் தொடங்குவதற்கு முன்
+> ஒரு Cloudflare கணக்கைத் தயாராக வைத்திருக்கவும். நீங்கள் Cloudflare-ஐப் பயன்படுத்த
+> விரும்பவில்லை என்றால், இந்த வழிகாட்டியில் உள்ள Docker மற்றும் வெறும்-Node
+> அமைப்புகளுக்கு Cloudflare கணக்கு தேவையில்லை.
+
 Breeze ரிலேவை இயக்க இரண்டு வழிகள் உள்ளன:
 
 1. **சுய-ஹோஸ்ட் செய்யப்பட்டது (Node + Docker)** — உங்கள் சொந்தக் கணினியில் அல்லது

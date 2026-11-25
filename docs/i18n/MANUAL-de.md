@@ -20,7 +20,7 @@ Wählen Sie auf der [Download-Seite](https://github.com/shizukutanaka/Breeze/rel
 - Windows: die, deren Name auf `-win-x64.exe` endet (es gibt auch eine für ARM-Geräte)
 - Mac: die, deren Name auf `-mac.dmg` endet
 - Linux: `.AppImage` (so ausführbar) oder `.deb`
-- Zur Nutzung im Browser verwendet man das, was auf dem eigenen Server installiert ist (die Installationsschritte stehen im separaten Dokument „Anleitung zur Installation auf dem eigenen Server“)
+- Zur Nutzung im Browser verwendet man das, was auf dem eigenen Server installiert ist (die Installationsschritte stehen im separaten Dokument „Anleitung zur Installation auf dem eigenen Server“). Die Standardinstallation nutzt Cloudflare, daher ist ein Cloudflare-Konto erforderlich
 
 Zu jeder Datei gibt es einen Prüfwert (SHA256SUMS.txt). Wenn Sie besorgt sind, können Sie prüfen, ob der Wert der heruntergeladenen Datei übereinstimmt.
 
@@ -29,20 +29,20 @@ Zu jeder Datei gibt es einen Prüfwert (SHA256SUMS.txt). Wenn Sie besorgt sind, 
 ### Erste Einrichtung
 
 1. Öffnen Sie die App.
-2. Geben Sie Ihren Namen ein und drücken Sie „Konto erstellen“. Damit ist alles bereit. Keine Registrierung, keine Telefonnummer.
+2. Drücken Sie „Mit einer zufälligen ID starten“. Damit ist alles bereit. Keine Registrierung, keine Telefonnummer.
 
-- Wenn Sie eine früher erstellte Identität zurückholen möchten, öffnen Sie „Ein vorhandenes Konto wiederherstellen“, und die Wiederherstellungsmethoden (eine Sicherungsdatei, eine Wiederherstellungsphrase usw.) erscheinen.
+- Wenn Sie „Ihr Name (Anzeigename)“ in das Feld über der Schaltfläche eingeben, starten Sie mit diesem Namen. Sie können die Schaltfläche auch bei leerem Feld drücken. Den Anzeigenamen können Sie später im Profilabschnitt der Einstellungen ändern.
+- Es gibt auch einen Weg, eine Identität mit einem Namen und einer Breeze-ID zu erstellen, die Sie selbst wählen. In diesem Fall wird eine Wiederherstellungsphrase ausgegeben und auf dem Bildschirm angezeigt. Die Wiederherstellungsphrase sind die Wörter, mit denen Sie diese Identität auf einem anderen Gerät zurückholen können. Notieren Sie sie auf Papier oder an einem sicheren Ort.
+- Wenn Sie eine früher erstellte Identität zurückholen möchten, öffnen Sie „Vorhandenes Konto wiederherstellen“, und die Wiederherstellungsmethoden (aus einer Sicherungsdatei wiederherstellen, mit Wiederherstellungsphrase wiederherstellen, mit Konto + Passphrase wiederherstellen) erscheinen.
 - Wenn die Erstellung abgeschlossen ist, erscheint eine Karte, die Sie anleitet, Ihren Schlüssel mit einer Passphrase zu schützen (sie verschwindet nicht nach einer Zeit). Folgen Sie für eine wichtige Identität der Anleitung und fügen Sie den Schutz hinzu.
 
 In diesem Moment wird in Ihrem Gerät ein „Schlüssel“ erzeugt. Das ist Ihre Identität selbst.
 **Auf dem Server gibt es keine Liste der Konten.** Ihre Identität existiert nur in Ihrem Gerät.
 Dieser Punkt wird im Kapitel zur Sicherung (9) wichtig.
 
-### Über die „Wegwerf-Identität“
+### Über die frühere „Wegwerf-Identität“
 
-Wenn Sie bei der Erstellung „Wegwerf-Identität“ wählen, erhalten Sie eine Identität ohne jede Möglichkeit der Wiederherstellung.
-Wenn Sie dieses Gerät verlieren, es zurücksetzen oder die Browserdaten löschen, kommt diese Identität nie zurück.
-Das wird auch auf dem Bildschirm angezeigt. Wählen Sie sie nicht für eine Identität, die Sie lange benutzen.
+Die „Wegwerf-Identität“ – eine Identität ohne jede Möglichkeit der Wiederherstellung – gibt es nicht mehr. Mit den heutigen Wegen, eine Identität zu erstellen, kann jede Identität durch eine Sicherung geschützt werden.
 
 ---
 
@@ -73,6 +73,7 @@ Wenn die andere Person die App ebenfalls geöffnet hat, verbinden Sie sich direk
 
 - **Sendezustand**: Er ist an der Markierung neben einer Nachricht zu erkennen. ✓ bedeutet gesendet, ein ✓ in einem Kreis bedeutet, dass sie im Briefkasten hinterlegt wurde, ✓✓ bedeutet, dass sie das Gegenüber erreicht hat, Gelesen ist eine blaue Markierung und ein Fehler eine rote. Sie unterscheiden sich auch durch die Form, nicht nur durch die Farbe.
 - **Die Kontaktliste**: Die Zeit des letzten Gesprächs wird für heute als Uhrzeit, für gestern als „Gestern“, für dieses Jahr als Monat/Tag und für alles Frühere als Jahr/Monat/Tag angezeigt. Bei Kontakten mit ungelesenen Nachrichten sind Name und Zeit hervorgehoben.
+- **Namen für Kontakte**: Öffnen Sie „Kontaktinfo“ (im Rechtsklickmenü eines Kontakts oder im Menü „⋮“ der Unterhaltung), und Sie können Ihren eigenen Namen für diesen Kontakt festlegen (einen Spitznamen). Spitznamen werden nur auf diesem Gerät gespeichert und niemals an den Kontakt oder den Relay-Server gesendet. Wenn Sie einen Spitznamen festlegen, wird daneben auch der Name, den der Kontakt selbst festgelegt hat, in einer gedämpften Farbe angezeigt. Diesen zweiten Namen können Sie mit „Auch den Namen anzeigen, den jeder Kontakt selbst festgelegt hat“ im Abschnitt „Privatsphäre“ der Einstellungen abschalten.
 - **Ihre eigene Karte**: Oben in der Liste steht Ihre eigene Profilkarte; drücken Sie darauf, um Ihr Profil zu öffnen. Sie scrollt mit der Liste mit.
 - **Untere Tabs auf einem Telefon**: Bei Telefonbreite erscheinen unten auf dem Bildschirm die Tabs „Kontakte“ und „Einstellungen“.
 - **Der Kopf der Unterhaltung**: Über das Suchsymbol können Sie innerhalb der Unterhaltung suchen. Über das Menü „⋮“ können Sie die Sicherheitsnummer prüfen, Benachrichtigungen stummschalten, anheften, eine Umfrage erstellen und mehr.
@@ -107,6 +108,7 @@ Einige Vorgänge wie Einstellungen und Geräteverknüpfung erfolgen über Befehl
 - Konten können mehrfach erstellt und getrennt genutzt werden (z. B. beruflich und privat). Sowohl die Geräteanzahl als auch die Kontenanzahl ist kostenlos und unbegrenzt.
 - **So erstellen Sie ein Konto**: Drücken Sie die Schaltfläche „+“ neben den Konto-Tabs ganz oben in der Kontaktliste. Geben Sie einen Namen ein und wählen Sie ein Symbol-Emoji, und ein neues Konto wird erstellt und automatisch dorthin gewechselt.
 - **Konten wechseln**: Die Konto-Tabs werden immer ganz oben in der Kontaktliste angezeigt. Drücken Sie auf einen, um zu wechseln (auf einem Computer können Sie auch mit Strg+1–9 wechseln). Drücken und halten Sie einen Tab, um ihn umzubenennen, sein Symbol zu ändern oder ihn zu löschen.
+- Kontakte und Schlüssel sind für jedes Konto getrennt. Tauschen Sie die Kontakte für jedes Konto erneut aus.
 - Die Sprache wird automatisch aus 51 Sprachen, einschließlich Englisch, passend zur Sprache Ihres Geräts gewählt.
 
 ---
@@ -117,6 +119,7 @@ Die Einstellungen öffnen sich als eigener Bildschirm. Öffnen Sie sie auf einem
 
 - **Automatische Sperre**: Es gibt eine Einstellung, die beim Wechseln des Tabs automatisch sperrt.
 - **Schlüssel-Passphrase**: Sie können den Schlüssel in Ihrem Gerät schützen, indem Sie ihn mit einer Passphrase umhüllen. Beim Öffnen der App wird die Eingabe verlangt.
+- **Auch den Namen anzeigen, den jeder Kontakt selbst festgelegt hat**: im Abschnitt „Privatsphäre“. Für einen Kontakt, dem Sie einen Spitznamen gegeben haben, können Sie wählen, ob dessen eigener Name daneben angezeigt wird (Kapitel 3).
 - **Blockieren**: Störende Gegenüber können blockiert werden. Nachrichten von blockierten Personen erreichen Sie nicht.
 
 ---
@@ -141,11 +144,21 @@ Auf Geräten, die den Akkustand nicht automatisch lesen können (wie ein iPhone-
 Die Identität von Breeze ist nur der Schlüssel in Ihrem Gerät. Auf dem Server gibt es keine Liste der Konten, und auch die Ersteller haben Ihren Schlüssel nicht.
 **Wenn Sie Ihr Gerät verlieren, verlieren Sie auch Ihre Identität.** Erstellen Sie für eine wichtige Identität unbedingt eine Sicherung.
 
-Sicherung und Wiederherstellung erfolgen im Abschnitt „Sicherung und Wiederherstellung“ der Einstellungen (es gibt drei Schaltflächen: „In die Cloud sichern“, „Wiederherstellen“ und „Aus einer Datei wiederherstellen“). Wenn Sie zum ersten Mal einen Kontakt hinzufügen, erscheint genau einmal eine Karte, die Sie zum Erstellen einer Sicherung auffordert.
+Sicherung und Wiederherstellung erfolgen im Abschnitt „Sichern & Wiederherstellen“ der Einstellungen (die Schaltflächen sind „Sicherung erstellen“, „Sicherung wiederherstellen“ und „📂 Aus Datei wiederherstellen“). Wenn Sie zum ersten Mal einen Kontakt hinzufügen, erscheint genau einmal eine Karte, die Sie zum Erstellen einer Sicherung auffordert.
 
-### So erstellen Sie eine Sicherung
+### Automatische Sicherung
 
-1. Wählen Sie im Abschnitt „Sicherung und Wiederherstellung“ der Einstellungen das Erstellen einer Sicherung.
+Die Einstellung „Automatische Sicherung“ ist von Anfang an eingeschaltet. Wenn sich Ihre Daten ändern, wird eine verschlüsselte Sicherung automatisch an den Relay-Server gesendet, den Sie betreiben.
+
+- Sie sendet nicht bei jeder Änderung: Sie wartet 30 Sekunden nach der letzten Änderung und sendet alles zusammen. Versuche haben mindestens 15 Minuten Abstand.
+- Während Sie offline sind, wird nichts gesendet; die Änderungen werden zurückgehalten und gesendet, wenn die Verbindung zurück ist und wenn Sie die App öffnen.
+- Für das automatische Senden müssen Sie die Sicherungs-Passphrase einmal auf diesem Gerät eingeben (wenn es nötig ist, erscheint im Einstellungsabschnitt eine Schaltfläche „Passphrase eingeben“). **Die Passphrase wird nicht gespeichert.** Sie wird nur erinnert, solange die App geöffnet ist, und ist weg, wenn Sie sie schließen. Bei einer Identität mit einfacher Wiederherstellung funktioniert das Senden direkt, nachdem Sie die Passphrase bei der Registrierung oder Aktualisierung eingegeben haben.
+- Wenn der Relay-Server das Speichern von Sicherungen nicht unterstützt, läuft die automatische Sicherung nicht. Das wird im Einstellungsabschnitt angezeigt.
+- Der Zustand (wann das letzte erfolgreiche Senden war, ob Änderungen warten, ob ein Senden fehlgeschlagen ist) wird im Einstellungsabschnitt angezeigt.
+
+### So erstellen Sie eine Sicherung (manuell)
+
+1. Wählen Sie im Abschnitt „Sicherung und Wiederherstellung“ der Einstellungen „Sicherung erstellen“.
 2. Legen Sie eine Passphrase für die Sicherung fest (6 Zeichen oder mehr).
 3. Wählen Sie den Speicherort.
    - **In eine Datei speichern**: Bewahren Sie die Sicherungsdatei in Ihren eigenen Händen auf (empfohlen).
@@ -157,11 +170,23 @@ Der Inhalt der Sicherung ist verschlüsselt. Der Server am Speicherort behandelt
 
 Stellen Sie auf einem neuen Gerät mit der Sicherungsdatei (oder der Sicherung auf dem Relay-Server) und der festgelegten Passphrase wieder her.
 
+Wenn Sie Ihre Identität gerade mit einer Wiederherstellungsphrase zurückgeholt haben und eine Sicherung dieser Identität auf dem Relay-Server liegt, wird sie automatisch gefunden und Sie werden mit „Sicherung gefunden“ gefragt. Wenn Sie sie wiederherstellen, werden die Daten auf diesem Gerät durch den Inhalt der Sicherung ersetzt.
+
+### Auf ein neues Gerät umziehen
+
+Drücken Sie die Schaltfläche „Auf ein neues Gerät umziehen“ im Abschnitt „Sichern & Wiederherstellen“ der Einstellungen, und die Schritte werden angezeigt.
+
+1. Bewahren Sie auf Ihrem aktuellen Gerät eine Sicherung auf dem Relay-Server auf (automatische Sicherung oder „Sicherung erstellen“).
+2. Wählen Sie auf dem neuen Gerät auf dem ersten Bildschirm eine Wiederherstellungsmethode und geben Sie Ihre Wiederherstellungsphrase ein (oder Ihren Kontonamen und Ihre Passphrase).
+3. Wenn Ihre Identität zurück ist, wird die Sicherung auf dem Server automatisch gefunden und eine Wiederherstellung angeboten.
+
+Es sind keine Kabel und keine Dateiübergaben nötig.
+
 ### Hinweise
 
 - **Wenn Sie die Passphrase vergessen, ist eine Wiederherstellung unmöglich.** Auch die Ersteller können das nicht beheben. Notieren Sie die Passphrase an einem anderen Ort.
-- **Eine Wegwerf-Identität kommt weder durch Sicherung noch durch Wiederherstellung zurück.**
-- Erstellen Sie die Sicherung neu, wenn Ihre Identitäten zunehmen oder Sie das Gerät wechseln.
+- Die Eingabe der Passphrase für die automatische Sicherung ist auf jedem Gerät nötig. Geben Sie sie auf einem neuen Gerät noch einmal ein.
+- Erstellen Sie eine manuelle Sicherung neu, wenn Ihre Identitäten zunehmen oder Sie das Gerät wechseln.
 
 ---
 

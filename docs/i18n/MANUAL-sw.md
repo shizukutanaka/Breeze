@@ -20,7 +20,7 @@ Kutoka [ukurasa wa kupakua](https://github.com/shizukutanaka/Breeze/releases/lat
 - Windows: kile ambacho jina lake huisha na `-win-x64.exe` (pia kuna cha mashine za ARM)
 - Mac: kile ambacho jina lake huisha na `-mac.dmg`
 - Linux: `.AppImage` (inaweza kuendeshwa moja kwa moja) au `.deb`
-- Ikiwa unatumia kivinjari, tumia uliyoiweka kwenye seva yako mwenyewe (hatua za usakinishaji ziko katika hati tofauti, "mwongozo wa usakinishaji")
+- Ikiwa unatumia kivinjari, tumia uliyoiweka kwenye seva yako mwenyewe (hatua za usakinishaji ziko katika hati tofauti, "mwongozo wa usakinishaji") Usanidi wa kawaida hutumia Cloudflare, kwa hiyo akaunti ya Cloudflare inahitajika.
 
 Kila faili inaambatana na namba za kulinganisha (SHA256SUMS.txt). Ikiwa una wasiwasi, unaweza kuthibitisha kama namba za faili uliyopakua zinalingana.
 
@@ -29,20 +29,20 @@ Kila faili inaambatana na namba za kulinganisha (SHA256SUMS.txt). Ikiwa una wasi
 ### Mipangilio ya kwanza
 
 1. Fungua programu.
-2. Weka jina lako na ubonyeze "Tengeneza akaunti". Hiyo tu, umekuwa tayari. Hakuna usajili, hakuna namba ya simu.
+2. Bonyeza "Anza na ID ya nasibu". Hiyo tu, umekuwa tayari. Hakuna usajili, hakuna namba ya simu.
 
-- Ikiwa unataka kurudisha utambulisho ulioutengeneza awali, fungua "Rejesha akaunti iliyopo" na njia za kurejesha (faili ya akiba, kifungu cha kurejesha, n.k.) zitatokea.
+- Ukiweka "Jina lako (jina la kuonyesha)" katika sehemu iliyo juu ya kitufe, unaanza na jina hilo. Unaweza pia kubonyeza kitufe ukiiacha sehemu ikiwa tupu. Unaweza kubadilisha jina la kuonyesha baadaye, katika sehemu ya wasifu ya mipangilio.
+- Pia kuna njia ya kuunda utambulisho kwa jina na ID ya Breeze unayochagua mwenyewe. Katika hali hiyo, kishazi cha kurejesha hutolewa na kuonyeshwa kwenye skrini. Kishazi cha kurejesha ni maneno yanayokuwezesha kurudisha utambulisho huo kwenye kifaa kingine. Kiandike kwenye karatasi au mahali salama.
+- Ikiwa unataka kurudisha utambulisho ulioutengeneza awali, fungua "Rejesha akaunti iliyopo" na njia za kurejesha (rejesha kutoka kwenye faili ya nakala rudufu, rejesha kwa kishazi cha kurejesha, rejesha kwa akaunti + kishazi cha siri) zitatokea.
 - Uundaji ukimalizika, kadi itatokea inayokuongoza kulinda ufunguo wako kwa kifungu cha siri (haitoweki baada ya muda). Kwa utambulisho muhimu, fuata mwongozo na uongeze ulinzi.
 
 Wakati huu, "ufunguo" unatengenezwa ndani ya kifaa. Huo ndio utambulisho wako wenyewe.
 **Hakuna orodha ya akaunti kwenye seva.** Utambulisho wako uko ndani ya kifaa chako tu.
 Jambo hili ni muhimu katika sura ya akiba (9).
 
-### Kuhusu "utambulisho wa kutupa"
+### Kuhusu "utambulisho wa kutupa" wa zamani
 
-Ukichagua "utambulisho wa kutupa" wakati wa kuunda, unakuwa utambulisho usio na njia yoyote ya kuurejesha.
-Ukikipoteza kifaa hicho, ukikiweka upya, au ukifuta data ya kivinjari, utambulisho huo hautarudi tena kamwe.
-Hii pia inaonyeshwa kwenye skrini. Usiuchague kwa utambulisho utakaoutumia kwa muda mrefu.
+"Utambulisho wa kutupa" — utambulisho usio na njia yoyote ya kuurejesha — umeondoka. Kwa njia za sasa za kuunda utambulisho, kila utambulisho unaweza kulindwa kwa akiba.
 
 ---
 
@@ -73,6 +73,7 @@ Ikiwa mwenzako naye amefungua programu, mnaweza kuunganishwa moja kwa moja na ku
 
 - **Hali ya utumaji**: Unaweza kutambua kutoka alama iliyo karibu na ujumbe. ✓ inamaanisha imetumwa, ✓ ndani ya duara inamaanisha imewekwa kwenye sanduku la kuhifadhia, ✓✓ inamaanisha imemfikia mwenzako, kusomwa ni alama ya buluu, na kushindwa ni alama nyekundu. Zinabainishwa kwa umbo pia, si kwa rangi tu.
 - **Orodha ya waasiliani**: Muda wa mwisho kuzungumza unaonyeshwa kama saa kwa leo, "Jana" kwa jana, mwezi/siku kwa mwaka huu, na mwaka/mwezi/siku kwa chochote kilichotangulia. Waasiliani wenye ujumbe ambao hujasoma wana majina na nyakati zilizosisitizwa.
+- **Majina ya waasiliani**: Fungua "Taarifa ya mwasiliani" (katika menyu ya kubofya kulia ya mwasiliani, au menyu ya "⋮" ya mazungumzo) na unaweza kuweka jina lako mwenyewe kwa mwasiliani huyo (jina la utani). Majina ya utani huhifadhiwa kwenye kifaa hiki tu na hayatumwi kamwe kwa mwasiliani au seva ya kipeanaji. Unapoweka jina la utani, jina ambalo mwasiliani amejiwekea mwenyewe pia huonyeshwa karibu nalo kwa rangi iliyofifia. Unaweza kuzima jina hilo la pili kwa "Onyesha pia jina ambalo kila mwasiliani amejiwekea mwenyewe" katika sehemu ya "Faragha" ya mipangilio.
 - **Kadi yako mwenyewe**: Juu ya orodha kuna kadi ya wasifu wako mwenyewe; ibonyeze kufungua wasifu wako. Inasogeza pamoja na orodha.
 - **Vichupo vya chini kwenye simu**: Kwa upana wa simu, vichupo vya "Waasiliani" na "Mipangilio" vinatokea chini ya skrini.
 - **Kichwa cha mazungumzo**: Kutoka aikoni ya utafutaji unaweza kutafuta ndani ya mazungumzo. Kutoka menyu ya "⋮" unaweza kuangalia namba ya usalama, kunyamazisha arifa, kubandika, kutengeneza kura, na zaidi.
@@ -107,6 +108,7 @@ Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 - Unaweza kuunda akaunti nyingi na kuzitumia kwa madhumuni tofauti (kwa kazi na kwa binafsi, kwa mfano). Idadi ya vifaa na akaunti haina kikomo na ni bure.
 - **Jinsi ya kutengeneza akaunti**: Bonyeza kitufe cha "+" kilicho karibu na vichupo vya akaunti juu kabisa ya orodha ya waasiliani. Weka jina na uchague emoji ya aikoni, na akaunti mpya itatengenezwa na kubadilishwa kiotomatiki kwenda kwake.
 - **Kubadilisha akaunti**: Vichupo vya akaunti vinaonyeshwa kila wakati juu kabisa ya orodha ya waasiliani. Bonyeza kimoja kubadilisha (kwenye kompyuta unaweza pia kubadilisha kwa Ctrl+1–9). Bonyeza na ushikilie kichupo ili kukipa jina jipya, kubadilisha aikoni yake, au kukifuta.
+- Waasiliani na funguo ni tofauti kwa kila akaunti. Badilishaneni waasiliani tena kwa kila akaunti.
 - Lugha huchaguliwa kiotomatiki kutoka lugha 51, ikiwemo Kiingereza, kulingana na lugha ya kifaa chako.
 
 ---
@@ -117,6 +119,7 @@ Mipangilio hufunguka kama skrini yake yenyewe. Kwenye simu, ifungue kutoka kichu
 
 - **Kufunga kiotomatiki**: Kuna mpangilio wa kufunga kiotomatiki unapobadilisha kichupo.
 - **Nenosiri la ufunguo**: Unaweza kuufunika ufunguo ndani ya kifaa kwa nenosiri ili kuulinda. Utaulizwa kuliweka unapofungua programu.
+- **Onyesha pia jina ambalo kila mwasiliani amejiwekea mwenyewe**: Katika sehemu ya "Faragha". Kwa mwasiliani uliyempa jina la utani, unaweza kuchagua kama jina lake mwenyewe lionyeshwe karibu nalo (sura ya 3).
 - **Kuzuia**: Unaweza kuwazuia wenzako wanaokusumbua. Mawasiliano kutoka kwa waliozuiwa hayatafika.
 
 ---
@@ -141,11 +144,21 @@ Kwenye vifaa ambavyo haviwezi kusoma kiwango cha betri kiotomatiki (kama kivinja
 Utambulisho wako katika Breeze ni ufunguo tu ndani ya kifaa chako. Hakuna orodha ya akaunti kwenye seva, na mtengenezaji naye hana ufunguo wako.
 **Ukikipoteza kifaa, unapoteza pia utambulisho wako.** Kwa utambulisho muhimu, hakikisha unatengeneza akiba.
 
-Akiba na urejeshaji hufanywa kutoka sehemu ya "Akiba na urejeshaji" ya mipangilio (kuna vitufe vitatu: "Hifadhi akiba kwenye wingu", "Rejesha", na "Rejesha kutoka faili"). Mara ya kwanza unapoongeza mwasiliani, kadi inayokuhimiza kutengeneza akiba itatokea mara moja tu.
+Akiba na urejeshaji hufanywa kutoka sehemu ya "Hifadhi nakala & rejesha" ya mipangilio (vitufe ni "Tengeneza Nakala Rudufu", "Rejesha Nakala Rudufu", na "📂 Rejesha kutoka kwenye faili"). Mara ya kwanza unapoongeza mwasiliani, kadi inayokuhimiza kutengeneza akiba itatokea mara moja tu.
 
-### Jinsi ya kutengeneza akiba
+### Akiba ya kiotomatiki
 
-1. Kutoka "Akiba na urejeshaji" katika mipangilio, chagua kutengeneza akiba.
+Mpangilio wa "Akiba ya kiotomatiki" umewashwa tangu mwanzo. Data yako inapobadilika, akiba iliyofungwa kwa usiri hutumwa kiotomatiki kwenye seva ya kipeanaji unayoiendesha mwenyewe.
+
+- Haitumi kwa kila badiliko: inasubiri sekunde 30 baada ya badiliko la mwisho na kutuma vyote pamoja. Majaribio huachwa kwa vipindi vya angalau dakika 15.
+- Ukiwa nje ya mtandao, hakuna kinachotumwa; mabadiliko huhifadhiwa na kutumwa muunganisho unaporejea na unapofungua programu.
+- Kwa utumaji wa kiotomatiki, unahitaji kuweka nenosiri la akiba mara moja kwenye kifaa hicho (inapohitajika, kitufe cha "Weka nenosiri" hutokea katika sehemu ya mipangilio). **Nenosiri halihifadhiwi.** Hukumbukwa tu programu ikiwa wazi, na hutoweka ukiifunga. Kwa utambulisho wa urejeshaji rahisi, mara tu baada ya kuweka nenosiri wakati wa usajili au usasishaji, utumaji hufanya kazi kama ulivyo.
+- Ikiwa seva ya kipeanaji haiungi mkono kuhifadhi akiba, akiba ya kiotomatiki haifanyi kazi. Hilo huonyeshwa katika sehemu ya mipangilio.
+- Hali (wakati utumaji wa mwisho uliofanikiwa ulikuwa, kama mabadiliko yanasubiri, kama utumaji ulishindwa) huonyeshwa katika sehemu ya mipangilio.
+
+### Jinsi ya kutengeneza akiba (kwa mikono)
+
+1. Kutoka "Hifadhi nakala & rejesha" katika mipangilio, chagua "Tengeneza Nakala Rudufu".
 2. Weka nenosiri la akiba (herufi 6 au zaidi).
 3. Chagua mahali pa kuhifadhi.
    - **Hifadhi kwenye faili**: Tega faili ya akiba mikononi mwako mwenyewe (inapendekezwa).
@@ -157,11 +170,23 @@ Yaliyomo katika akiba yamefungwa kwa usiri. Seva ya mahali pa kuhifadhi hushughu
 
 Kwenye kifaa kipya, rejesha kwa kutumia faili ya akiba (au akiba kwenye seva ya kipeanaji) na nenosiri uliloweka.
 
+Ikiwa umerejesha utambulisho wako kwa kishazi cha kurejesha, na akiba ya utambulisho huo iko kwenye seva ya kipeanaji, itapatikana kiotomatiki na utaulizwa kwa "Akiba imepatikana." Ukiirejesha, data kwenye kifaa hicho itabadilishwa na yaliyomo katika akiba.
+
+### Kuhamia kifaa kipya
+
+Bonyeza kitufe cha "Hamisha kwenda kifaa kipya" katika sehemu ya "Hifadhi nakala & rejesha" ya mipangilio na hatua zitaonyeshwa.
+
+1. Kwenye kifaa chako cha sasa, weka akiba kwenye seva ya kipeanaji (akiba ya kiotomatiki, au "Tengeneza Nakala Rudufu").
+2. Kwenye kifaa kipya, chagua njia ya kurejesha kwenye skrini ya kwanza na uweke kishazi chako cha kurejesha (au jina la akaunti yako na nenosiri).
+3. Utambulisho wako ukirejea, akiba kwenye seva itapatikana kiotomatiki na urejeshaji utapendekezwa.
+
+Hakuna nyaya wala kukabidhiana faili kunakohitajika.
+
 ### Tahadhari
 
 - **Ukisahau nenosiri, urejeshaji hauwezekani.** Mtengenezaji naye hawezi kuirekebisha. Andika nenosiri mahali pengine.
-- **Utambulisho wa kutupa haurudi kwa akiba wala kwa urejeshaji.**
-- Tengeneza akiba upya wakati utambulisho unapoongezeka au unapobadilisha kifaa.
+- Kuweka nenosiri kwa ajili ya akiba ya kiotomatiki kunahitajika kwenye kila kifaa. Kwenye kifaa kipya, liweke mara moja tena.
+- Tengeneza akiba ya mikono upya wakati utambulisho unapoongezeka au unapobadilisha kifaa.
 
 ---
 

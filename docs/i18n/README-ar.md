@@ -1,6 +1,6 @@
 # Breeze Messenger
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../../LICENSE)
 
 **اقرأ بلغة أخرى**: [日本語](../../README.md) · [English](README-en.md) · [中文（简体）](README-zh-CN.md) · [中文（繁體）](README-zh-TW.md) · [Español](README-es.md) · [Français](README-fr.md) · [Deutsch](README-de.md) · [Italiano](README-it.md) · [Português (Brasil)](README-pt-BR.md) · [Русский](README-ru.md) · [Українська](README-uk.md) · [Polski](README-pl.md) · [Nederlands](README-nl.md) · [Svenska](README-sv.md) · [Norsk](README-nb.md) · [Dansk](README-da.md) · [Suomi](README-fi.md) · [Čeština](README-cs.md) · [Magyar](README-hu.md) · [Română](README-ro.md) · [Ελληνικά](README-el.md) · [Türkçe](README-tr.md) · العربية (هذه الصفحة) · [فارسی](README-fa.md) · [עברית](README-he.md) · [हिन्दी](README-hi.md) · [বাংলা](README-bn.md) · [اردو](README-ur.md) · [ਪੰਜਾਬੀ](README-pa.md) · [தமிழ்](README-ta.md) · [తెలుగు](README-te.md) · [മലയാളം](README-ml.md) · [Bahasa Indonesia](README-id.md) · [Bahasa Melayu](README-ms.md) · [Tiếng Việt](README-vi.md) · [ไทย](README-th.md) · [မြန်မာ](README-my.md) · [ខ្មែរ](README-km.md) · [한국어](README-ko.md) · [Filipino](README-tl.md) · [Kiswahili](README-sw.md) · [Hausa](README-ha.md) · [Yorùbá](README-yo.md) · [Igbo](README-ig.md) · [አማርኛ](README-am.md) · [ქართული](README-ka.md) · [Azərbaycan](README-az.md) · [Қазақша](README-kk.md) · [Oʻzbek](README-uz.md) · [Српски](README-sr.md) · [Hrvatski](README-hr.md)
 
@@ -16,7 +16,7 @@
 
 ليس لدى Breeze «خادم شركة مشغّلة». **لاستخدامه، عليك أن تجهّز بنفسك مكان التثبيت (الخادم) وتثبّت Breeze فيه. هذه هي طريقة الاستخدام الرسمية.**
 
-- يكفي لمكان التثبيت المستوى المجاني. يعمل ضمن الحصة المجانية من Cloudflare، ولا حاجة إلى بطاقة ائتمان. توجد الطريقة في [دليل التثبيت](SELF_HOSTING-ar.md) (يمكن اختيار النسخ بلغات أخرى من أول الدليل).
+- الإعداد القياسي يستخدم Cloudflare، لذا **يلزم وجود حساب Cloudflare**. توجد الطريقة في [دليل التثبيت](SELF_HOSTING-ar.md) (يمكن اختيار النسخ بلغات أخرى من أول الدليل).
 - التطبيق (Windows / Mac / Linux / Android / iPhone) تحصل عليه من [صفحة التنزيل](https://github.com/shizukutanaka/Breeze/releases/latest)، وتستخدمه متصلًا بخادمك الخاص.
 - **بشأن التثبيت النموذجي (إشعار صريح)**: وضعنا نموذجًا للتحقق من العمل (https://breeze-469.pages.dev/). يعمل عليه البرنامج نفسه، لكن للاستخدام الفعلي نرجو استخدام خادمك الخاص. قد يتغير النموذج أو يتوقف دون إشعار مسبق. والنسخة المثبتة على خادمك الخاص لا تتأثر بتوقف النموذج.
 
@@ -24,7 +24,7 @@
 
 ## طريقة الاستخدام (3 خطوات)
 
-1. افتح Breeze المثبت على خادمك الخاص (أو العنوان الذي أخبرك به الشخص الذي ثبّته) وأدخل اسمك. بهذا فقط يكتمل الإعداد (لا حاجة إلى تسجيل ولا إلى رقم هاتف). في هذه اللحظة يُنشأ داخل الجهاز «مفتاح» يصبح هويتك.
+1. افتح Breeze المثبت على خادمك الخاص (أو العنوان الذي أخبرك به الشخص الذي ثبّته) واضغط «ابدأ بمعرّف عشوائي» (يمكنك إدخال اسم إن أردت). بهذا فقط يكتمل الإعداد (لا حاجة إلى تسجيل ولا إلى رقم هاتف). في هذه اللحظة يُنشأ داخل الجهاز «مفتاح» يصبح هويتك.
 2. أعطِ معرّفك (ID) أو رمز QR الخاص بك للشخص الذي تريد التحدث معه.
 3. إذا كان الطرف الآخر قد فتح التطبيق أيضًا، يمكنكما الاتصال مباشرة والتحدث. وإذا لم يكن الطرف الآخر قد فتحه، تبقى الرسالة مشفرة في «صندوق الحفظ» وتُسلَّم عندما يفتحه. والخادم الذي ينقل صندوق الحفظ لا يستطيع قراءة المحتوى. والرسائل التي لا تُسلَّم تُحذف تلقائيًا بعد 7 أيام كحد أقصى.
 
@@ -43,6 +43,8 @@
 - مكالمات صوتية ومكالمات فيديو (المكالمات الجماعية حتى 8 أشخاص)
 - إرسال الملفات (في المحادثات الفردية حتى 50 MB. ويمكن إرسالها في المجموعات أيضًا، لكن حد الحجم أصغر.)
 - استخدام أجهزة متعددة وحسابات متعددة بشكل منفصل (مثل العمل والخاص؛ وعدد الأجهزة وعدد الحسابات كلاهما مجاني وغير محدود)
+- النسخ الاحتياطي التلقائي (عند حدوث أي تغيير، تُحفظ نسخة احتياطية مشفرة تلقائيًا على خادمك الخاص. وعلى جهاز جديد، بمجرد استعادة هويتك، تُكتشف النسخة الاحتياطية تلقائيًا وتُعرض عليك. كما ترشدك الإعدادات إلى الانتقال إلى جهاز جديد)
+- اسم تختاره لكل جهة اتصال (يمكنك إعادة تسمية كل جهة اتصال، ويُحفظ ذلك على هذا الجهاز فقط. ويمكنك أيضًا اختيار ما إذا كان الاسم الذي حدّدته كل جهة اتصال لنفسها سيظهر)
 - 51 لغة (الإنجليزية بالإضافة إلى 50 ملف لغة)، تُختار تلقائيًا بما يناسب لغة جهازك
 - ملف شخصي مع صورة، وملصقات، ومشاركة الموقع
 - التشغيل بالأوامر مثل `/help` (71 نوعًا)
@@ -114,7 +116,7 @@ npm test          # テストを実行する
 
 ## English
 
-Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server (Cloudflare's free tier is enough) and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
+Breeze is an end-to-end encrypted messenger with no phone number, no registration, and no ads — every feature is free. There is no company server: to use Breeze, you host it on your own server and connect the apps to it. Your identity is a key pair on your device; relays handle only sealed envelopes they cannot read. Full text in English: [README-en.md](README-en.md). The full, sourced comparison against Signal and LINE — including where Breeze loses — is in [../COMPARISON.md](../COMPARISON.md).
 
 ## الرخصة
 
