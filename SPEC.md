@@ -505,7 +505,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 | Optimization | Impact |
 |-------------|--------|
-| _DOM.get() memoized cache | 131 getElementById calls cached with isConnected validation |
+| _DOM.get() memoized cache | 255 getElementById calls cached with isConnected validation |
 | requestAnimationFrame render coalescing | 3 render paths avoid forced layout |
 | DocumentFragment batch insertion | 2 batch DOM operations |
 | renderContacts throttle (200ms) | Prevents 38+ calls/cycle jank |
