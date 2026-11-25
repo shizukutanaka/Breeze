@@ -37,24 +37,17 @@ Mer detaljerade anvisningar finns i [manualen](MANUAL-sv.md) (versioner på andr
 
 Vi skriver också ärligt om gränserna. För att leverera meddelanden finns det en kortvarig förvaring på servern (olevererade kuvert i högst 7 dagar, anslutningssignaler i 5 minuter, adress- och enhetsregister i 90 dagar, gruppinformation och aviseringar i 30 dagar. Allt raderas automatiskt och innehållet kan inte läsas). Säkerhetskopiering till molnet är inaktiverad från början. Om du placerar Breeze på din egen server har du även den förvaringen under din egen kontroll.
 
-## En design som inte lönar sig för brottslighet
-
-Breeze är byggd så att missbruk kostar tid och pengar för den som missbrukar. Vi säger inte att den "gör brott omöjliga". Den är utformad för att "inte löna sig".
-
-- **Ingen grund att åka snålskjuts på.** Eftersom det inte finns någon central gratisserver måste även den som missbrukar tillhandahålla en plats med ett konto i eget namn och på egen bekostnad.
-- **Det kostar att skicka.** Varje sändning kräver en liten beräkning (arbetsbevis), och mängden är begränsad. Massutskick och trakasserier lönar sig inte.
-- **Rapporter som inte går att prata bort.** Den som tar emot ett meddelande kan rapportera själva leveransen som bevis. Avsändaren kan inte hävda att den inte skickades.
-- **Den som placerade servern har makten att stoppa.** Det som händer på din egen server kan du stoppa själv. Du behöver ingens tillstånd.
-
 ## Funktioner
 
 - Chattar en mot en och gruppchattar (upp till 1 000 personer)
-- Röstsamtal och videosamtal
+- Röstsamtal och videosamtal (gruppsamtal upp till 8 personer)
 - Skicka filer (upp till 50MB i chattar en mot en. Det går även i grupper, men storleksgränsen är mindre där)
 - Flera enheter och flera konton för olika ändamål (till exempel arbete och privat. Både antal enheter och konton är gratis och obegränsade)
-- Väljs automatiskt bland 8 språk (engelska, japanska, koreanska, kinesiska (Taiwan), spanska, thailändska, indonesiska, portugisiska)
+- 51 språk (engelska plus 50 språkfiler), väljs automatiskt för att matcha enhetens språk
 - Profiler med foto, klistermärken, platsdelning
-- Kommandon som `/help` (mer än 60 typer)
+- Kommandon som `/help` (71 typer)
+- Energilägen anpassade till ditt batteri (automatiskt / normalt / energisparläge / nödläge). När batteriet tar slut sprids leveranskontroller ut så att batteriet räcker längre. Ett skydd för katastrofer och andra tider då du inte kan ladda
+- Lättlästa skärmar (uppmärksamhet på färgkontrast, textstorlek och användning med enbart tangentbordet)
 
 ## Skillnader mot andra meddelandeappar
 

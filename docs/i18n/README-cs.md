@@ -37,24 +37,17 @@ Podrobné pokyny k používání jsou v [příručce](MANUAL-cs.md) (verze v jin
 
 Poctivě píšeme i o mezích. Kvůli doručování existuje na serveru krátkodobé uložení (nedoručené obálky nejvýše 7 dní, signály připojení 5 minut, záznamy adres a zařízení 90 dní, informace o skupinách a odběry oznámení 30 dní. Vše se automaticky maže a obsah nelze číst). Zálohování do cloudu je zpočátku vypnuté. Pokud Breeze umístíte na vlastní server, máte i toto uložení pod vlastní kontrolou.
 
-## Návrh, při kterém se kriminalita nevyplatí
-
-Breeze je vytvořen tak, aby zneužití stálo zneužívající stranu čas a peníze. Netvrdíme, že "znemožňuje kriminalitu". Je navržen tak, aby se "nevyplatila".
-
-- **Žádná bezplatná platforma k přiživování.** Protože neexistuje centrální bezplatný server, musí si i zneužívající osoba zajistit místo s účtem na vlastní jméno a na vlastní náklady.
-- **Odesílání něco stojí.** Každé odeslání vyžaduje malý výpočet (důkaz práce) a množství je omezeno. Hromadné rozesílání a obtěžování se nevyplatí.
-- **Nahlášení, které nelze vymluvit.** Osoba, která zprávu přijme, může samotné doručení nahlásit jako důkaz. Odesílatel nemůže tvrdit, že ji neposlal.
-- **Pravomoc zastavit má ten, kdo server umístil.** To, co se děje na vašem vlastním serveru, můžete zastavit sami. Nepotřebujete ničí povolení.
-
 ## Co umí
 
 - Konverzace jeden na jednoho a skupinové konverzace (až 1 000 lidí)
-- Hlasové a videohovory
+- Hlasové a videohovory (skupinové hovory až pro 8 lidí)
 - Posílání souborů (v konverzacích jeden na jednoho až 50MB. Posílat lze i ve skupinách, ale limit velikosti je menší)
 - Používání více zařízení a více účtů pro různé účely (například pracovní a soukromé. Počet zařízení i účtů je zdarma a neomezený)
-- Automaticky se vybírá z 8 jazyků (angličtina, japonština, korejština, čínština (Tchaj-wan), španělština, thajština, indonéština, portugalština)
+- 51 jazyků (angličtina plus 50 jazykových souborů), vybírá se automaticky podle jazyka vašeho zařízení
 - Profily s fotografií, samolepky, sdílení polohy
-- Příkazy jako `/help` (více než 60 druhů)
+- Příkazy jako `/help` (71 druhů)
+- Režimy napájení přizpůsobené vaší baterii (automatický / normální / úsporný / nouzový). Když baterie dochází, kontroly doručení se rozloží, aby baterie vydržela déle. Pojistka pro katastrofy a jiné situace, kdy nemůžete nabíjet
+- Čitelné obrazovky (pozornost věnovaná kontrastu barev, velikosti textu a ovládání pouze klávesnicí)
 
 ## Rozdíly oproti jiným messengerům
 

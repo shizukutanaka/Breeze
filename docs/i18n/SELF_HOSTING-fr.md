@@ -197,7 +197,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **C'est tout.** Toutes les fonctions marchent, sauf les notifications push. Notez
@@ -213,9 +213,9 @@ paquet fermé par défaut est la voie Docker ci-dessus.
 | Messagerie P2P | ✓ | WebRTC DataChannel |
 | Appels vocaux/vidéo | ✓ | WebRTC + STUN gratuit |
 | Relais TURN | ✓ | Open Relay (20 Go/mois gratuits) |
-| Groupes (100 membres) | ✓ | Sender Key O(1) |
+| Groupes (1 000 membres) | ✓ | Sender Key O(1) |
 | Transfert de fichiers | ✓ | Jusqu'à 50 Mo via P2P |
-| 8 langues | ✓ | EN + 7 locales complètes, détection automatique |
+| 51 langues | ✓ | Anglais intégré + 50 fichiers de locale complets, détection automatique |
 | Hors ligne/PWA | ✓ | Service Worker |
 | Notifications push | ✗ | Nécessite des clés VAPID |
 
@@ -231,7 +231,7 @@ des sous-comptes locaux illimités gratuitement, sans contrôle par formule.
 | Lectures KV | 100 000/jour | ~200/jour |
 | Écritures KV | 1 000/jour | ~350/jour (optimisé) |
 | Stockage KV | 1 Go | ~10 Ko/utilisateur |
-| Ressources statiques | Illimité | ~400 Ko (un seul HTML) |
+| Ressources statiques | Illimité | ~894 Ko (un seul HTML) |
 
 **Prend en charge ~3 utilisateurs actifs simultanés sur l'offre gratuite.**
 

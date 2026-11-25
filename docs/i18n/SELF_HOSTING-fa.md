@@ -191,7 +191,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **همین است.** همه قابلیت‌ها به‌جز اعلان‌های پوش کار می‌کنند. توجه کنید
@@ -207,9 +207,9 @@ wrangler pages deploy . --project-name=breeze
 | پیام‌رسانی P2P | ✓ | WebRTC DataChannel |
 | تماس صوتی/ویدیویی | ✓ | WebRTC + STUN رایگان |
 | واسطه TURN | ✓ | Open Relay (20GB/ماه رایگان) |
-| گروه‌ها (100 عضو) | ✓ | Sender Key O(1) |
+| گروه‌ها (1,000 عضو) | ✓ | Sender Key O(1) |
 | انتقال فایل | ✓ | تا 50MB از طریق P2P |
-| 8 زبان | ✓ | EN + 7 مکان (لوکیل) کامل، شناسایی خودکار |
+| 51 زبان | ✓ | انگلیسی داخلی + 50 فایل مکان کامل، شناسایی خودکار |
 | آفلاین/PWA | ✓ | Service Worker |
 | اعلان‌های پوش | ✗ | به کلیدهای VAPID نیاز دارد |
 
@@ -225,7 +225,7 @@ wrangler pages deploy . --project-name=breeze
 | خواندن‌های KV | 100,000/روز | ~200/روز |
 | نوشتن‌های KV | 1,000/روز | ~350/روز (بهینه‌شده) |
 | ذخیره‌سازی KV | 1 GB | ~10 KB/کاربر |
-| دارایی‌های ایستا | نامحدود | ~400 KB (یک HTML) |
+| دارایی‌های ایستا | نامحدود | ~894 KB (یک HTML) |
 
 **حدود 3 کاربر فعال هم‌زمان را روی طرح رایگان پشتیبانی می‌کند.**
 

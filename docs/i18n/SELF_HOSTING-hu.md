@@ -196,7 +196,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Ennyi.** Minden funkció működik, a push értesítések kivételével. Vegye figyelembe,
@@ -212,9 +212,9 @@ alapértelmezés szerint zárt csomagolás a fenti Docker-út.
 | P2P üzenetküldés | ✓ | WebRTC DataChannel |
 | Hang-/videohívások | ✓ | WebRTC + ingyenes STUN |
 | TURN közvetítő | ✓ | Open Relay (20 GB/hónap ingyenes) |
-| Csoportok (100 tag) | ✓ | Sender Key O(1) |
+| Csoportok (1 000 tag) | ✓ | Sender Key O(1) |
 | Fájlátvitel | ✓ | Akár 50 MB P2P-n |
-| 8 nyelv | ✓ | EN + 7 teljes locale, automatikusan felismerve |
+| 51 nyelv | ✓ | Angol beépítve + 50 teljes locale-fájl, automatikusan felismerve |
 | Offline/PWA | ✓ | Service Worker |
 | Push értesítések | ✗ | VAPID kulcsok szükségesek |
 
@@ -230,7 +230,7 @@ korlátlan helyi alfiókot kap ingyen, csomagkapuzás nélkül.
 | KV olvasások | 100 000/nap | ~200/nap |
 | KV írások | 1 000/nap | ~350/nap (optimalizálva) |
 | KV tárhely | 1 GB | ~10 KB/felhasználó |
-| Statikus eszközök | Korlátlan | ~400 KB (egyetlen HTML) |
+| Statikus eszközök | Korlátlan | ~894 KB (egyetlen HTML) |
 
 **Körülbelül 3 egyidejű aktív felhasználót támogat az ingyenes szinten.**
 

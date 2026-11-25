@@ -37,24 +37,17 @@ Meer over het gebruik staat in de [handleiding](MANUAL-nl.md) (versies in andere
 
 We schrijven de reikwijdte er eerlijk bij. Om te bezorgen bewaart de server dingen korte tijd (niet-bezorgde enveloppen maximaal 7 dagen, verbindingssignalen 5 minuten, adres- en apparaatgegevens 90 dagen, groepsinformatie en meldingsabonnementen 30 dagen. Alles wordt automatisch verwijderd en de inhoud kan niet worden gelezen). Back-up naar de cloud staat in het begin uit. Als je het op je eigen server zet, valt ook die bewaring onder je eigen beheer.
 
-## Zo ontworpen dat misdaad niet loont
-
-Breeze is zo gemaakt dat misbruik de misbruiker moeite en geld kost. We zeggen niet dat het “misdaad onmogelijk maakt”. Het is een ontwerp dat het “niet lonend” maakt.
-
-- **Er is geen gratis basis om op mee te liften.** Omdat er geen centrale gratis server is, moet ook wie misbruik wil maken een plek regelen met een account op zijn eigen naam en op eigen kosten.
-- **Verzenden kost iets.** Bij elke verzending wordt een kleine berekening gevraagd (bewijs van werk) en er zijn grenzen aan de hoeveelheden. Massaal spamberichtjes versturen loont niet.
-- **Je kunt een melding doen waar geen excuus tegen helpt.** De ontvanger kan een melding doen met de ontvangen verzending zelf als bewijs. De verzender kan niet zeggen “ik heb het niet verzonden”.
-- **De bevoegdheid om te stoppen ligt bij wie het heeft neergezet.** Wat er op je eigen server gebeurt, kun je zelf stoppen. Je hebt niemands toestemming nodig.
-
 ## Wat het kan
 
 - Een-op-eengesprekken en groepsgesprekken (tot 1.000 mensen)
-- Spraak- en videogesprekken
+- Spraak- en videogesprekken (groepsgesprekken tot 8 mensen)
 - Bestanden verzenden (in een-op-eengesprekken tot 50 MB. In groepen kan het ook, maar de groottelimiet is kleiner)
 - Meerdere apparaten en meerdere accounts (bijv. werk en privé. Zowel het aantal apparaten als het aantal accounts is gratis en onbeperkt)
-- Wordt automatisch gekozen uit 8 talen (Engels, Japans, Koreaans, Chinees (Taiwan), Spaans, Thais, Indonesisch, Portugees)
+- 51 talen (Engels plus 50 taalbestanden), automatisch gekozen op basis van de taal van je apparaat
 - Profiel met foto, stickers, locatie delen
-- Commando's zoals `/help` (meer dan 60 soorten)
+- Commando's zoals `/help` (71 soorten)
+- Energiemodi afgestemd op je batterij (automatisch / normaal / energiebesparing / noodgeval). Naarmate de batterij leegraakt, worden bezorgcontroles uitgespreid zodat de batterij langer meegaat. Een beveiliging voor rampen en andere tijden waarin je niet kunt opladen
+- Leesbare schermen (aandacht voor kleurcontrast, tekstgrootte en bediening met alleen het toetsenbord)
 
 ## Verschillen met andere messengers
 

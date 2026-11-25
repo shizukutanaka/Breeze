@@ -198,7 +198,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Shi ke nan.** Duk fasaloli suna aiki sai sanarwar turawa (push). Lura
@@ -214,9 +214,9 @@ da ke a rufe a asali ita ce hanyar Docker da ke sama.
 | Saƙonnin P2P | ✓ | WebRTC DataChannel |
 | Kiran murya/bidiyo | ✓ | WebRTC + STUN kyauta |
 | Isarwar TURN | ✓ | Open Relay (20GB/wata kyauta) |
-| Ƙungiyoyi (mambobi 100) | ✓ | Sender Key O(1) |
+| Ƙungiyoyi (mambobi 1,000) | ✓ | Sender Key O(1) |
 | Isar da fayil | ✓ | Har zuwa 50MB ta P2P |
-| Harsuna 8 | ✓ | EN + cikakkun wuraren gida 7, ana ganowa ta atomatik |
+| Harsuna 51 | ✓ | Turanci a gina a ciki + cikakkun fayilolin wuraren gida 50, ana ganowa ta atomatik |
 | Ba-kan-layi/PWA | ✓ | Service Worker |
 | Sanarwar turawa | ✗ | Ana buƙatar maɓallan VAPID |
 
@@ -232,7 +232,7 @@ sashen "Removed: multi-account billing" na [SECURITY.md](../../SECURITY.md). Kow
 | Karatun KV | 100,000/rana | ~200/rana |
 | Rubutun KV | 1,000/rana | ~350/rana (an inganta) |
 | Ajiyar KV | 1 GB | ~10 KB/mai amfani |
-| Kayan aiki na tsaye | Ba iyaka | ~400 KB (HTML guda ɗaya) |
+| Kayan aiki na tsaye | Ba iyaka | ~894 KB (HTML guda ɗaya) |
 
 **Yana tallafa wa ~masu amfani masu aiki 3 a lokaci ɗaya a kyauta.**
 

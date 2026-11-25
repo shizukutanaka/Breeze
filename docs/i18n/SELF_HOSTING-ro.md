@@ -197,7 +197,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Asta este tot.** Toate funcțiile merg, cu excepția notificărilor push. Rețineți
@@ -213,9 +213,9 @@ setați dumneavoastră `REGISTRATION_ALLOWLIST` (vedeți `.env.example`); ambala
 | Mesagerie P2P | ✓ | WebRTC DataChannel |
 | Apeluri vocale/video | ✓ | WebRTC + STUN gratuit |
 | Releu TURN | ✓ | Open Relay (20 GB/lună gratuit) |
-| Grupuri (100 de membri) | ✓ | Sender Key O(1) |
+| Grupuri (1.000 de membri) | ✓ | Sender Key O(1) |
 | Transfer de fișiere | ✓ | Până la 50 MB prin P2P |
-| 8 limbi | ✓ | EN + 7 locale complete, detectate automat |
+| 51 de limbi | ✓ | Engleza inclusă + 50 de fișiere locale complete, detectate automat |
 | Offline/PWA | ✓ | Service Worker |
 | Notificări push | ✗ | Necesită chei VAPID |
 
@@ -231,7 +231,7 @@ subconturi locale nelimitate, gratuit, fără nicio condiționare de plan.
 | Citiri KV | 100.000/zi | ~200/zi |
 | Scrieri KV | 1.000/zi | ~350/zi (optimizat) |
 | Stocare KV | 1 GB | ~10 KB/utilizator |
-| Fișiere statice | Nelimitat | ~400 KB (un singur HTML) |
+| Fișiere statice | Nelimitat | ~894 KB (un singur HTML) |
 
 **Suportă ~3 utilizatori activi simultan pe nivelul gratuit.**
 

@@ -198,7 +198,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **სულ ეს არის.** ყველა ფუნქცია მუშაობს push შეტყობინებების გარდა. გაითვალისწინეთ,
@@ -214,9 +214,9 @@ wrangler pages deploy . --project-name=breeze
 | P2P შეტყობინებები | ✓ | WebRTC DataChannel |
 | ხმოვანი/ვიდეო ზარები | ✓ | WebRTC + უფასო STUN |
 | TURN რელე | ✓ | Open Relay (20GB/თვეში უფასო) |
-| ჯგუფები (100 წევრი) | ✓ | Sender Key O(1) |
+| ჯგუფები (1,000 წევრი) | ✓ | Sender Key O(1) |
 | ფაილების გადაცემა | ✓ | P2P-ით 50MB-მდე |
-| 8 ენა | ✓ | EN + 7 სრული ლოკალი, ავტომატურად ამოცნობილი |
+| 51 ენა | ✓ | ინგლისური ჩაშენებულია + 50 სრული ლოკალის ფაილი, ავტომატურად ამოცნობილი |
 | ოფლაინი/PWA | ✓ | Service Worker |
 | Push შეტყობინებები | ✗ | სჭირდება VAPID გასაღებები |
 
@@ -232,7 +232,7 @@ wrangler pages deploy . --project-name=breeze
 | KV კითხვები | 100,000/დღეში | ~200/დღეში |
 | KV ჩაწერები | 1,000/დღეში | ~350/დღეში (ოპტიმიზებული) |
 | KV შენახვა | 1 GB | ~10 KB/მომხმარებელზე |
-| სტატიკური აქტივები | შეუზღუდავი | ~400 KB (ერთი HTML) |
+| სტატიკური აქტივები | შეუზღუდავი | ~894 KB (ერთი HTML) |
 
 **უფასო საფეხურზე მხარს უჭერს ~3 ერთდროულად აქტიურ მომხმარებელს.**
 

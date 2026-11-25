@@ -24,16 +24,19 @@ Valitse laitteellesi sopiva tiedosto [lataussivulta](https://github.com/shizukut
 
 Jokaisen tiedoston mukana on tarkistusluku (SHA256SUMS.txt). Jos olet huolissasi, voit tarkistaa, että lataamasi tiedoston luku täsmää.
 
-> **Kokeilusivusta**: Julkinen kokeilusivu (breeze.pages.dev) on tällä hetkellä pysäytetty (sen avaaminen antaa 404). Käytä sovellusversiota, kunnes se palautetaan. Omalle palvelimellesi sijoittamaasi Breezeen pysähtyminen ei vaikuta.
+> **Kokeilusivusta**: Kokeilusivu toiminnan tarkistamiseen (https://breeze-469.pages.dev/) on tarjolla. Siellä oleva on sama ohjelmisto, mutta kokeilu voi muuttua tai pysähtyä ilman ilmoitusta. Todelliseen käyttöön käytä omalle palvelimellesi sijoittamaasi kopiota. Omalle palvelimellesi sijoitettuun kopioon kokeilun pysähtyminen ei vaikuta.
 
 ### Ensiasetukset
 
 1. Avaa sovellus.
-2. Syötä nimesi. Siinä kaikki – olet valmis. Rekisteröitymistä tai puhelinnumeroa ei tarvita.
+2. Syötä nimesi ja paina "Luo tili". Siinä kaikki – olet valmis. Rekisteröitymistä tai puhelinnumeroa ei tarvita.
+
+- Jos haluat palauttaa aiemmin tekemäsi identiteetin, avaa "Palauta olemassa oleva tili", niin palautustavat (varmuuskopiotiedosto, palautuslauseke jne.) tulevat näkyviin.
+- Kun luominen on valmis, näkyviin tulee kortti, joka ohjaa sinua suojaamaan avaimesi tunnuslauseella (se ei katoa ajan kuluttua). Tärkeän identiteetin kohdalla noudata ohjetta ja lisää suojaus.
 
 Tällöin laitteesi sisällä luodaan "avain". Se on itse identiteettisi.
 **Palvelimella ei ole tililuetteloa.** Identiteettisi on vain laitteesi sisällä.
-Tämä tulee tärkeäksi varmuuskopiointiluvussa (8).
+Tämä tulee tärkeäksi varmuuskopiointiluvussa (9).
 
 ### "Kertakäyttöidentiteetistä"
 
@@ -45,11 +48,13 @@ Tämä näkyy myös näytöllä. Älä valitse sitä identiteetille, jota aiot k
 
 ## 2. Yhteys toiseen henkilöön
 
-On kolme tapaa yhdistyä henkilöön, jonka kanssa haluat keskustella.
+Paina yhteystietonäytöllä painiketta "Lisää ystävä", niin kolme vaihtoehtoa tulee näkyviin.
 
-- **Anna tunnuksesi**: Kerro tunnuksesi toiselle henkilölle ja anna hänen syöttää se.
-- **QR-koodi**: Näytä kutsun QR-koodi ja anna toisen henkilön lukea se.
-- **Kutsulinkki**: Kopioi kutsuviesti kohdasta "Kutsu ystävä" ja lähetä se tavallisella yhteydenpitotavallasi (sähköposti jne.). Kun toinen henkilö avaa linkin ja syöttää nimensä, voitte keskustella heti.
+- **Lisää yhteystieto**: Syötä toisen henkilön tunnus tai lue QR-koodi.
+- **Kutsu ystävä**: Kopioi kutsulinkki ja lähetä se tavallisella yhteydenpitotavallasi (sähköposti jne.). Kun toinen henkilö avaa linkin ja syöttää nimensä, voitte keskustella heti.
+- **Luo ryhmä**: Luo ryhmä syöttämällä vain ryhmän nimi (luku 4).
+
+Oma tunnuksesi näkyy täydellisessä muodossaan, kun avaat oman profiilisi, ja voit kopioida sen sellaisenaan. Voit luovuttaa täydellisen tunnuksen, et vain lyhyttä tunnusta.
 
 Jos myös toisella henkilöllä on sovellus auki, voitte yhdistyä suoraan ja keskustella.
 
@@ -58,14 +63,23 @@ Jos myös toisella henkilöllä on sovellus auki, voitte yhdistyä suoraan ja ke
 ## 3. Keskustelut
 
 - Kirjoita vain viesti ja lähetä se. Voit lähettää myös kuvia, tarroja ja sijainnin.
+- Avaa syöttökentän vieressä oleva "+", niin tiedostoliitteet, ääniviestit, äänisyöttö, sijaintitiedot, tarrat, asetus "vastausta ei tarvita" ja muuta tulee näkyviin yhdessä.
 - **Tiedostojen lähetys**: Kahdenkeskisissä keskusteluissa enintään 50 MB. Ryhmissä se on pienempi, noin 50 KB.
 - Vaaralliset tiedostomuodot, kuten suoritettavat tiedostot, estetään automaattisesti.
 - Jos toisella henkilöllä ei ole sovellusta auki, viesti asetetaan edelleen salattuna "postilaatikkoon" ja toimitetaan, kun hän avaa sovelluksen. Postilaatikkoa kuljettava palvelin ei voi lukea sisältöä. Kirjeet, joita ei koskaan toimiteta, poistetaan automaattisesti **viimeistään 7 päivän** kuluttua.
 - Keskusteluhistorian voi viedä tiedostoon ja tuoda siitä.
 
+### Näytön lukeminen
+
+- **Lähetystila**: Sen näkee viestin vieressä olevasta merkistä. ✓ tarkoittaa lähetettyä, ympyrässä oleva ✓ tarkoittaa, että se on talletettu postilaatikkoon, ✓✓ tarkoittaa, että se tavoitti toisen henkilön, luettu on sininen merkki ja epäonnistuminen punainen merkki. Ne erotetaan myös muodolla, ei vain värillä.
+- **Yhteystietoluettelo**: Viimeisimmän keskustelun aika näkyy kellonaikana tälle päivälle, "Eilen" eiliselle, kuukausi/päivä tälle vuodelle ja vuosi/kuukausi/päivä sitä vanhemmille. Yhteyshenkilöillä, joilta on lukemattomia viestejä, nimi ja aika ovat korostettuina.
+- **Oma korttisi**: Luettelon yläosassa on oma profiilikorttisi; avaa profiilisi painamalla sitä. Se vierii luettelon mukana.
+- **Alareunan välilehdet puhelimessa**: Puhelimen leveydellä näytön alareunaan ilmestyvät välilehdet "Yhteystiedot" ja "Asetukset".
+- **Keskustelun otsikko**: Hakukuvakkeesta voit hakea keskustelusta. Valikosta "⋮" voit tarkistaa turvanumeron, mykistää ilmoitukset, kiinnittää, luoda äänestyksen ja muuta.
+
 ### Komennot
 
-Jos syötät syöttökenttään `/help`, näet luettelon käytettävistä komennoista (yli 60 tyyppiä).
+Jos syötät syöttökenttään `/`, komentoehdotukset tulevat näkyviin. Syötä `/help` nähdäksesi luettelon käytettävistä komennoista (71 tyyppiä).
 Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 
 ---
@@ -73,7 +87,7 @@ Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 ## 4. Ryhmät
 
 - Ryhmässä voi olla enintään **1 000 henkilöä**.
-- Luot ryhmän syöttämällä vain ryhmän nimen. Kutsut tehdään "Ryhmäkutsulinkillä". Linkin saanut henkilö voi liittyä syöttämällä nimensä.
+- Luot ryhmän syöttämällä vain ryhmän nimen kohdassa "Luo ryhmä" valikossa "Lisää ystävä" (voit luoda sen myös komennolla `/newgroup`). Kutsut tehdään "Ryhmäkutsulinkillä". Linkin saanut henkilö voi liittyä syöttämällä nimensä.
 - Myös ryhmissä voi lähettää tiedostoja, mutta raja on pienempi, noin 50 KB. Ääniviestejä ei vielä voi lähettää ryhmissä.
 - Jos jäsen käyttää sovelluksen vanhaa versiota, ryhmä ei voi käyttää uudempaa, turvallisempaa tilaa (ryhmä v5), ja näytöllä näkyy varoitus. Se otetaan käyttöön, kun kaikilla on uusin versio.
 
@@ -81,7 +95,7 @@ Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 
 ## 5. Puhelut
 
-- Voit soittaa kahdenkeskisiä ääni- ja videopuheluita. Myös ryhmäpuheluita on.
+- Voit soittaa kahdenkeskisiä ääni- ja videopuheluita. Myös ryhmäpuheluita on (enintään 8 henkilölle).
 - **Puhelun vahvistuskoodi**: Puhelunäytöllä näkyy vahvistuskoodi. Lukekaa se ääneen toisen henkilön kanssa ja tarkistakaa, että se täsmää molemmilla näytöillä. Jos se ei täsmää, joku saattaa salakuunnella puhelua. Katkaise puhelu siinä tapauksessa.
 - Ryhmäpuheluita ei joskus voi aloittaa, jos kaikkien sovellukset eivät ole uusinta versiota.
 
@@ -91,11 +105,15 @@ Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 
 - Käyttääksesi samaa identiteettiä useilla laitteilla linkität laitteet komennolla `/link`.
 - Voit luoda useita tilejä ja käyttää niitä eri tarkoituksiin (esimerkiksi työ ja yksityinen). Sekä laitteiden että tilien määrä on ilmainen ja rajoittamaton.
-- Kieli valitaan automaattisesti 8 kielestä: englanti, japani, korea, kiina (Taiwan), espanja, thai, indonesia ja portugali (Brasilia).
+- **Tilin luominen**: Paina painiketta "+" tilivälilehtien vieressä yhteystietoluettelon aivan yläosassa. Syötä nimi ja valitse kuvake-emoji, niin uusi tili luodaan ja siihen vaihdetaan automaattisesti.
+- **Tilien vaihtaminen**: Tilivälilehdet näkyvät aina yhteystietoluettelon aivan yläosassa. Vaihda painamalla yhtä (tietokoneella voit vaihtaa myös näppäimillä Ctrl+1–9). Paina välilehteä pitkään nimetäksesi sen uudelleen, vaihtaaksesi sen kuvakkeen tai poistaaksesi sen.
+- Kieli valitaan automaattisesti 51 kielestä, englanti mukaan lukien, laitteesi kielen mukaan.
 
 ---
 
 ## 7. Turvallisuutta ylläpitävät asetukset
+
+Asetukset avautuvat omana näyttönään. Puhelimessa avaa ne näytön alareunan välilehdeltä "Asetukset"; tietokoneella näytön rataskuvakepainikkeesta (voit avata ne myös komennolla `/settings`). Palaa edelliselle näytölle takaisin-toiminnolla.
 
 - **Automaattinen lukitus**: On asetus, joka lukitsee automaattisesti, kun vaihdat välilehteä.
 - **Avaimen tunnuslause**: Voit suojata laitteesi sisällä olevan avaimen käärimällä sen tunnuslauseeseen. Sinua pyydetään syöttämään se, kun avaat sovelluksen.
@@ -103,14 +121,31 @@ Jotkin toiminnot, kuten asetukset ja laitteiden linkitys, tehdään komennoilla.
 
 ---
 
-## 8. Varmuuskopiointi ja palautus (tärkein luku)
+## 8. Akku ja hätätilanteet (virtatilat)
+
+Asetuksessa "Virtatila" voit valita, miten akkua käytetään.
+
+- **Automaattinen (akun taso)**: Vaihtaa automaattisesti sen mukaan, kuinka paljon akkua on jäljellä.
+- **Normaali**: Kuten tavallisesti.
+- **Virransäästö**: Harventaa toimitustarkistukset enintään kerran 60 sekunnissa ja pysäyttää läsnäolosignaalin.
+- **Hätätila (katastrofeihin)**: Harventaa toimitustarkistukset enintään kerran 10 minuutissa. Käytä sitä katastrofissa tai muulloin, kun et voi ladata.
+
+Akkua kuluttaa ei viestinnän määrä vaan se, kuinka monta kertaa radio herää. Siksi lähetyspuolta ei harvenneta; vain kuuntelupuoli harvennetaan. Lähetys lähtee silti heti, kuten aina. Kun aloitat lataamisen, se siirtyy automaattisesti yhden askeleen takaisin kevyempään suuntaan.
+
+Laitteilla, jotka eivät voi lukea akun tasoa automaattisesti (kuten iPhone-selain), "Automaattinen" toimii kuten Normaali, ja manuaalinen valinta toimii valitulla tavalla.
+
+---
+
+## 9. Varmuuskopiointi ja palautus (tärkein luku)
 
 Breeze-identiteettisi on vain laitteesi sisällä oleva avain. Palvelimella ei ole tililuetteloa, eikä tekijälläkään ole avaintasi.
 **Jos kadotat laitteesi, menetät identiteettisi.** Tee tärkeälle identiteetille aina varmuuskopio.
 
+Varmuuskopiointi ja palautus tehdään asetusten osiosta "Varmuuskopiointi ja palautus" (siinä on kolme painiketta: "Varmuuskopioi pilveen", "Palauta" ja "Palauta tiedostosta"). Kun lisäät yhteystiedon ensimmäisen kerran, näkyviin tulee vain kerran kortti, joka kehottaa tekemään varmuuskopion.
+
 ### Varmuuskopion tekeminen
 
-1. Valitse "Tee varmuuskopio".
+1. Valitse varmuuskopion tekeminen asetusten kohdasta "Varmuuskopiointi ja palautus".
 2. Aseta varmuuskopion tunnuslause (vähintään 6 merkkiä).
 3. Valitse tallennuspaikka.
    - **Tallenna tiedostoon**: Säilytä varmuuskopiotiedosto itselläsi (suositeltu).
@@ -130,7 +165,7 @@ Palauta uudella laitteella varmuuskopiotiedostolla (tai välityspalvelimen varmu
 
 ---
 
-## 9. Postilaatikko ja kustannusajattelu
+## 10. Postilaatikko ja kustannusajattelu
 
 - Kirjeet henkilölle, joka on offline-tilassa, asetetaan salattuna välityspalvelimen "postilaatikkoon" (enintään 7 päivää).
 - Välittäjällä on rajat väärinkäytön estämiseksi (kuinka paljon voi jättää ja kuinka usein). Kun raja saavutetaan, et voi jättää uusia kirjeitä kyseisenä aikana, mutta **jo toimitetut kirjeet eivät koskaan katoa**. Näytöllä näkyy syy ja kuinka kauan on odotettava.
@@ -147,7 +182,7 @@ Palvelinpuolelle jäävien tietojen laajuus (kaikki poistetaan automaattisesti, 
 
 ---
 
-## 10. Päivittäminen (työpöytäversio)
+## 11. Päivittäminen (työpöytäversio)
 
 1. Kun uusi versio on saatavilla, näytölle tulee ilmoitus.
 2. Paina "Lataa" hakeaksesi uuden version (sitä ei asenneta automaattisesti).
@@ -157,7 +192,7 @@ Jos päivityksen aikana menee jotain pieleen (esimerkiksi tiedoston tarkistus ei
 
 ---
 
-## 11. Kun jokin menee pieleen
+## 12. Kun jokin menee pieleen
 
 | Oire | Mitä tarkistaa |
 |---|---|
@@ -167,13 +202,13 @@ Jos päivityksen aikana menee jotain pieleen (esimerkiksi tiedoston tarkistus ei
 | Puhelun vahvistuskoodi ei täsmää | Katkaise puhelu ja soita uudelleen. Älä jatka, kun se ei täsmää. |
 | Unohtunut tunnuslause | Palautus on mahdotonta. Luo uusi identiteetti ja kerro yhteyshenkilöillesi uudelleen. |
 | Kadonnut laite | Jos sinulla on varmuuskopio, voit palauttaa uudella laitteella. Jos ei, siitä tulee uusi identiteetti. |
-| Kokeilusivu ei aukea (404) | Se on tällä hetkellä pysäytetty. Käytä sovellusversiota. |
+| Kokeilusivu ei aukea | Kokeilu voi pysähtyä ilman ilmoitusta. Käytä omalle palvelimellesi sijoittamaasi kopiota. |
 
 Ilmoita vioista [Issue-sivulla](https://github.com/shizukutanaka/Breeze/issues), kiitos.
 
 ---
 
-## 12. Breezen lupaukset
+## 13. Breezen lupaukset
 
 - Ei mainoksia. Ei sovelluksessa eikä missään muuallakaan.
 - Ei seurantaa. Ei käytön analysointia, ei mainosmekanismeja, ei tietojen myyntiä – ei lainkaan.
@@ -184,4 +219,4 @@ Yksityiskohtainen vertailu muihin viestisovelluksiin on arkiston "vertailusivull
 
 ---
 
-*Tämä opas kuvaa sisältöä Breeze v3.8.0:n ajankohdan mukaisesti.*
+*Tämä opas vastaa Breezen tilaa 25.11.2026.*

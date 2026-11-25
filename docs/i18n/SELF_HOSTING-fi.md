@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Siinä kaikki.** Kaikki ominaisuudet toimivat paitsi push-ilmoitukset. Huomaa,
@@ -215,9 +215,9 @@ suljettu-oletuksena-pakkaus on yllä oleva Docker-polku.
 | P2P-viestit | ✓ | WebRTC DataChannel |
 | Ääni-/videopuhelut | ✓ | WebRTC + ilmainen STUN |
 | TURN-välittäjä | ✓ | Open Relay (20GB/kuukausi ilmaiseksi) |
-| Ryhmät (100 jäsentä) | ✓ | Sender Key O(1) |
+| Ryhmät (1 000 jäsentä) | ✓ | Sender Key O(1) |
 | Tiedostonsiirto | ✓ | Enintään 50MB P2P:n kautta |
-| 8 kieltä | ✓ | EN + 7 täyttä lokaalia, tunnistetaan automaattisesti |
+| 51 kieltä | ✓ | Englanti sisäänrakennettuna + 50 täyttä lokaalitiedostoa, tunnistetaan automaattisesti |
 | Offline/PWA | ✓ | Service Worker |
 | Push-ilmoitukset | ✗ | Vaatii VAPID-avaimet |
 
@@ -233,7 +233,7 @@ rajoittamattomat paikalliset alatilat ilmaiseksi ilman suunnitelmarajoitusta.
 | KV-luvut | 100 000/päivä | ~200/päivä |
 | KV-kirjoitukset | 1 000/päivä | ~350/päivä (optimoitu) |
 | KV-tallennus | 1 GB | ~10 KB/käyttäjä |
-| Staattiset resurssit | Rajoittamaton | ~400 KB (yksi HTML) |
+| Staattiset resurssit | Rajoittamaton | ~894 KB (yksi HTML) |
 
 **Tukee ~3 samanaikaista aktiivista käyttäjää ilmaistasolla.**
 

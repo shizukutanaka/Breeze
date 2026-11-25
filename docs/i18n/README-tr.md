@@ -37,24 +37,17 @@ Ayrıntılı kullanım, [kullanım kılavuzunda](MANUAL-tr.md) yer alır (diğer
 
 Dürüst olmak için kapsamı da yazarız. Teslimat için sunucuda kısa süreli bir tutma olur (teslim edilemeyen zarflar en çok 7 gün, bağlantı işaretleri 5 dakika, adres ve cihaz kayıtları 90 gün, grup bilgileri ve bildirim abonelikleri 30 gün; hepsi otomatik olarak silinir ve içerik okunamaz). Buluta yedekleme, başlangıçta devre dışıdır. Kendi sunucunuza kurarsanız, bu tutma da kendi yönetiminize girer.
 
-## Suçta kullanmak kârlı olmayacak şekilde tasarlandı
-
-Breeze, kötüye kullanımın, bunu yapan kişiye maliyet ve zahmet çıkarması için yapılmıştır. "Suçu imkânsız kılar" demiyoruz. "Kârlı olmayacak" hâle getiren bir tasarımdır.
-
-- **Beleşe binilecek bir zemin yoktur.** Merkezî ücretsiz sunucu olmadığı için, kötüye kullanan kişi de kendi adına açılmış bir hesapla ve kendi parasıyla barındırma hazırlamak zorundadır.
-- **Göndermek yük getirir.** Her gönderimde küçük bir hesaplama (proof of work) istenir ve miktar sınırları da vardır. Toplu taciz gönderimi kârlı olmaz.
-- **İnkâr edilemeyecek bildirim yapılabilir.** Alan kişi, gelen gönderinin kendisini kanıt olarak bildirebilir. Gönderen taraf "göndermedim" diyerek kurtulamaz.
-- **Durdurma yetkisi kuran kişidedir.** Kendi sunucunuzda olan şeyi kendiniz durdurabilirsiniz. Kimsenin izni gerekmez.
-
 ## Neler yapabilir
 
 - Bire bir konuşmalar ve grup konuşmaları (en çok 1.000 kişi)
-- Sesli aramalar ve görüntülü aramalar
+- Sesli aramalar ve görüntülü aramalar (en çok 8 kişilik grup aramaları)
 - Dosya gönderme (bire bir konuşmada en çok 50 MB. Grupta da gönderilebilir ancak boyut sınırı daha küçüktür.)
 - Birden çok cihazı ve birden çok hesabı ayrı ayrı kullanma (iş ve özel gibi; cihaz sayısı da hesap sayısı da ücretsiz ve sınırsızdır)
-- 8 dil arasından otomatik seçilir (İngilizce, Japonca, Korece, Çince (Tayvan), İspanyolca, Tayca, Endonezyaca, Portekizce)
+- 51 dil (İngilizce artı 50 dil dosyası), cihazınızın diliyle eşleşecek şekilde otomatik seçilir
 - Fotoğraflı profil, çıkartmalar, konum paylaşımı
-- `/help` gibi komutlarla kullanım (60'tan fazla çeşit)
+- `/help` gibi komutlarla kullanım (71 çeşit)
+- Pilinize uygun güç modları (otomatik / normal / güç tasarrufu / acil durum). Pil azaldıkça teslim denetimleri seyreltilir, böylece pil daha uzun dayanır. Afetler ve şarj edemediğiniz başka zamanlar için bir güvence
+- Okunaklı ekranlar (renk kontrastına, metin boyutuna ve yalnızca klavyeyle kullanıma özen gösterilir)
 
 ## Diğer mesajlaşma uygulamalarından farkları
 

@@ -198,7 +198,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Αυτό είναι όλο.** Όλες οι λειτουργίες δουλεύουν εκτός από τις ειδοποιήσεις push. Σημειώστε
@@ -214,9 +214,9 @@ wrangler pages deploy . --project-name=breeze
 | Μηνύματα P2P | ✓ | WebRTC DataChannel |
 | Φωνητικές/βιντεοκλήσεις | ✓ | WebRTC + δωρεάν STUN |
 | Αναμετάδοση TURN | ✓ | Open Relay (20 GB/μήνα δωρεάν) |
-| Ομάδες (100 μέλη) | ✓ | Sender Key O(1) |
+| Ομάδες (1.000 μέλη) | ✓ | Sender Key O(1) |
 | Μεταφορά αρχείων | ✓ | Έως 50 MB μέσω P2P |
-| 8 γλώσσες | ✓ | EN + 7 πλήρη locale, αυτόματη ανίχνευση |
+| 51 γλώσσες | ✓ | Αγγλικά ενσωματωμένα + 50 πλήρη αρχεία locale, αυτόματη ανίχνευση |
 | Εκτός σύνδεσης/PWA | ✓ | Service Worker |
 | Ειδοποιήσεις push | ✗ | Χρειάζονται κλειδιά VAPID |
 
@@ -232,7 +232,7 @@ wrangler pages deploy . --project-name=breeze
 | Αναγνώσεις KV | 100.000/ημέρα | ~200/ημέρα |
 | Εγγραφές KV | 1.000/ημέρα | ~350/ημέρα (βελτιστοποιημένο) |
 | Αποθήκευση KV | 1 GB | ~10 KB/χρήστη |
-| Στατικά αρχεία | Απεριόριστα | ~400 KB (ένα μόνο HTML) |
+| Στατικά αρχεία | Απεριόριστα | ~894 KB (ένα μόνο HTML) |
 
 **Υποστηρίζει ~3 ταυτόχρονους ενεργούς χρήστες στο δωρεάν επίπεδο.**
 

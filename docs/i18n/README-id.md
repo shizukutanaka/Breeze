@@ -37,24 +37,17 @@ Untuk petunjuk penggunaan yang terperinci, lihat [manual](MANUAL-id.md) (bahasa 
 
 Kami juga menuliskan cakupannya dengan jujur. Untuk pengiriman, ada penyimpanan jangka pendek di server (amplop yang belum terkirim maksimal 7 hari, sinyal koneksi 5 menit, catatan alamat dan perangkat 90 hari, informasi grup dan langganan notifikasi 30 hari. Semuanya terhapus secara otomatis, dan isinya tidak dapat dibaca). Cadangan cloud secara bawaan dinonaktifkan. Jika Anda menghostingnya di server Anda sendiri, penyimpanan itu pun berada di bawah kendali Anda sendiri.
 
-## Dirancang agar menggunakannya untuk kejahatan tidak sepadan
-
-Breeze dirancang agar mahal dan merepotkan bagi mereka yang menyalahgunakannya. Kami tidak mengatakan bahwa ini "membuat kejahatan menjadi mustahil." Desain ini membuatnya "tidak sepadan."
-
-- **Tidak ada landasan gratis untuk ditumpangi.** Karena tidak ada server gratis terpusat, bahkan seseorang yang menyalahgunakannya pun harus menyiapkan akun atas namanya sendiri dan hosting dengan biayanya sendiri.
-- **Mengirim dikenakan biaya.** Setiap pengiriman memerlukan perhitungan kecil (bukti kerja), dan ada batas jumlahnya. Mengirim spam dalam jumlah besar tidak sepadan.
-- **Laporan yang tidak dapat disangkal dapat dibuat.** Penerima dapat melaporkan pesan yang diterima itu sendiri sebagai bukti. Pengirim tidak dapat mengatakan "saya tidak mengirimnya."
-- **Kewenangan untuk menghentikannya ada pada orang yang menghostingnya.** Apa yang terjadi di server Anda sendiri dapat Anda hentikan sendiri. Tidak diperlukan izin dari siapa pun.
-
 ## Apa yang dapat Anda lakukan
 
 - Percakapan satu lawan satu dan percakapan grup (maksimal 1.000 orang)
-- Panggilan suara dan panggilan video
+- Panggilan suara dan panggilan video (panggilan grup maksimal 8 orang)
 - Mengirim file (maksimal 50MB untuk satu lawan satu. Dapat juga dikirim dalam grup, tetapi batas ukurannya lebih kecil)
 - Menggunakan banyak perangkat dan banyak akun (misalnya untuk pekerjaan dan pribadi. Jumlah perangkat dan akun gratis dan tidak terbatas)
-- Dipilih secara otomatis dari 8 bahasa (Inggris, Jepang, Korea, Mandarin (Taiwan), Spanyol, Thai, Indonesia, Portugis)
+- 51 bahasa (Inggris ditambah 50 file bahasa), dipilih secara otomatis sesuai bahasa perangkat Anda
 - Profil dengan foto, stiker, berbagi lokasi
-- Perintah seperti `/help` (lebih dari 60 jenis)
+- Perintah seperti `/help` (71 jenis)
+- Mode daya yang disesuaikan dengan baterai Anda (otomatis / normal / hemat daya / darurat). Saat baterai berkurang, pemeriksaan pengiriman diberi jarak agar baterai lebih tahan lama. Sebuah pengaman untuk bencana dan keadaan lain ketika Anda tidak dapat mengisi daya
+- Layar yang mudah dibaca (memperhatikan kontras warna, ukuran teks, dan pengoperasian hanya dengan keyboard)
 
 ## Perbedaannya dengan aplikasi pesan lain
 

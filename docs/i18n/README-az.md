@@ -37,24 +37,17 @@ Breeze-in «operator şirkət serveri» yoxdur. **İstifadə etmək üçün yerl
 
 Dürüstcəsinə əhatə dairəsini də yazırıq. Çatdırılma üçün serverdə qısa müddətli saxlama var (çatdırılmamış zərflər ən çox 7 gün, qoşulma siqnalları 5 dəqiqə, ünvan və cihaz qeydləri 90 gün, qrup məlumatları və bildiriş abunəlikləri 30 gün. Hamısı avtomatik silinir və məzmun oxuna bilməz). Buluda ehtiyat nüsxə ilkin olaraq söndürülüb. Öz serverinizə yerləşdirsəniz, həmin saxlamanı da öz idarəniz altına ala bilərsiniz.
 
-## Cinayətdə istifadə etmək sərfəli deyil
-
-Breeze sui-istifadə edən tərəf üçün baha və əziyyətli olacaq şəkildə hazırlanmışdır. «Cinayəti qeyri-mümkün edirik» demirik. «Sərfəli deyil» dizaynıdır.
-
-- **Pulsuz minmək üçün zəmin yoxdur.** Mərkəzi pulsuz server olmadığı üçün sui-istifadə edənlər də öz adlarına hesab və öz vəsaitləri ilə yerləşdirmə yeri hazırlamalı olurlar.
-- **Göndərmək yük yaradır.** Hər göndəriş kiçik bir hesablama (işin sübutu) tələb edir və həcm limiti də müəyyən edilib. Kütləvi spam göndərişləri sərfəli deyil.
-- **İnkar edilə bilməyən şikayət mümkündür.** Qəbul edən şəxs aldığı göndərişin özünü sübut kimi şikayət edə bilər. Göndərən «göndərməmişəm» deyib yaxa qurtara bilməz.
-- **Dayandırmaq səlahiyyəti yerləşdirən şəxsdədir.** Öz serverinizdə baş verəni özünüz dayandıra bilərsiniz. Heç kimin icazəsi lazım deyil.
-
 ## İmkanlar
 
 - Təkbətək söhbətlər və qrup söhbətləri (ən çox 1.000 nəfər)
-- Səsli zənglər və videozənglər
+- Səsli zənglər və videozənglər (qrup zəngləri ən çox 8 nəfər)
 - Fayl göndərmə (təkbətəkdə ən çox 50MB. Qruplarda da göndərmək olur, lakin ölçü limiti daha kiçikdir)
 - Bir neçə cihaz və bir neçə hesabdan istifadə (məsələn, iş və şəxsi. Həm cihaz sayı, həm də hesab sayı pulsuz və limitsizdir)
-- 8 dildən (ingilis, yapon, koreya, Çin (Tayvan), ispan, tay, indoneziya və portuqal) avtomatik seçilir
+- 51 dil (ingilis dili və 50 dil faylı), cihazınızın dilinə uyğun avtomatik seçilir
 - Şəkilli profil, stikerlər, məkan paylaşımı
-- `/help` kimi əmr əməliyyatları (60-dan çox növ)
+- `/help` kimi əmr əməliyyatları (71 növ)
+- Batareyanıza uyğun enerji rejimləri (avtomatik / normal / enerjiyə qənaət / fövqəladə). Batareya azaldıqca çatdırılma yoxlamaları seyrəkləşir ki, batareya daha uzun davam etsin. Fəlakətlər və enerji doldura bilmədiyiniz digər vaxtlar üçün qorunma
+- Oxunaqlı ekranlar (rəng kontrastına, mətn ölçüsünə və yalnız klaviatura ilə idarəetməyə diqqət)
 
 ## Digər messencerlərdən fərqi
 

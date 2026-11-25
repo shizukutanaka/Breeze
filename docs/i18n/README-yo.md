@@ -37,24 +37,17 @@ Breeze kò ní "sáfà ilé-iṣẹ́". **Láti lò ó, ìwọ fúnra rẹ ni y�
 
 A ó tún kọ ààlà náà pẹ̀lú òtítọ́. Láti fi ránṣẹ́, sáfà ń pa ìránṣẹ́ mọ́ fún ìgbà díẹ̀ (àwọn ẹnu-ìwé tí kò tíì dé títí di ọjọ́ 7, àmì ìsopọ̀ fún ìṣẹ́jú 5, àkọsílẹ̀ àdírẹ́sì àti ẹ̀rọ fún ọjọ́ 90, ìwífún ẹgbẹ́ àti ìforúkọsílẹ̀ ìfitónilétí fún ọjọ́ 30. Gbogbo wọn ń parẹ́ fúnra wọn, a kò sì lè ka ohun tí ó wà nínú wọn). Ìpamọ́ àfikún sí ìkùukùu ti wà ní títì ní ìbẹ̀rẹ̀. Tí o bá fi sí orí sáfà tìrẹ, o lè fi ìpamọ́ yẹn náà sí abẹ́ ìṣàkóso tìrẹ.
 
-## Ìṣètò tí ó mú kí lílò ó fún ìwà ọ̀daràn má ṣe é ní èrè
-
-A ṣe Breeze ní ọ̀nà tí ẹni tí ó bá lò ó ní ọ̀nà tí kò tọ́ yóò san owó àti ìnira. A kò sọ pé "yóò mú kí ìwà ọ̀daràn má ṣeé ṣe". Ìṣètò ni tí ó mú kí ó "má ṣe é ní èrè".
-
-- **Kò sí ìpìlẹ̀ fún jíjẹ ọ̀fẹ́ lórí ẹlòmíràn.** Nítorí kò sí sáfà àárín ọ̀fẹ́, ẹni tí ó bá fẹ́ lò ó ní ọ̀nà tí kò tọ́ náà kò ní àṣàyàn bí kò ṣe láti pèsè ibì ìpamọ́ pẹ̀lú àkáǹtì orúkọ tirẹ̀ àti owó tirẹ̀.
-- **Fífi ránṣẹ́ ní ẹrù.** Ní gbogbo ìgbà tí a bá ránṣẹ́, a ń béèrè ìṣirò kékeré (ẹ̀rí iṣẹ́), ààlà sì wà fún iye. Fífi ọ̀pọ̀ ìránṣẹ́ ìdàrúdàpọ̀ ránṣẹ́ kò ní èrè.
-- **A lè ṣe ìròyìn tí a kò lè sẹ́.** Ẹni tí ó gbà lè ṣe ìròyìn ní lílo ìránṣẹ́ tí ó gbà fúnra rẹ̀ gẹ́gẹ́ bí ẹ̀rí. Ẹni tí ó ránṣẹ́ kò lè sọ pé "n kò ránṣẹ́".
-- **Àṣẹ ìdádúró wà lọ́wọ́ ẹni tí ó fi sílẹ̀.** Ohun tí ó ṣẹlẹ̀ lórí sáfà tìrẹ, ìwọ fúnra rẹ lè dá a dúró. A kò nílò ìyọ̀ǹda ẹnikẹ́ni.
-
 ## Ohun tí ó lè ṣe
 
 - Ìjíròrò ẹnìkan-sí-ẹnìkan, àti ìjíròrò ẹgbẹ́ (títí di ènìyàn 1,000)
-- Ìpè ohùn àti ìpè fídíò
+- Ìpè ohùn àti ìpè fídíò (ìpè ẹgbẹ́ títí di ènìyàn 8)
 - Fífi fáìlì ránṣẹ́ (títí di 50MB nínú ìjíròrò ẹnìkan-sí-ẹnìkan. A lè ránṣẹ́ nínú ẹgbẹ́ náà, ṣùgbọ́n ààlà ìtóbi kéré)
 - Lílo àwọn ẹ̀rọ púpọ̀ àti àwọn àkáǹtì púpọ̀ (bí ti iṣẹ́ àti ti ara ẹni. Iye àwọn ẹ̀rọ àti àkáǹtì ọ̀fẹ́ ni láìsí ààlà)
-- A ń yan án fúnra rẹ̀ láti inú àwọn èdè 8 (Gẹ̀ẹ́sì, Japanese, Korean, Chinese (Taiwan), Spanish, Thai, Indonesian, Portuguese)
+- Àwọn èdè 51 (Gẹ̀ẹ́sì pẹ̀lú àwọn fáìlì èdè 50), a ń yan án fúnra wọn gẹ́gẹ́ bí èdè ẹ̀rọ rẹ
 - Àwòrán ìdánimọ̀ pẹ̀lú fọ́tò, àwọn sítíkà, pípín ipò
-- Àwọn iṣẹ́ àṣẹ bíi `/help` (jù oríṣi 60 lọ)
+- Àwọn iṣẹ́ àṣẹ bíi `/help` (oríṣi 71)
+- Àwọn ọ̀nà agbára tí ó bá bátìrì rẹ mu (fúnra rẹ̀ / déédéé / ìfipamọ́ agbára / pajáwìrì). Bí bátìrì ṣe ń dín kù, a ń fa àwọn àyẹ̀wò ìfìránṣẹ́ síra kí bátìrì ó lè pẹ́. Ààbò fún àjálù àti àwọn àkókò mìíràn tí o kò lè gba agbára
+- Àwọn ìbòjú tí ó rọrùn láti kà (àkíyèsí sí ìyàtọ̀ àwọ̀, ìtóbi ọ̀rọ̀, àti lílo kọ́bọ̀ọ̀dù nìkan)
 
 ## Ìyàtọ̀ sí àwọn ohun ìránṣẹ́ mìíràn
 

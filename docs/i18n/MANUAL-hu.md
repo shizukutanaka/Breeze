@@ -24,16 +24,19 @@ A [letöltési oldalról](https://github.com/shizukutanaka/Breeze/releases/lates
 
 Minden fájlhoz tartozik egy ellenőrző szám (SHA256SUMS.txt). Aki aggódik, ellenőrizheti, hogy a letöltött fájl száma egyezik-e.
 
-> **A próbaverzió oldaláról**: A korábban közzétett próbaverzió oldala (breeze.pages.dev) jelenleg le van állítva (megnyitáskor 404 jelenik meg). A helyreállításig használja az alkalmazásváltozatot. A saját szerverére telepített példányt ez a leállás nem érinti.
+> **A mintáról**: A működés kipróbálására szolgáló minta (https://breeze-469.pages.dev/) rendelkezésre áll. Az ott lévő ugyanaz a szoftver, de a minta előzetes értesítés nélkül megváltozhat vagy leállhat. Valódi használatra a saját szerverére telepített példányt használja. A saját szerverén lévő példányt a minta leállása nem érinti.
 
 ### Első beállítás
 
 1. Nyissa meg az alkalmazást.
-2. Adja meg a nevét. Ezzel kész is a beállítás. Sem regisztráció, sem telefonszám nem kell.
+2. Adja meg a nevét, és nyomja meg a „Fiók létrehozása” gombot. Ezzel kész is a beállítás. Sem regisztráció, sem telefonszám nem kell.
+
+- Ha egy korábban létrehozott személyazonosságot szeretne visszahozni, nyissa meg a „Meglévő fiók visszaállítása” lehetőséget, és megjelennek a helyreállítási módok (biztonsági mentés fájlja, helyreállító jelmondat stb.).
+- Amikor a létrehozás befejeződik, megjelenik egy kártya, amely útmutatást ad a kulcs jelmondattal való védelméhez (nem tűnik el egy idő után). Fontos személyazonosság esetén kövesse az útmutatást, és adja hozzá a védelmet.
 
 Ekkor az eszközön belül létrejön egy „kulcs”. Ez maga az Ön személyazonossága.
 **A fiókok listája nincs meg a szerveren.** A személyazonosság csak az Ön eszközén belül létezik.
-Ez a pont lesz fontos a biztonsági mentésről szóló fejezetben (8).
+Ez a pont lesz fontos a biztonsági mentésről szóló fejezetben (9).
 
 ### Az „eldobható személyazonosságról”
 
@@ -45,11 +48,13 @@ Ez a képernyőn is megjelenik. Hosszú távon használt személyazonossághoz n
 
 ## 2. Kapcsolódás a másik félhez
 
-Háromféleképpen kapcsolódhat ahhoz, akivel beszélni szeretne.
+Nyomja meg a névjegyek képernyőjén az „Ismerős hozzáadása” gombot, és három választási lehetőség jelenik meg.
 
-- **Az azonosító átadása**: Közölje a saját azonosítóját a másik féllel, és kérje meg, hogy írja be.
-- **QR-kód**: Jelenítse meg a meghívó QR-kódot, és olvastassa be a másik féllel.
-- **Meghívó hivatkozás**: Az „Ismerős meghívása” menüből másolja ki a meghívó üzenetet, és küldje el a szokásos elérhetőségén (például e-mailben). Ha a másik fél megnyitja a hivatkozást és megadja a nevét, máris beszélgethetnek.
+- **Névjegy hozzáadása**: Adja meg a másik fél azonosítóját, vagy olvasson be egy QR-kódot.
+- **Ismerős meghívása**: Másolja ki a meghívó hivatkozást, és küldje el a szokásos elérhetőségén (például e-mailben). Ha a másik fél megnyitja a hivatkozást és megadja a nevét, máris beszélgethetnek.
+- **Csoport létrehozása**: Csak egy csoportnevet kell megadni a létrehozáshoz (4. fejezet).
+
+A saját azonosítója teljes formájában jelenik meg, amikor megnyitja a saját profilját, és úgy, ahogy van, kimásolható. A teljes azonosítót adhatja át, nem csak a rövid azonosítót.
 
 Ha a másik fél is megnyitotta az alkalmazást, közvetlenül kapcsolódhatnak és beszélgethetnek.
 
@@ -58,14 +63,23 @@ Ha a másik fél is megnyitotta az alkalmazást, közvetlenül kapcsolódhatnak 
 ## 3. Beszélgetés
 
 - Csak írja be az üzenetet és küldje el. Fotó, matrica és hely is küldhető.
+- Nyissa meg a beviteli mező melletti „+” jelet, és együtt jelennek meg a fájlmellékletek, a hangüzenetek, a hangbevitel, a helyadatok, a matricák, a „válasz nem szükséges” beállítás és még mások.
 - **Fájlküldés**: egyéni beszélgetésben legfeljebb 50 MB-ig. Csoportban kisebb, körülbelül 50 KB-ig.
 - A veszélyes formátumú fájlok, például a futtatható fájlok, automatikusan letiltásra kerülnek.
 - Ha a másik fél nem nyitotta meg az alkalmazást, az üzenet titkosítva a „letéti dobozban” marad, és akkor kézbesül, amikor megnyitja. A letéti dobozt továbbító szerver nem tudja elolvasni a tartalmat. A kézbesítetlen levelek **legfeljebb 7 nap** után automatikusan törlődnek.
 - A beszélgetések előzményei fájlba írhatók és beolvashatók.
 
+### A képernyő olvasása
+
+- **Küldési állapot**: Az üzenet melletti jelről ismerhető fel. A ✓ azt jelenti, elküldve, a körben lévő ✓ azt, hogy a letéti dobozba került, a ✓✓ azt, hogy megérkezett a másik félhez, az olvasott kék jel, a sikertelen pedig piros jel. Alakjuk is megkülönbözteti őket, nem csak a színük.
+- **A névjegyzék**: A legutóbbi beszélgetés ideje ma esetén óra-perc formában, tegnap esetén „Tegnap”, idén esetén hónap/nap, korábbinál év/hónap/nap formában jelenik meg. Azoknál a névjegyeknél, amelyektől olvasatlan üzenet van, a név és az idő ki van emelve.
+- **A saját kártyája**: A lista tetején a saját profilkártyája található; nyomja meg a profil megnyitásához. A listával együtt görgetődik.
+- **Alsó lapok telefonon**: Telefonszélességben a képernyő alján a „Névjegyek” és a „Beállítások” lap jelenik meg.
+- **A beszélgetés fejléc**: A keresés ikonból a beszélgetésen belül kereshet. A „⋮” menüből ellenőrizheti a biztonsági számot, némíthatja az értesítéseket, kitűzhet, szavazást hozhat létre és még sok mást.
+
 ### Parancsok
 
-Ha a beviteli mezőbe beírja, hogy `/help`, megjelenik a használható parancsok listája (több mint 60 féle).
+Ha a beviteli mezőbe `/` jelet ír, megjelennek a parancsjelöltek. Írja be, hogy `/help`, a használható parancsok listájához (71 féle).
 Egyes műveletek, például a beállítások és az eszközök összekapcsolása, parancsokból végezhetők.
 
 ---
@@ -73,7 +87,7 @@ Egyes műveletek, például a beállítások és az eszközök összekapcsolása
 ## 4. Csoportok
 
 - Egy csoportba legfeljebb **1 000 fő** léphet be.
-- A létrehozáshoz csak egy csoportnevet kell megadni. A meghívás a „csoportmeghívó hivatkozásból” történik. Aki megkapta a hivatkozást, a neve megadásával csatlakozhat.
+- A létrehozáshoz csak egy csoportnevet kell megadni az „Ismerős hozzáadása” menü „Csoport létrehozása” pontjában (a `/newgroup` paranccsal is létrehozható). A meghívás a „csoportmeghívó hivatkozásból” történik. Aki megkapta a hivatkozást, a neve megadásával csatlakozhat.
 - Csoportban is küldhető fájl, de a korlát kisebb, körülbelül 50 KB. Hangüzenet csoportban még nem küldhető.
 - Ha egy tag az alkalmazás régi változatát használja, abban a csoportban nem használható a biztonságosabb új módszer (csoport v5), és figyelmeztetés jelenik meg a képernyőn. Akkor kapcsol be, amikor mindenki a legújabb változatra frissít.
 
@@ -81,7 +95,7 @@ Egyes műveletek, például a beállítások és az eszközök összekapcsolása
 
 ## 5. Hívások
 
-- Egyéni hanghívás és videohívás lehetséges. Csoportos hívás is van.
+- Egyéni hanghívás és videohívás lehetséges. Csoportos hívás is van (legfeljebb 8 főig).
 - **Hívásellenőrző kód**: A hívás képernyőjén ellenőrző kód jelenik meg. Olvassák fel egymásnak a másik féllel, és ellenőrizzék, hogy mindkét képernyőn egyezik-e. Ha nem egyezik, lehet, hogy valaki útközben lehallgat. Ilyenkor bontsa a hívást.
 - A csoportos hívás esetenként nem indítható el, ha nem mindenki alkalmazása a legújabb változat.
 
@@ -91,11 +105,15 @@ Egyes műveletek, például a beállítások és az eszközök összekapcsolása
 
 - Ahhoz, hogy ugyanazt a személyazonosságot több eszközön használja, a `/link` paranccsal kapcsolja össze az eszközöket.
 - Több fiók is létrehozható és külön használható (például munkahelyi és magán). Mind az eszközök, mind a fiókok száma ingyenes és korlátlan.
-- A nyelv automatikusan kerül kiválasztásra 8 nyelv közül: angol, japán, koreai, kínai (tajvani), spanyol, thai, indonéz, portugál (brazíliai).
+- **Fiók létrehozása**: Nyomja meg a „+” gombot a fióklapok mellett a névjegyzék legtetején. Adjon meg egy nevet, és válasszon egy ikon-emojit; ekkor új fiók jön létre, és a rendszer automatikusan átvált rá.
+- **Fiókváltás**: A fióklapok mindig a névjegyzék legtetején láthatók. Nyomja meg az egyiket a váltáshoz (számítógépen a Ctrl+1–9 billentyűkkel is válthat). Nyomja meg hosszan egy lapot az átnevezéséhez, az ikonja megváltoztatásához vagy a törléséhez.
+- A nyelv automatikusan kerül kiválasztásra 51 nyelv közül, az angolt is beleértve, az eszköz nyelvéhez igazodva.
 
 ---
 
 ## 7. A biztonságot megőrző beállítások
+
+A beállítások saját képernyőként nyílnak meg. Telefonon a képernyő alján lévő „Beállítások” lapról nyissa meg; számítógépen a képernyőn lévő fogaskerék gombról (a `/settings` paranccsal is megnyitható). A vissza művelettel térhet vissza arra a képernyőre, amelyen volt.
 
 - **Automatikus zárolás**: Van olyan beállítás, amely lapváltáskor automatikusan zárol.
 - **Kulcs jelmondata**: Az eszközön belüli kulcs jelmondatba csomagolva védhető. Az alkalmazás megnyitásakor be kell írni.
@@ -103,14 +121,31 @@ Egyes műveletek, például a beállítások és az eszközök összekapcsolása
 
 ---
 
-## 8. Biztonsági mentés és helyreállítás (ez a legfontosabb fejezet)
+## 8. Akkumulátor és vészhelyzetek (energiamódok)
+
+Az „Energiamód” beállításban kiválaszthatja, hogyan használja a rendszer az akkumulátort.
+
+- **Automatikus (akkumulátorszint)**: Automatikusan vált attól függően, mennyi töltés maradt.
+- **Normál**: A megszokott módon.
+- **Energiatakarékos**: A kézbesítési ellenőrzéseket legfeljebb 60 másodpercenkéntire ritkítja, és leállítja a jelenléti jelet.
+- **Vészhelyzeti (katasztrófákra)**: A kézbesítési ellenőrzéseket legfeljebb 10 percenkéntire ritkítja. Katasztrófa esetén vagy máskor használja, amikor nem tud tölteni.
+
+Az akkumulátort nem a kommunikáció mennyisége meríti, hanem az, hogy a rádió hányszor ébred fel. Ezért a küldési oldalt nem ritkítjuk; csak a hallgatási oldalt. A küldés továbbra is azonnal kimegy, mint mindig. Amikor tölteni kezd, automatikusan egy lépést visszalép a könnyebb oldal felé.
+
+Azokon az eszközökön, amelyek nem tudják automatikusan leolvasni az akkumulátor szintjét (például iPhone böngészőben), az „Automatikus” Normálként viselkedik, és a kézi választás a választott módon működik.
+
+---
+
+## 9. Biztonsági mentés és helyreállítás (ez a legfontosabb fejezet)
 
 A Breeze személyazonossága csak az Ön eszközén belüli kulcs. A szerveren nincs fióklista, és a készítőnél sincs meg az Ön kulcsa.
 **Ha elveszíti az eszközt, a személyazonosság is elveszik.** Fontos személyazonossághoz mindenképpen készítsen biztonsági mentést.
 
+A biztonsági mentés és a helyreállítás a beállítások „Biztonsági mentés és helyreállítás” szakaszából végezhető (három gomb van: „Biztonsági mentés a felhőbe”, „Helyreállítás” és „Helyreállítás fájlból”). Amikor először ad hozzá névjegyet, csak egyszer jelenik meg egy kártya, amely biztonsági mentés készítésére buzdít.
+
 ### A biztonsági mentés elkészítése
 
-1. Válassza a „Biztonsági mentés létrehozása” lehetőséget.
+1. A beállítások „Biztonsági mentés és helyreállítás” szakaszából válassza a biztonsági mentés létrehozását.
 2. Állítson be egy jelmondatot a biztonsági mentéshez (legalább 6 karakter).
 3. Válassza ki a mentés helyét.
    - **Mentés fájlba**: A biztonsági mentés fájlját saját magánál tárolja (ajánlott).
@@ -130,7 +165,7 @@ A biztonsági mentés tartalma titkosított. A mentési hely szervere csak a tit
 
 ---
 
-## 9. A letéti doboz és a költségek szemlélete
+## 10. A letéti doboz és a költségek szemlélete
 
 - Amikor a másik fél offline van, a levelek a közvetítő szerver „letéti dobozában” maradnak titkosítva (legfeljebb 7 napig).
 - A közvetítésnek a visszaélések megelőzésére korlátai vannak (a letétbe helyezhető mennyiség és gyakoriság). A korlát elérésekor az adott időszakban nem helyezhető letétbe új levél, de a **már megérkezett levelek nem tűnnek el**. A képernyőn megjelenik az ok és a várakozási idő.
@@ -147,7 +182,7 @@ A szerver oldalon megmaradó nyilvántartás köre (mindegyik automatikusan tör
 
 ---
 
-## 10. A frissítés módja (asztali változat)
+## 11. A frissítés módja (asztali változat)
 
 1. Ha van új változat, értesítés jelenik meg a képernyőn.
 2. A „Letöltés” gomb megnyomásával az új változat letöltődik (automatikusan nem települ).
@@ -157,7 +192,7 @@ Ha a frissítés közben hiba történik (például az ellenőrző szám nem egy
 
 ---
 
-## 11. Ha gond van
+## 12. Ha gond van
 
 | Tünet | Amit ellenőrizni kell |
 |---|---|
@@ -167,13 +202,13 @@ Ha a frissítés közben hiba történik (például az ellenőrző szám nem egy
 | A hívás ellenőrző kódja nem egyezik | Bontsa a hívást, és hívjon újra. Ne folytassa egyezés nélkül. |
 | Elfelejtette a jelmondatot | A visszaállítás nem lehetséges. Hozzon létre új személyazonosságot, és értesítse újra a másik felet. |
 | Elvesztette az eszközt | Ha van biztonsági mentés, új eszközön helyreállítható. Ha nincs, új személyazonosság lesz. |
-| A próbaverzió oldala nem nyílik meg (404) | Jelenleg le van állítva. Használja az alkalmazásváltozatot. |
+| A mintaoldal nem nyílik meg | A minta előzetes értesítés nélkül leállhat. A saját szerverére telepített példányt használja. |
 
 A hibajelentéseket az [Issues oldalra](https://github.com/shizukutanaka/Breeze/issues) kérjük küldeni.
 
 ---
 
-## 12. A Breeze ígéretei
+## 13. A Breeze ígéretei
 
 - Nem jelenítünk meg hirdetéseket. Sem az alkalmazásban, sem sehol máshol.
 - Nem követünk nyomon. Nincs használatelemzés, hirdetési mechanizmus és adatkereskedelem.
@@ -184,4 +219,4 @@ A többi üzenetküldővel való részletes összehasonlítás a tárhely „ös
 
 ---
 
-*Ez a kézikönyv a Breeze v3.8.0 időpontjának tartalma.*
+*Ez a kézikönyv a Breeze 2026-11-25-i állapotát tükrözi.*

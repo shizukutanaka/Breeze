@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Det är allt.** Alla funktioner fungerar utom push-aviseringar. Observera
@@ -215,9 +215,9 @@ stängda-som-standard-paketeringen är Docker-vägen ovan.
 | P2P-meddelanden | ✓ | WebRTC DataChannel |
 | Röst-/videosamtal | ✓ | WebRTC + gratis STUN |
 | TURN-relä | ✓ | Open Relay (20GB/månad gratis) |
-| Grupper (100 medlemmar) | ✓ | Sender Key O(1) |
+| Grupper (1 000 medlemmar) | ✓ | Sender Key O(1) |
 | Filöverföring | ✓ | Upp till 50MB via P2P |
-| 8 språk | ✓ | EN + 7 fulla lokaler, upptäcks automatiskt |
+| 51 språk | ✓ | Engelska inbyggt + 50 fulla lokalfiler, upptäcks automatiskt |
 | Offline/PWA | ✓ | Service Worker |
 | Push-aviseringar | ✗ | Kräver VAPID-nycklar |
 
@@ -233,7 +233,7 @@ obegränsade lokala underkonton gratis utan planstyrning.
 | KV-läsningar | 100 000/dag | ~200/dag |
 | KV-skrivningar | 1 000/dag | ~350/dag (optimerat) |
 | KV-lagring | 1 GB | ~10 KB/användare |
-| Statiska tillgångar | Obegränsat | ~400 KB (enkel HTML) |
+| Statiska tillgångar | Obegränsat | ~894 KB (enkel HTML) |
 
 **Stöder ~3 samtidigt aktiva användare på gratisnivå.**
 

@@ -196,7 +196,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **זהו זה.** כל התכונות עובדות מלבד התראות push. שימו לב
@@ -212,9 +212,9 @@ wrangler pages deploy . --project-name=breeze
 | הודעות P2P | ✓ | WebRTC DataChannel |
 | שיחות קוליות/וידאו | ✓ | WebRTC + STUN חינמי |
 | מתווך TURN | ✓ | Open Relay (20GB/חודש חינם) |
-| קבוצות (100 חברים) | ✓ | Sender Key O(1) |
+| קבוצות (1,000 חברים) | ✓ | Sender Key O(1) |
 | העברת קבצים | ✓ | עד 50MB דרך P2P |
-| 8 שפות | ✓ | EN + 7 locales מלאים, זיהוי אוטומטי |
+| 51 שפות | ✓ | אנגלית מובנית + 50 קובצי locale מלאים, זיהוי אוטומטי |
 | לא מקוון/PWA | ✓ | Service Worker |
 | התראות Push | ✗ | צריך מפתחות VAPID |
 
@@ -230,7 +230,7 @@ wrangler pages deploy . --project-name=breeze
 | קריאות KV | 100,000/יום | ~200/יום |
 | כתיבות KV | 1,000/יום | ~350/יום (ממוטב) |
 | אחסון KV | 1 GB | ~10 KB/משתמש |
-| נכסים סטטיים | ללא הגבלה | ~400 KB (HTML יחיד) |
+| נכסים סטטיים | ללא הגבלה | ~894 KB (HTML יחיד) |
 
 **תומך בכ־3 משתמשים פעילים בו־זמנית במסלול החינמי.**
 

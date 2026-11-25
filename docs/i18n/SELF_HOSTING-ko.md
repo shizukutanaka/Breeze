@@ -192,7 +192,7 @@ wrangler kv:namespace create KV
 # 그다음 바인딩이 효력을 갖도록 다시 배포한다:
 wrangler pages deploy . --project-name=breeze
 
-# 5. https://breeze.pages.dev 를 방문한다
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **이것으로 끝입니다.** 푸시 알림을 제외한 모든 기능이 동작합니다.
@@ -208,9 +208,9 @@ Cloudflare 배포에서의 등록은, 직접 `REGISTRATION_ALLOWLIST`를
 | P2P 메시징 | ✓ | WebRTC DataChannel |
 | 음성/영상 통화 | ✓ | WebRTC + 무료 STUN |
 | TURN 중계 | ✓ | Open Relay(월 20GB 무료) |
-| 그룹(100명) | ✓ | Sender Key O(1) |
+| 그룹(1,000명) | ✓ | Sender Key O(1) |
 | 파일 전송 | ✓ | P2P로 최대 50MB |
-| 8개 언어 | ✓ | EN + 완전한 로케일 7개, 자동 감지 |
+| 51개 언어 | ✓ | 영어 내장 + 완전한 로케일 파일 50개, 자동 감지 |
 | 오프라인/PWA | ✓ | Service Worker |
 | 푸시 알림 | ✗ | VAPID 키가 필요 |
 
@@ -226,7 +226,7 @@ Cloudflare 배포에서의 등록은, 직접 `REGISTRATION_ALLOWLIST`를
 | KV 읽기 | 100,000/일 | ~200/일 |
 | KV 쓰기 | 1,000/일 | ~350/일(최적화됨) |
 | KV 저장 | 1 GB | ~10 KB/사용자 |
-| 정적 자산 | 무제한 | ~400 KB(단일 HTML) |
+| 정적 자산 | 무제한 | ~894 KB(단일 HTML) |
 
 **무료 한도에서 동시 활성 사용자 약 3명을 지원합니다.**
 

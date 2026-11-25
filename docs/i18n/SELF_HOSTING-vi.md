@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Chỉ vậy thôi.** Mọi tính năng đều hoạt động ngoại trừ thông báo đẩy. Lưu ý
@@ -215,9 +215,9 @@ tự đặt `REGISTRATION_ALLOWLIST` (xem `.env.example`); gói
 | Nhắn tin P2P | ✓ | WebRTC DataChannel |
 | Gọi thoại/video | ✓ | WebRTC + STUN miễn phí |
 | Chuyển tiếp TURN | ✓ | Open Relay (20GB/tháng miễn phí) |
-| Nhóm (100 thành viên) | ✓ | Sender Key O(1) |
+| Nhóm (1.000 thành viên) | ✓ | Sender Key O(1) |
 | Truyền tệp | ✓ | Tối đa 50MB qua P2P |
-| 8 ngôn ngữ | ✓ | EN + 7 bản địa hóa đầy đủ, tự động phát hiện |
+| 51 ngôn ngữ | ✓ | Tiếng Anh tích hợp sẵn + 50 tệp bản địa hóa đầy đủ, tự động phát hiện |
 | Ngoại tuyến/PWA | ✓ | Service Worker |
 | Thông báo đẩy | ✗ | Cần khóa VAPID |
 
@@ -233,7 +233,7 @@ tài khoản phụ cục bộ không giới hạn miễn phí mà không có c�
 | Lượt đọc KV | 100.000/ngày | ~200/ngày |
 | Lượt ghi KV | 1.000/ngày | ~350/ngày (đã tối ưu) |
 | Dung lượng KV | 1 GB | ~10 KB/người dùng |
-| Tài sản tĩnh | Không giới hạn | ~400 KB (HTML đơn lẻ) |
+| Tài sản tĩnh | Không giới hạn | ~894 KB (HTML đơn lẻ) |
 
 **Hỗ trợ ~3 người dùng hoạt động đồng thời trên gói miễn phí.**
 

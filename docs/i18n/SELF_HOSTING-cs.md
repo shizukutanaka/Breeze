@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **To je vše.** Všechny funkce fungují kromě push oznámení. Všimněte si,
@@ -215,9 +215,9 @@ uzavřené-ve-výchozím-nastavení balení je cesta Docker výše.
 | Zprávy P2P | ✓ | WebRTC DataChannel |
 | Hlasové/videohovory | ✓ | WebRTC + bezplatný STUN |
 | Relé TURN | ✓ | Open Relay (20GB/měsíc zdarma) |
-| Skupiny (100 členů) | ✓ | Sender Key O(1) |
+| Skupiny (1 000 členů) | ✓ | Sender Key O(1) |
 | Přenos souborů | ✓ | Až 50MB přes P2P |
-| 8 jazyků | ✓ | EN + 7 úplných lokalizací, zjišťováno automaticky |
+| 51 jazyků | ✓ | Angličtina vestavěná + 50 úplných souborů lokalizací, zjišťováno automaticky |
 | Offline/PWA | ✓ | Service Worker |
 | Push oznámení | ✗ | Vyžaduje klíče VAPID |
 
@@ -233,7 +233,7 @@ neomezené místní podúčty zdarma bez vazby na plán.
 | Čtení KV | 100 000/den | ~200/den |
 | Zápisy KV | 1 000/den | ~350/den (optimalizováno) |
 | Úložiště KV | 1 GB | ~10 KB/uživatel |
-| Statické prostředky | Neomezené | ~400 KB (jediný HTML) |
+| Statické prostředky | Neomezené | ~894 KB (jediný HTML) |
 
 **Podporuje ~3 současně aktivní uživatele na bezplatné úrovni.**
 

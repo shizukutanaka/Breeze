@@ -199,7 +199,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **To je to.** Sve funkcije rade osim push obavijesti. Imajte na umu
@@ -215,9 +215,9 @@ zatvoreno zadano Docker je put iznad.
 | P2P razmjena poruka | ✓ | WebRTC DataChannel |
 | Glasovni/video pozivi | ✓ | WebRTC + besplatan STUN |
 | TURN relej | ✓ | Open Relay (20GB mjesečno besplatno) |
-| Grupe (100 članova) | ✓ | Sender Key O(1) |
+| Grupe (1,000 članova) | ✓ | Sender Key O(1) |
 | Prijenos datoteka | ✓ | Do 50MB preko P2P |
-| 8 jezika | ✓ | EN + 7 potpunih jezika, automatski otkriveno |
+| 51 jezik | ✓ | Engleski ugrađen + 50 potpunih datoteka jezika, automatski otkriveno |
 | Izvanmrežno/PWA | ✓ | Service Worker |
 | Push obavijesti | ✗ | Potrebni su VAPID ključevi |
 
@@ -233,7 +233,7 @@ neograničene besplatne lokalne podračune bez ograničenja plana.
 | KV čitanja | 100.000 dnevno | ~200 dnevno |
 | KV pisanja | 1.000 dnevno | ~350 dnevno (optimizirano) |
 | KV pohrana | 1 GB | ~10 KB po korisniku |
-| Statički resursi | Neograničeno | ~400 KB (jedan HTML) |
+| Statički resursi | Neograničeno | ~894 KB (jedan HTML) |
 
 **Podržava ~3 istodobno aktivna korisnika na besplatnom planu.**
 

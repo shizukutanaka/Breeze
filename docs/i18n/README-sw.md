@@ -37,24 +37,17 @@ Maelezo ya kina ya matumizi yako katika [mwongozo](MANUAL-sw.md) (matoleo ya lug
 
 Tunaandika pia upeo kwa ukweli. Kwa ajili ya uwasilishaji, kuna uhifadhi wa muda mfupi kwenye seva (bahasha ambazo hazijawasilishwa: hadi siku 7, ishara za muunganisho: dakika 5, rekodi za anwani na vifaa: siku 90, taarifa za vikundi na usajili wa arifa: siku 30. Zote hutoweka kiotomatiki, na yaliyomo hayawezi kusomwa). Uhifadhi wa akiba kwenye wingu umezimwa mwanzoni. Ukiweka kwenye seva yako mwenyewe, uhifadhi huo pia uko chini ya usimamizi wako.
 
-## Imeundwa ili isifae kutumika kwa uhalifu
-
-Breeze imetengenezwa ili iwe na gharama na usumbufu kwa anayeitumia vibaya. Hatudai "kuufanya uhalifu usiwezekane". Ni muundo wa "kuufanya usifae".
-
-- **Hakuna jukwaa la kupanda bure.** Hakuna seva kuu ya bure, kwa hiyo hata anayeitumia vibaya hana budi kutayarisha mahali kwa akaunti ya jina lake mwenyewe na kwa gharama yake mwenyewe.
-- **Kutuma kuna mzigo.** Kila utumaji huhitaji hesabu ndogo (uthibitisho wa kazi), na kuna kikomo cha kiasi kilichowekwa. Kutuma barua taka kwa wingi hakufai.
-- **Unaweza kuripoti bila kujitetea kuwezekana.** Mpokeaji anaweza kuripoti utumaji wenyewe aliopokea kama ushahidi. Mtumaji hawezi kujitetea kwamba "sikutuma".
-- **Mamlaka ya kusimamisha yako kwa aliyeiweka.** Yanayotokea kwenye seva yako mwenyewe, unaweza kuyasimamisha mwenyewe. Huhitaji ruhusa ya mtu yeyote.
-
 ## Mambo unayoweza kufanya
 
 - Mazungumzo ya mtu mmoja kwa mmoja na mazungumzo ya kikundi (hadi watu 1,000)
-- Simu za sauti na simu za video
+- Simu za sauti na simu za video (simu za kikundi hadi watu 8)
 - Kutuma faili (kwa mtu mmoja kwa mmoja, hadi 50MB. Unaweza pia kutuma katika vikundi, lakini kikomo cha ukubwa ni kidogo zaidi)
 - Kutumia vifaa vingi na akaunti nyingi kwa madhumuni tofauti (kwa kazi na kwa binafsi, kwa mfano. Idadi ya vifaa na akaunti haina kikomo na ni bure)
-- Huchaguliwa kiotomatiki kutoka lugha 8 (Kiingereza, Kijapani, Kikorea, Kichina (Taiwan), Kihispania, Kithai, Kiindonesia, Kireno)
+- Lugha 51 (Kiingereza pamoja na faili 50 za lugha), huchaguliwa kiotomatiki kulingana na lugha ya kifaa chako
 - Wasifu wenye picha, stika, kushiriki eneo
-- Amri kama `/help` (aina zaidi ya 60)
+- Amri kama `/help` (aina 71)
+- Hali za nishati zinazolingana na betri yako (kiotomatiki / kawaida / kuokoa nishati / dharura). Betri inapopungua, ukaguzi wa uwasilishaji huachwa kwa vipindi virefu zaidi ili betri idumu zaidi. Kinga kwa majanga na nyakati nyingine ambapo huwezi kuchaji tena
+- Skrini zinazosomeka kwa urahisi (uangalifu kwa utofauti wa rangi, ukubwa wa maandishi, na kuendesha kwa kibodi pekee)
 
 ## Tofauti na wajumbe wengine
 

@@ -37,24 +37,17 @@ Detaljerede anvisninger findes i [manualen](MANUAL-da.md) (versioner på andre s
 
 Vi skriver også ærligt om grænserne. For at levere beskeder er der en kortvarig opbevaring på serveren (uafleverede kuverter i højst 7 dage, forbindelsessignaler i 5 minutter, optegnelser over adresser og enheder i 90 dage, gruppeoplysninger og notifikationsabonnementer i 30 dage. Alt slettes automatisk, og indholdet kan ikke læses). Cloud-backup er slået fra fra starten. Hvis du placerer Breeze på din egen server, har du også denne opbevaring under din egen kontrol.
 
-## Et design, hvor kriminalitet ikke kan betale sig
-
-Breeze er bygget, så misbrug koster tid og besvær for den, der misbruger. Vi siger ikke, at den "gør kriminalitet umulig". Den er designet til at "gøre det urentabelt".
-
-- **Intet grundlag at snylte på.** Da der ikke findes en central gratis server, må også den, der misbruger, skaffe et sted med en konto i eget navn og for egne penge.
-- **Det koster at sende.** Hver afsendelse kræver en lille beregning (arbejdsbevis), og mængden er begrænset. Masseafsendelser og chikane kan ikke betale sig.
-- **Anmeldelser, der ikke kan bortforklares.** Den, der modtager en besked, kan anmelde selve leveringen som bevis. Afsenderen kan ikke påstå, at den ikke blev sendt.
-- **Den, der placerede serveren, har magten til at stoppe det.** Det, der sker på din egen server, kan du stoppe selv. Du behøver ingens tilladelse.
-
 ## Funktioner
 
 - Samtaler én til én og gruppesamtaler (op til 1.000 personer)
-- Tale- og videoopkald
+- Tale- og videoopkald (gruppeopkald med op til 8 personer)
 - Afsendelse af filer (op til 50MB i én-til-én-samtaler. Det er også muligt i grupper, men størrelsesgrænsen er mindre)
 - Flere enheder og flere konti til forskellige formål (f.eks. arbejde og privat. Både antal enheder og konti er gratis og ubegrænsede)
-- Vælges automatisk blandt 8 sprog (engelsk, japansk, koreansk, kinesisk (Taiwan), spansk, thai, indonesisk, portugisisk)
+- 51 sprog (engelsk plus 50 sprogfiler), vælges automatisk, så det passer til din enheds sprog
 - Profiler med foto, klistermærker, deling af placering
-- Kommandoer som `/help` (mere end 60 typer)
+- Kommandoer som `/help` (71 typer)
+- Strømtilstande tilpasset dit batteri (automatisk / normal / strømbesparende / nødstilstand). Når batteriet bliver lavt, spredes leveringstjek ud, så batteriet holder længere. En sikring til katastrofer og andre tidspunkter, hvor du ikke kan oplade
+- Læsbare skærme (opmærksomhed på farvekontrast, tekststørrelse og betjening med kun tastaturet)
 
 ## Forskelle fra andre beskedtjenester
 

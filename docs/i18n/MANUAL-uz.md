@@ -24,16 +24,19 @@ Bu qo'llanma foydalanishni boshlayotganlar uchun yo'riqnomadir.
 
 Har bir faylga tekshirish raqami (SHA256SUMS.txt) ilova qilingan. Xohlasangiz, yuklab olgan faylingizning raqami mos kelishini tekshirishingiz mumkin.
 
-> **Sinov sahifasi haqida**: Nashr qilgan sinov sahifamiz (breeze.pages.dev) hozirda to'xtatilgan (ochsangiz 404 chiqadi). Tiklangunicha ilova versiyasidan foydalaning. O'z serveringizga joylashtirganingiz bu to'xtashdan ta'sirlanmaydi.
+> **Namuna sahifasi haqida**: Qanday ishlashini tekshirish uchun namuna (https://breeze-469.pages.dev/) taqdim etiladi. U yerda joylashtirilgani xuddi shu dastur, lekin namuna ogohlantirishsiz o'zgarishi yoki to'xtashi mumkin. Haqiqiy foydalanish uchun o'z serveringizga joylashtirgan nusxadan foydalaning. Namuna to'xtasa ham, o'z serveringizga joylashtirganingizga ta'sir qilmaydi.
 
 ### Dastlabki sozlash
 
 1. Ilovani oching.
-2. Ismingizni kiriting. Tayyorgarlik shu bilan tugaydi. Ro'yxatdan o'tish ham, telefon raqami ham kerak emas.
+2. Ismingizni kiriting va «Hisob yaratish» tugmasini bosing. Tayyorgarlik shu bilan tugaydi. Ro'yxatdan o'tish ham, telefon raqami ham kerak emas.
+
+- Avval yaratgan shaxsingizni qaytarmoqchi bo'lsangiz, «Mavjud hisobni tiklash»ni oching va tiklash usullari (zaxira nusxa fayli, tiklash iborasi va h.k.) chiqadi.
+- Yaratish tugaganda kalitingizni parol iborasi bilan himoya qilishga yo'naltiruvchi karta chiqadi (u bir muddatdan keyin yo'qolmaydi). Muhim shaxs uchun ko'rsatmaga amal qiling va himoyani qo'shing.
 
 Shu payt qurilmangiz ichida «kalit» yaratiladi. U sizning shaxsingizning o'zi.
 **Hisoblar ro'yxati serverda yo'q.** Shaxs faqat sizning qurilmangizda bor.
-Bu jihat zaxira nusxa bobida (8) muhim bo'ladi.
+Bu jihat zaxira nusxa bobida (9) muhim bo'ladi.
 
 ### «Bir martalik shaxs» haqida
 
@@ -45,11 +48,13 @@ Bu ekranda ham ko'rsatiladi. Uzoq ishlatadigan shaxs uchun tanlamang.
 
 ## 2. Ikkinchi tomon bilan ulanish
 
-Gaplashmoqchi bo'lgan odam bilan ulanishning 3 usuli bor.
+Kontaktlar ekranidagi «Do'st qo'shish» tugmasini bossangiz, uchta tanlov chiqadi.
 
-- **ID berish**: O'z ID'ingizni ikkinchi tomonga aytib, kiritdiring.
-- **QR kod**: Taklif QR kodini ko'rsatib, ikkinchi tomonga o'qiting.
-- **Taklif havolasi**: «Do'stlarni taklif qilish»dan taklif xabarini nusxalab, odatdagi aloqa vositangiz (elektron pochta va h.k.) bilan yuboring. Ikkinchi tomon havolani ochib ismini kiritsa, shu zahoti suhbatlasha olasiz.
+- **Kontakt qo'shish**: Ikkinchi tomonning ID-sini kiriting yoki QR kodni skanerlang.
+- **Do'stni taklif qilish**: Taklif havolasini nusxalab, odatdagi aloqa vositangiz (elektron pochta va h.k.) bilan yuboring. Ikkinchi tomon havolani ochib ismini kiritsa, shu zahoti suhbatlasha olasiz.
+- **Guruh yaratish**: Guruh yaratish uchun guruh nomini kiritsangiz bo'ldi (4-bob).
+
+O'z ID-ingiz o'z profilingizni ochganingizda to'liq shaklda ko'rsatiladi va uni boricha nusxalashingiz mumkin. Faqat qisqa ID-ni emas, to'liq ID-ni ham berishingiz mumkin.
 
 Ikkinchi tomon ham ilovani ochgan bo'lsa, to'g'ridan-to'g'ri ulanib suhbatlasha olasiz.
 
@@ -58,14 +63,23 @@ Ikkinchi tomon ham ilovani ochgan bo'lsa, to'g'ridan-to'g'ri ulanib suhbatlasha 
 ## 3. Suhbat
 
 - Xabar yozib yuborsangiz bo'ldi. Surat, stiker va joylashuv ham yuborish mumkin.
+- Kiritish maydoni yonidagi «+»ni ochsangiz, fayl biriktirmalari, ovozli xabarlar, ovozli kiritish, joylashuv ma'lumoti, stikerlar, «javob talab qilinmaydi» sozlamasi va boshqalar birgalikda chiqadi.
 - **Fayl yuborish**: Yakkama-yakka suhbatlarda ko'pi bilan 50MB gacha. Guruhlarda taxminan 50KB gacha, kichikroq.
 - Bajariladigan fayllar kabi xavfli formatlar avtomatik bloklanadi.
 - Ikkinchi tomon ilovani ochmagan bo'lsa, xat shifrlangan holda «saqlash qutisiga» qo'yiladi va u ochganda yetkaziladi. Saqlash qutisini tashuvchi server mazmunni o'qiy olmaydi. Yetkazilmagan xatlar **ko'pi bilan 7 kunda** avtomatik o'chiriladi.
 - Suhbat tarixini faylga chiqarish yoki fayldan olish mumkin.
 
+### Ekranni o'qish
+
+- **Yuborish holati**: Xabar yonidagi belgidan ajrata olasiz. ✓ yuborilgan degani, doira ichidagi ✓ saqlash qutisiga qo'yilgan degani, ✓✓ ikkinchi tomonga yetgan degani, o'qilgan ko'k belgi, muvaffaqiyatsizlik esa qizil belgidir. Ular rang bilan birga shakl bilan ham farqlanadi.
+- **Kontaktlar ro'yxati**: Oxirgi suhbatlashgan vaqtingiz bugun uchun vaqt sifatida, kecha uchun «Kecha», joriy yil uchun oy/kun, undan oldingilar uchun yil/oy/kun sifatida ko'rsatiladi. O'qilmagan xabarlari bor kontaktlarning ismi va vaqti ajratib ko'rsatiladi.
+- **O'z kartangiz**: Ro'yxatning yuqorisida o'z profil kartangiz bor; profilingizni ochish uchun uni bosing. U ro'yxat bilan birga aylanadi.
+- **Telefondagi pastki yorliqlar**: Telefon kengligida ekranning pastki qismida «Kontaktlar» va «Sozlamalar» yorliqlari chiqadi.
+- **Suhbat sarlavhasi**: Qidiruv belgisidan suhbat ichida qidirishingiz mumkin. «⋮» menyusidan xavfsizlik raqamini tekshirishingiz, bildirishnomalarni o'chirishingiz, mahkamlashingiz, so'rovnoma yaratishingiz va boshqalarni qilishingiz mumkin.
+
 ### Buyruqlar
 
-Kiritish maydoniga `/help` deb yozsangiz, ishlatish mumkin bo'lgan buyruqlar ro'yxati (60 dan ortiq turi) chiqadi.
+Kiritish maydoniga `/` yozsangiz, buyruq takliflari chiqadi. Ishlatish mumkin bo'lgan buyruqlar ro'yxatini ko'rish uchun `/help` yozing (71 turi).
 Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 
 ---
@@ -73,7 +87,7 @@ Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 ## 4. Guruhlar
 
 - Guruhga ko'pi bilan **1 000 kishi** kira oladi.
-- Yaratish uchun guruh nomini kiritsangiz bo'ldi. Taklif «guruh taklif havolasi» orqali qilinadi. Havolani olgan odam ismini kiritib qo'shila oladi.
+- Yaratish uchun «Do'st qo'shish»dagi «Guruh yaratish» ostiga guruh nomini kiritsangiz bo'ldi (shuningdek `/newgroup` buyrug'i bilan ham yaratishingiz mumkin). Taklif «guruh taklif havolasi» orqali qilinadi. Havolani olgan odam ismini kiritib qo'shila oladi.
 - Guruhlarda ham fayl yuborish mumkin, lekin chegarasi taxminan 50KB, kichikroq. Ovozli xabarlarni guruhlarda hali yuborib bo'lmaydi.
 - Eski versiyadagi ilovadan foydalanayotgan a'zo bo'lsa, shu guruhda xavfsizligi yuqori yangi usul (guruh v5) ishlatilmaydi va ekranda ogohlantirish chiqadi. Hamma eng so'nggi versiyaga o'tganda yoqiladi.
 
@@ -81,7 +95,7 @@ Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 
 ## 5. Qo'ng'iroqlar
 
-- Yakkama-yakka ovozli qo'ng'iroqlar va videoqo'ng'iroqlar qilish mumkin. Guruh qo'ng'iroqlari ham bor.
+- Yakkama-yakka ovozli qo'ng'iroqlar va videoqo'ng'iroqlar qilish mumkin. Guruh qo'ng'iroqlari ham bor (ko'pi bilan 8 kishi).
 - **Qo'ng'iroq tekshirish kodi**: Qo'ng'iroq ekranida tekshirish kodi ko'rsatiladi. Ikkinchi tomon bilan bir-biringizga o'qib, ikkala ekranda ham mos kelishini tekshiring. Mos kelmasa, kimdir yo'lda tinglab o'tirgan bo'lishi mumkin. Bunday holda qo'ng'iroqni uzing.
 - Guruh qo'ng'iroqlari barcha ishtirokchilarning ilovasi eng so'nggi versiyada bo'lmasa boshlanmasligi mumkin.
 
@@ -91,11 +105,15 @@ Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 
 - Bitta shaxsni bir nechta qurilmada ishlatish uchun `/link` buyrug'i bilan qurilmalarni bog'lang.
 - Hisoblarni bir nechta yaratib, alohida ishlatish mumkin (masalan, ish va shaxsiy). Qurilmalar soni ham, hisoblar soni ham bepul va cheksiz.
-- Til 8 tildan avtomatik tanlanadi: ingliz, yapon, koreys, xitoy (Tayvan), ispan, tay, indonez va portugal (Braziliya).
+- **Hisob qanday yaratiladi**: Kontaktlar ro'yxatining eng yuqorisidagi hisob yorliqlarining yonidagi «+» tugmasini bosing. Ism kiritib emoji belgisini tanlasangiz, yangi hisob yaratiladi va avtomatik unga o'tiladi.
+- **Hisoblarni almashtirish**: Hisob yorliqlari har doim kontaktlar ro'yxatining eng yuqorisida ko'rsatiladi. Almashtirish uchun birini bosing (kompyuterda Ctrl+1–9 bilan ham almashtirishingiz mumkin). Yorliqni bosib ushlab tursangiz, uning ismini o'zgartirishingiz, belgisini o'zgartirishingiz yoki o'chirishingiz mumkin.
+- Til ingliz tilini ham qo'shganda 51 tildan qurilmangiz tiliga mos ravishda avtomatik tanlanadi.
 
 ---
 
 ## 7. Xavfsizlikni saqlaydigan sozlamalar
+
+Sozlamalar o'z ekrani sifatida ochiladi. Telefonda ularni ekranning pastki qismidagi «Sozlamalar» yorlig'idan, kompyuterda ekrandagi tishli tugmadan oching (shuningdek `/settings` buyrug'i bilan ham ochishingiz mumkin). Turgan ekraningizga qaytish uchun orqaga amalidan foydalaning.
 
 - **Avtomatik qulflash**: Yorliqni almashtirganda avtomatik qulflaydigan sozlama bor.
 - **Kalit parol iborasi**: Qurilma ichidagi kalitni parol iborasi bilan o'rab himoya qilish mumkin. Ilovani ochganda kiritish so'raladi.
@@ -103,14 +121,31 @@ Sozlamalar va qurilmalarni bog'lash kabi ba'zi amallar buyruqlardan bajariladi.
 
 ---
 
-## 8. Zaxira nusxa va tiklash (eng muhim bob)
+## 8. Batareya va favqulodda holatlar (quvvat rejimlari)
+
+«Quvvat rejimi» sozlamasida batareya qanday ishlatilishini tanlashingiz mumkin.
+
+- **Avtomatik (batareya darajasi)**: Qancha batareya qolganiga qarab avtomatik almashadi.
+- **Normal**: Odatdagidek.
+- **Quvvat tejash**: Yetkazishni tekshirishni ko'pi bilan 60 soniyada bir martagacha siyraklashtiradi va mavjudlik signalini to'xtatadi.
+- **Favqulodda (falokatlar uchun)**: Yetkazishni tekshirishni ko'pi bilan 10 daqiqada bir martagacha siyraklashtiradi. Falokatda yoki quvvatlay olmaydigan boshqa paytda foydalaning.
+
+Batareyani sarflaydigan narsa aloqa miqdori emas, radioning uyg'onish sonidir. Shuning uchun yuboruvchi tomon siyraklashtirilmaydi; faqat tinglovchi tomon siyraklashtiriladi. Yuborish odatdagidek darhol chiqadi. Quvvatlashni boshlasangiz, u avtomatik bir qadam yengil tomonga qaytadi.
+
+Batareya darajasini avtomatik o'qiy olmaydigan qurilmalarda (iPhone brauzeri kabi) «Avtomatik» Normal sifatida ishlaydi, qo'lda tanlov esa tanlangandek ishlaydi.
+
+---
+
+## 9. Zaxira nusxa va tiklash (eng muhim bob)
 
 Breeze shaxsi — faqat qurilmangizdagi kalit. Serverda hisoblar ro'yxati yo'q va yaratuvchida ham sizning kalitingiz yo'q.
 **Qurilmani yo'qotsangiz, shaxsni ham yo'qotasiz.** Muhim shaxslaringiz uchun albatta zaxira nusxa yarating.
 
+Zaxira nusxa va tiklash sozlamalarning «Zaxira nusxa va tiklash» bo'limidan qilinadi (uchta tugma bor: «Bulutga zaxira nusxa», «Tiklash» va «Fayldan tiklash»). Kontaktni birinchi marta qo'shganingizda zaxira nusxa yaratishga undovchi karta faqat bir marta chiqadi.
+
 ### Zaxira nusxa yaratish
 
-1. «Zaxira nusxa yaratish»ni tanlang.
+1. Sozlamalardagi «Zaxira nusxa va tiklash» bo'limidan zaxira nusxa yaratishni tanlang.
 2. Zaxira nusxa uchun parol iborasi belgilang (6 belgi yoki undan ko'p).
 3. Saqlash joyini tanlang.
    - **Faylga saqlash**: Zaxira nusxa faylini o'zingizda saqlang (tavsiya etiladi).
@@ -130,7 +165,7 @@ Yangi qurilmada zaxira nusxa fayli (yoki uzatuvchi serverdagi zaxira nusxa) va b
 
 ---
 
-## 9. Saqlash qutisi va xarajat yondashuvi
+## 10. Saqlash qutisi va xarajat yondashuvi
 
 - Ikkinchi tomon oflayn bo'lgandagi xatlar uzatuvchi serverning «saqlash qutisida» shifrlangan holda qo'yiladi (ko'pi bilan 7 kun).
 - Uzatuvchida suiiste'molning oldini olish uchun cheklovlar bor (saqlash mumkin bo'lgan hajm va tezlik). Cheklovga yetganda, shu davrda yangi xatlarni saqlab bo'lmaydi, lekin **allaqachon yetkazilgan xatlar hech qachon o'chirilmaydi**. Ekranda sabab va kutish vaqti ko'rsatiladi.
@@ -147,7 +182,7 @@ Server tomonida qoladigan yozuvlar qamrovi (hammasi avtomatik o'chiriladi va maz
 
 ---
 
-## 10. Yangilash usuli (ish stoli versiyasi)
+## 11. Yangilash usuli (ish stoli versiyasi)
 
 1. Yangi versiya bo'lsa, ekranda bildirishnoma chiqadi.
 2. «Yuklab olish»ni bossangiz, yangi versiya olib kelinadi (avtomatik o'rnatilmaydi).
@@ -157,7 +192,7 @@ Yangilash paytida xato yuz bersa (fayl tekshiruvi mos kelmasa va h.k.), **yangil
 
 ---
 
-## 11. Muammo yuzaga kelganda
+## 12. Muammo yuzaga kelganda
 
 | Alomat | Tekshiriladigan narsa |
 |---|---|
@@ -167,13 +202,13 @@ Yangilash paytida xato yuz bersa (fayl tekshiruvi mos kelmasa va h.k.), **yangil
 | Qo'ng'iroq tekshirish kodi mos kelmaydi | Qo'ng'iroqni uzib, qayta qo'ng'iroq qiling. Mos kelmagan holda davom ettirmang. |
 | Parol iborasini unutdingiz | Tiklash mumkin emas. Yangi shaxs yaratib, ikkinchi tomonga qayta xabar bering. |
 | Qurilmani yo'qotdingiz | Zaxira nusxangiz bo'lsa, yangi qurilmada tiklashingiz mumkin. Bo'lmasa, yangi shaxs bo'ladi. |
-| Sinov sahifasi ochilmaydi (404) | Hozirda to'xtatilgan. Ilova versiyasidan foydalaning. |
+| Namuna sahifasi ochilmaydi | Namuna ogohlantirishsiz to'xtashi mumkin. Iltimos, o'z serveringizga joylashtirgan nusxadan foydalaning. |
 
 Xatoliklar haqida xabarlarni [Issue sahifasiga](https://github.com/shizukutanaka/Breeze/issues) yuboring.
 
 ---
 
-## 12. Breeze va'dalari
+## 13. Breeze va'dalari
 
 - Reklama ko'rsatmaymiz. Ilova ichida ham, boshqa yerda ham.
 - Kuzatmaymiz. Foydalanish tahlili, reklama mexanizmlari, ma'lumot sotish umuman yo'q.
@@ -184,4 +219,4 @@ Boshqa messenjerlar bilan batafsil taqqoslash repozitoriydagi «taqqoslash sahif
 
 ---
 
-*Bu qo'llanma Breeze v3.8.0 paytidagi mazmundir.*
+*Bu qo'llanma Breeze-ning 2026-11-25 holatidagi holatini aks ettiradi.*

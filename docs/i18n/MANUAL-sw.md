@@ -24,16 +24,19 @@ Kutoka [ukurasa wa kupakua](https://github.com/shizukutanaka/Breeze/releases/lat
 
 Kila faili inaambatana na namba za kulinganisha (SHA256SUMS.txt). Ikiwa una wasiwasi, unaweza kuthibitisha kama namba za faili uliyopakua zinalingana.
 
-> **Kuhusu ukurasa wa majaribio**: Ukurasa wa majaribio uliokuwa umechapishwa (breeze.pages.dev) umesimamishwa kwa sasa (ukifungua utapata 404). Tafadhali tumia toleo la programu hadi utakaporejeshwa. Ulichoweka kwenye seva yako mwenyewe hakiathiriwi na usimamishaji huu.
+> **Kuhusu ukurasa wa mfano**: Mfano wa kuangalia jinsi inavyofanya kazi (https://breeze-469.pages.dev/) umetolewa. Kilichowekwa hapo ni programu ile ile, lakini mfano unaweza kubadilika au kusimama bila taarifa. Kwa matumizi halisi, tafadhali tumia uliyoiweka kwenye seva yako mwenyewe. Ulichoweka kwenye seva yako mwenyewe hakiathiriwi hata mfano ukisimama.
 
 ### Mipangilio ya kwanza
 
 1. Fungua programu.
-2. Weka jina lako. Hiyo tu, umekuwa tayari. Hakuna usajili, hakuna namba ya simu.
+2. Weka jina lako na ubonyeze "Tengeneza akaunti". Hiyo tu, umekuwa tayari. Hakuna usajili, hakuna namba ya simu.
+
+- Ikiwa unataka kurudisha utambulisho ulioutengeneza awali, fungua "Rejesha akaunti iliyopo" na njia za kurejesha (faili ya akiba, kifungu cha kurejesha, n.k.) zitatokea.
+- Uundaji ukimalizika, kadi itatokea inayokuongoza kulinda ufunguo wako kwa kifungu cha siri (haitoweki baada ya muda). Kwa utambulisho muhimu, fuata mwongozo na uongeze ulinzi.
 
 Wakati huu, "ufunguo" unatengenezwa ndani ya kifaa. Huo ndio utambulisho wako wenyewe.
 **Hakuna orodha ya akaunti kwenye seva.** Utambulisho wako uko ndani ya kifaa chako tu.
-Jambo hili ni muhimu katika sura ya akiba (8).
+Jambo hili ni muhimu katika sura ya akiba (9).
 
 ### Kuhusu "utambulisho wa kutupa"
 
@@ -45,11 +48,13 @@ Hii pia inaonyeshwa kwenye skrini. Usiuchague kwa utambulisho utakaoutumia kwa m
 
 ## 2. Kuunganishwa na mwenzako
 
-Kuna njia 3 za kuunganishwa na mtu unayetaka kuzungumza naye.
+Ukibonyeza kitufe cha "Ongeza rafiki" kwenye skrini ya waasiliani, chaguo tatu zitatokea.
 
-- **Kutoa ID**: Mwambie mwenzako ID yako na umfanye aiweke.
-- **Msimbo wa QR**: Onyesha msimbo wa QR wa mwaliko na umfanye mwenzako ausome.
-- **Kiungo cha mwaliko**: Nakili ujumbe wa mwaliko kutoka "Mwalike rafiki" na uutume kwa njia yako ya kawaida ya mawasiliano (barua pepe, n.k.). Mwenzako akifungua kiungo na kuweka jina lake, mnaweza kuzungumza moja kwa moja.
+- **Ongeza mwasiliani**: Weka ID ya mwenzako, au changanua msimbo wa QR.
+- **Mwalike rafiki**: Nakili kiungo cha mwaliko na ukitume kwa njia yako ya kawaida ya mawasiliano (barua pepe, n.k.). Mwenzako akifungua kiungo na kuweka jina lake, mnaweza kuzungumza mara moja.
+- **Tengeneza kikundi**: Weka tu jina la kikundi ili kukitengeneza (sura ya 4).
+
+ID yako mwenyewe inaonyeshwa kwa ukamilifu wake unapofungua wasifu wako mwenyewe, na unaweza kuinakili kama ilivyo. Unaweza kumpa mwenzako ID kamili, si ID fupi tu.
 
 Ikiwa mwenzako naye amefungua programu, mnaweza kuunganishwa moja kwa moja na kuzungumza.
 
@@ -58,14 +63,23 @@ Ikiwa mwenzako naye amefungua programu, mnaweza kuunganishwa moja kwa moja na ku
 ## 3. Mazungumzo
 
 - Andika tu ujumbe na uutume. Unaweza pia kutuma picha, stika, na eneo.
+- Fungua "+" iliyo karibu na sehemu ya kuingiza, na viambatisho vya faili, ujumbe wa sauti, uingizaji wa sauti, taarifa za eneo, stika, mpangilio wa "hakuna jibu linalohitajika", na zaidi vitatokea pamoja.
 - **Kutuma faili**: Katika mazungumzo ya mtu mmoja kwa mmoja, hadi 50MB. Katika vikundi, ni kidogo zaidi, wapatao 50KB.
 - Faili za miundo hatari kama faili zinazoweza kuendeshwa huzuiwa kiotomatiki.
 - Ikiwa mwenzako hajafungua programu, hubaki imefungwa kwa usiri katika "sanduku la kuhifadhia", na humfikia atakapoifungua. Seva inayobeba sanduku haiwezi kusoma yaliyomo. Barua ambazo hazijafika hutoweka kiotomatiki baada ya **siku 7 zaidi**.
 - Historia ya mazungumzo inaweza kuandikwa kwenye faili au kuingizwa kutoka faili.
 
+### Kusoma skrini
+
+- **Hali ya utumaji**: Unaweza kutambua kutoka alama iliyo karibu na ujumbe. ✓ inamaanisha imetumwa, ✓ ndani ya duara inamaanisha imewekwa kwenye sanduku la kuhifadhia, ✓✓ inamaanisha imemfikia mwenzako, kusomwa ni alama ya buluu, na kushindwa ni alama nyekundu. Zinabainishwa kwa umbo pia, si kwa rangi tu.
+- **Orodha ya waasiliani**: Muda wa mwisho kuzungumza unaonyeshwa kama saa kwa leo, "Jana" kwa jana, mwezi/siku kwa mwaka huu, na mwaka/mwezi/siku kwa chochote kilichotangulia. Waasiliani wenye ujumbe ambao hujasoma wana majina na nyakati zilizosisitizwa.
+- **Kadi yako mwenyewe**: Juu ya orodha kuna kadi ya wasifu wako mwenyewe; ibonyeze kufungua wasifu wako. Inasogeza pamoja na orodha.
+- **Vichupo vya chini kwenye simu**: Kwa upana wa simu, vichupo vya "Waasiliani" na "Mipangilio" vinatokea chini ya skrini.
+- **Kichwa cha mazungumzo**: Kutoka aikoni ya utafutaji unaweza kutafuta ndani ya mazungumzo. Kutoka menyu ya "⋮" unaweza kuangalia namba ya usalama, kunyamazisha arifa, kubandika, kutengeneza kura, na zaidi.
+
 ### Amri
 
-Ukiweka `/help` katika sehemu ya kuingiza, orodha ya amri zinazoweza kutumika itatokea (aina zaidi ya 60).
+Ukiweka `/` katika sehemu ya kuingiza, mapendekezo ya amri yatatokea. Weka `/help` kuona orodha ya amri unazoweza kutumia (aina 71).
 Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 
 ---
@@ -73,7 +87,7 @@ Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 ## 4. Vikundi
 
 - Kikundi kinaweza kuwa na hadi watu **1,000**.
-- Jinsi ya kuunda ni kuweka tu jina la kikundi. Mwaliko hufanywa kupitia "kiungo cha mwaliko wa kikundi". Mtu anayepokea kiungo anaweza kujiunga kwa kuweka jina lake.
+- Ili kuunda, weka tu jina la kikundi chini ya "Tengeneza kikundi" katika "Ongeza rafiki" (unaweza pia kuunda kwa amri ya `/newgroup`). Mwaliko hufanywa kupitia "kiungo cha mwaliko wa kikundi". Mtu anayepokea kiungo anaweza kujiunga kwa kuweka jina lake.
 - Unaweza pia kutuma faili katika vikundi, lakini kikomo ni wapatao 50KB, kidogo zaidi. Ujumbe wa sauti bado hauwezi kutumwa katika vikundi.
 - Ikiwa kuna mwanachama anayetumia toleo la zamani la programu, njia mpya salama zaidi (kikundi v5) haiwezi kutumika katika kikundi hicho, na onyo litatokea kwenye skrini. Itakuwa na ufanisi wakati kila mtu atakuwa kwenye toleo jipya zaidi.
 
@@ -81,7 +95,7 @@ Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 
 ## 5. Simu
 
-- Unaweza kufanya simu za sauti na simu za video za mtu mmoja kwa mmoja. Pia kuna simu za kikundi.
+- Unaweza kufanya simu za sauti na simu za video za mtu mmoja kwa mmoja. Pia kuna simu za kikundi (hadi watu 8).
 - **Msimbo wa uthibitisho wa simu**: Msimbo wa uthibitisho unaonyeshwa kwenye skrini ya simu. Usome pamoja na mwenzako na uthibitishe kama unalingana kwenye skrini zote mbili. Ikiwa haulingani, kuna uwezekano kwamba mtu anasikiliza katikati. Katika hali hiyo, kata simu.
 - Simu za kikundi zinaweza zisianzishwe ikiwa programu za kila mtu si toleo jipya zaidi.
 
@@ -91,11 +105,15 @@ Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 
 - Ili kutumia utambulisho ule ule kwenye vifaa vingi, viunganishe vifaa kwa amri ya `/link`.
 - Unaweza kuunda akaunti nyingi na kuzitumia kwa madhumuni tofauti (kwa kazi na kwa binafsi, kwa mfano). Idadi ya vifaa na akaunti haina kikomo na ni bure.
-- Lugha huchaguliwa kiotomatiki kutoka lugha 8: Kiingereza, Kijapani, Kikorea, Kichina (Taiwan), Kihispania, Kithai, Kiindonesia, na Kireno (Brazil).
+- **Jinsi ya kutengeneza akaunti**: Bonyeza kitufe cha "+" kilicho karibu na vichupo vya akaunti juu kabisa ya orodha ya waasiliani. Weka jina na uchague emoji ya aikoni, na akaunti mpya itatengenezwa na kubadilishwa kiotomatiki kwenda kwake.
+- **Kubadilisha akaunti**: Vichupo vya akaunti vinaonyeshwa kila wakati juu kabisa ya orodha ya waasiliani. Bonyeza kimoja kubadilisha (kwenye kompyuta unaweza pia kubadilisha kwa Ctrl+1–9). Bonyeza na ushikilie kichupo ili kukipa jina jipya, kubadilisha aikoni yake, au kukifuta.
+- Lugha huchaguliwa kiotomatiki kutoka lugha 51, ikiwemo Kiingereza, kulingana na lugha ya kifaa chako.
 
 ---
 
 ## 7. Mipangilio ya kubaki salama
+
+Mipangilio hufunguka kama skrini yake yenyewe. Kwenye simu, ifungue kutoka kichupo cha "Mipangilio" chini ya skrini; kwenye kompyuta, kutoka kitufe cha gia kwenye skrini (unaweza pia kuifungua kwa amri ya `/settings`). Tumia kitendo cha kurudi nyuma kurudi kwenye skrini uliyokuwa.
 
 - **Kufunga kiotomatiki**: Kuna mpangilio wa kufunga kiotomatiki unapobadilisha kichupo.
 - **Nenosiri la ufunguo**: Unaweza kuufunika ufunguo ndani ya kifaa kwa nenosiri ili kuulinda. Utaulizwa kuliweka unapofungua programu.
@@ -103,14 +121,31 @@ Baadhi ya shughuli, kama mipangilio na kuunganisha vifaa, hufanywa kupitia amri.
 
 ---
 
-## 8. Akiba na urejeshaji (sura muhimu zaidi)
+## 8. Betri na dharura (hali za nishati)
+
+Katika mpangilio wa "Hali ya nishati", unaweza kuchagua jinsi betri inavyotumika.
+
+- **Kiotomatiki (kiwango cha betri)**: Hubadilika kiotomatiki kulingana na kiasi cha betri kilichobaki.
+- **Kawaida**: Kama kawaida.
+- **Kuokoa nishati**: Huacha ukaguzi wa uwasilishaji kwa vipindi vya hadi mara moja kila sekunde 60, na kusimamisha ishara ya uwepo.
+- **Dharura (kwa majanga)**: Huacha ukaguzi wa uwasilishaji kwa vipindi vya hadi mara moja kila dakika 10. Itumie wakati wa janga au wakati mwingine ambapo huwezi kuchaji tena.
+
+Kinachomaliza betri si kiasi cha mawasiliano bali ni idadi ya mara ambazo redio huamka. Kwa hiyo upande wa kutuma hauachwi kwa vipindi; ni upande wa kusikiliza tu. Kutuma bado kunatoka mara moja, kama kawaida. Unapoanza kuchaji, inarudi kiotomatiki hatua moja kuelekea upande mwepesi zaidi.
+
+Kwenye vifaa ambavyo haviwezi kusoma kiwango cha betri kiotomatiki (kama kivinjari cha iPhone), "Kiotomatiki" hufanya kazi kama Kawaida, na chaguo la mikono hufanya kazi kama lilivyochaguliwa.
+
+---
+
+## 9. Akiba na urejeshaji (sura muhimu zaidi)
 
 Utambulisho wako katika Breeze ni ufunguo tu ndani ya kifaa chako. Hakuna orodha ya akaunti kwenye seva, na mtengenezaji naye hana ufunguo wako.
 **Ukikipoteza kifaa, unapoteza pia utambulisho wako.** Kwa utambulisho muhimu, hakikisha unatengeneza akiba.
 
+Akiba na urejeshaji hufanywa kutoka sehemu ya "Akiba na urejeshaji" ya mipangilio (kuna vitufe vitatu: "Hifadhi akiba kwenye wingu", "Rejesha", na "Rejesha kutoka faili"). Mara ya kwanza unapoongeza mwasiliani, kadi inayokuhimiza kutengeneza akiba itatokea mara moja tu.
+
 ### Jinsi ya kutengeneza akiba
 
-1. Chagua "Tengeneza akiba".
+1. Kutoka "Akiba na urejeshaji" katika mipangilio, chagua kutengeneza akiba.
 2. Weka nenosiri la akiba (herufi 6 au zaidi).
 3. Chagua mahali pa kuhifadhi.
    - **Hifadhi kwenye faili**: Tega faili ya akiba mikononi mwako mwenyewe (inapendekezwa).
@@ -130,7 +165,7 @@ Kwenye kifaa kipya, rejesha kwa kutumia faili ya akiba (au akiba kwenye seva ya 
 
 ---
 
-## 9. Sanduku la kuhifadhia na mawazo kuhusu gharama
+## 10. Sanduku la kuhifadhia na mawazo kuhusu gharama
 
 - Barua za wakati mwenzako hayuko mtandaoni huwekwa, zimefungwa kwa usiri, katika "sanduku la kuhifadhia" la seva ya kipeanaji (hadi siku 7).
 - Kipeanaji kina kikomo cha kuzuia matumizi mabaya (kiasi na marudio yanayoweza kuwekwa). Kikomo kikifikiwa, huwezi kuweka barua mpya kwa kipindi hicho, lakini **barua ambazo tayari zimefika hazitatoweka**. Sababu na muda wa kusubiri huonyeshwa kwenye skrini.
@@ -147,7 +182,7 @@ Upeo wa rekodi zinazobaki upande wa seva (zote hutoweka kiotomatiki, na yaliyomo
 
 ---
 
-## 10. Jinsi ya kusasisha (toleo la desktop)
+## 11. Jinsi ya kusasisha (toleo la desktop)
 
 1. Ikiwa kuna toleo jipya, taarifa itatokea kwenye skrini.
 2. Ukibonyeza "Pakua", itaenda kuchukua toleo jipya (haisakinishi kiotomatiki).
@@ -157,7 +192,7 @@ Ikiwa itashindwa katikati ya usasishaji (kama kulinganisha faili hakulingani), *
 
 ---
 
-## 11. Unapopata shida
+## 12. Unapopata shida
 
 | Dalili | Kitu cha kuthibitisha |
 |---|---|
@@ -167,13 +202,13 @@ Ikiwa itashindwa katikati ya usasishaji (kama kulinganisha faili hakulingani), *
 | Msimbo wa uthibitisho wa simu haulingani | Kata simu na upige tena. Usiendelee ukiwa haulingani. |
 | Umesahau nenosiri | Urejeshaji hauwezekani. Tengeneza utambulisho mpya na umwambie mwenzako tena. |
 | Umepoteza kifaa | Ikiwa una akiba, unaweza kurejesha kwenye kifaa kipya. Ikiwa huna, unakuwa utambulisho mpya. |
-| Ukurasa wa majaribio haufunguki (404) | Umesimamishwa kwa sasa. Tafadhali tumia toleo la programu. |
+| Ukurasa wa mfano haufunguki | Mfano unaweza kusimama bila taarifa. Tafadhali tumia uliyoiweka kwenye seva yako mwenyewe. |
 
 Ripoti za kasoro, tafadhali ziende kwenye [ukurasa wa Issue](https://github.com/shizukutanaka/Breeze/issues).
 
 ---
 
-## 12. Ahadi za Breeze
+## 13. Ahadi za Breeze
 
 - Hatutoi matangazo. Si ndani ya programu, si popote.
 - Hatufuatilii. Hakuna uchambuzi wa matumizi, hakuna mifumo ya matangazo, hakuna uuzaji wa data — hakuna kabisa.
@@ -184,4 +219,4 @@ Ulinganisho wa kina na wajumbe wengine umeandikwa katika "ukurasa wa ulinganisho
 
 ---
 
-*Mwongozo huu ni yaliyomo katika wakati wa Breeze v3.8.0.*
+*Mwongozo huu unaonyesha hali ya Breeze kufikia 2026-11-25.*

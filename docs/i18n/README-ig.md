@@ -37,24 +37,17 @@ Nkọwa ojiji zuru oke dị n'ime [akwụkwọ ntuziaka](MANUAL-ig.md) (ị nwer
 
 Anyị ga-edekwa oke ya n'eziokwu. Iji ziga, sava na-echekwa ozi ruo nwa oge (envelopu ndị na-erughị ruo ụbọchị 7, akara njikọ nkeji 5, ndekọ adreesị na ngwaọrụ ụbọchị 90, ozi otu na ndebanye aha ọkwa ụbọchị 30. Ha niile na-ehichapụ onwe ha, enweghịkwa ike ịgụ ihe dị n'ime ha). Nchekwa nkwado na igwe ojii gbanyụrụ na mbido. Ọ bụrụ na ị tinye ya na sava nke gị, ị nwere ike itinye nchekwa ahụ n'okpuru nchịkwa nke gị.
 
-## Nhazi nke na-eme ka iji ya maka mpụ ghara ịba uru
-
-E wuru Breeze n'ụzọ onye ga-eji ya n'ụzọ na-ezighi ezi ga-ebu ego na nsogbu. Anyị anaghị asị na "ọ ga-eme ka mpụ ghara ikwe omume". Ọ bụ nhazi nke na-eme ka ọ "ghara ịba uru".
-
-- **Enweghị ntọala maka ịnya isi n'efu.** Ebe ọ bụ na enweghị sava etiti n'efu, onye chọrọ iji ya n'ụzọ na-ezighi ezi enweghị nhọrọ ọzọ ma ọ bụghị inye ebe nchekwa na akaụntụ aha ya na ego nke ya.
-- **Iziga nwere ibu.** Oge ọ bụla e zitere, a na-achọ obere ngụkọ (ihe akaebe ọrụ), oke dikwa maka ọnụọgụ. Iziga ọtụtụ ozi ọgba aghara anaghị aba uru.
-- **Enwere ike ịkọ akụkọ nke a na-enweghị ike ịgọnarị.** Onye natara nwere ike ịkọ akụkọ site n'iji ozi ọ natara n'onwe ya dịka ihe akaebe. Onye zitere enweghị ike ịsị "eziteghị m".
-- **Ike ịkwụsị dị n'aka onye tinyere ya.** Ihe mere na sava nke gị, gị onwe gị nwere ike ịkwụsị ya. Enweghị ikike onye ọ bụla achọrọ.
-
 ## Ihe ọ nwere ike ime
 
 - Mkparịta ụka otu-na-otu, na mkparịta ụka otu (ruo mmadụ 1,000)
-- Oku olu na oku vidiyo
+- Oku olu na oku vidiyo (oku otu ruo mmadụ 8)
 - Iziga faịlụ (ruo 50MB na mkparịta ụka otu-na-otu. Enwere ike iziga na otu kwa, mana oke nha pere mpe)
 - Iji ọtụtụ ngwaọrụ na ọtụtụ akaụntụ (dịka maka ọrụ na nke onwe. Ọnụọgụ ngwaọrụ na akaụntụ bụ n'efu na-enweghị oke)
-- A na-ahọrọ ya na-akpaghị aka site na asụsụ 8 (Bekee, Japanese, Korean, Chinese (Taiwan), Spanish, Thai, Indonesian, Portuguese)
+- Asụsụ 51 (Bekee na faịlụ asụsụ 50), a na-ahọrọ ya na-akpaghị aka ka o kwekọọ n'asụsụ ngwaọrụ gị
 - Profaịlụ nwere foto, stika, ikesa ọnọdụ
-- Ọrụ iwu dịka `/help` (ụdị karịrị 60)
+- Ọrụ iwu dịka `/help` (ụdị 71)
+- Ụdị ike dabara na batrị gị (na-akpaghị aka / nkịtị / ichekwa ike / mberede). Ka batrị na-ebelata, a na-agbatị oge nlele nnyefe ka batrị na-adị ogologo. Nchebe maka ọdachi na oge ndị ọzọ ị na-enweghị ike ịchaji
+- Ihuenyo ndị dị mfe ịgụ (nlebara anya na ọdịiche agba, nha ederede, na iji naanị kiiboodu rụọ ọrụ)
 
 ## Ọdịiche na ndị ozi ndị ọzọ
 

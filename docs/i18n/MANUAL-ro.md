@@ -24,16 +24,19 @@ De pe [pagina de descărcare](https://github.com/shizukutanaka/Breeze/releases/l
 
 Fiecare fișier are atașată o valoare numerică de verificare (SHA256SUMS.txt). Cei care sunt îngrijorați pot verifica dacă valoarea fișierului descărcat coincide.
 
-> **Despre pagina de probă**: Pagina de probă publicată anterior (breeze.pages.dev) este în prezent oprită (la deschidere apare 404). Până la restabilire, folosiți versiunea de aplicație. O copie instalată pe propriul server nu este afectată de această oprire.
+> **Despre pagina de probă**: O probă pentru verificarea modului de funcționare (https://breeze-469.pages.dev/) este pusă la dispoziție. Ceea ce se află acolo este același software, dar proba se poate schimba sau opri fără notificare. Pentru utilizarea reală, folosiți o copie instalată pe propriul server. O copie de pe propriul server nu este afectată dacă proba se oprește.
 
 ### Configurarea inițială
 
 1. Deschideți aplicația.
-2. Introduceți-vă numele. Cu asta, pregătirea este gata. Nu este nevoie nici de înregistrare, nici de număr de telefon.
+2. Introduceți-vă numele și apăsați „Creează cont”. Cu asta, pregătirea este gata. Nu este nevoie nici de înregistrare, nici de număr de telefon.
+
+- Dacă doriți să readuceți o identitate creată anterior, deschideți „Restaurează un cont existent” și apar metodele de recuperare (un fișier de rezervă, o frază de recuperare etc.).
+- Când crearea se termină, apare un card care vă îndrumă să vă protejați cheia cu o frază de acces (nu dispare după un timp). Pentru o identitate importantă, urmați îndrumarea și adăugați protecția.
 
 În acel moment, în interiorul dispozitivului se creează o „cheie”. Aceasta este însăși identitatea dumneavoastră.
 **Lista conturilor nu se află pe server.** Identitatea există numai în interiorul dispozitivului dumneavoastră.
-Acest punct devine important în capitolul despre copiile de rezervă (8).
+Acest punct devine important în capitolul despre copiile de rezervă (9).
 
 ### Despre „identitatea de unică folosință”
 
@@ -45,11 +48,13 @@ Acest lucru este afișat și pe ecran. Nu o alegeți pentru o identitate folosit
 
 ## 2. Conectarea cu cealaltă persoană
 
-Există 3 modalități de a vă conecta cu persoana cu care doriți să vorbiți.
+Apăsați butonul „Adaugă prieten” pe ecranul contactelor și apar trei opțiuni.
 
-- **Transmiterea ID-ului**: Comunicați ID-ul dumneavoastră celeilalte persoane și rugați-o să îl introducă.
-- **Cod QR**: Afișați codul QR de invitație și rugați cealaltă persoană să îl citească.
-- **Link de invitație**: Din „Invită un prieten”, copiați mesajul de invitație și trimiteți-l prin mijlocul obișnuit de contact (e-mail etc.). Dacă cealaltă persoană deschide linkul și își introduce numele, puteți conversa imediat.
+- **Adaugă un contact**: Introduceți ID-ul celeilalte persoane sau scanați un cod QR.
+- **Invită un prieten**: Copiați linkul de invitație și trimiteți-l prin mijlocul obișnuit de contact (e-mail etc.). Dacă cealaltă persoană deschide linkul și își introduce numele, puteți conversa imediat.
+- **Creează un grup**: Este suficient să introduceți un nume de grup pentru a crea unul (capitolul 4).
+
+ID-ul dumneavoastră este afișat în forma sa completă atunci când vă deschideți propriul profil și îl puteți copia ca atare. Puteți transmite ID-ul complet, nu doar ID-ul scurt.
 
 Dacă și cealaltă persoană a deschis aplicația, vă puteți conecta direct și puteți conversa.
 
@@ -58,14 +63,23 @@ Dacă și cealaltă persoană a deschis aplicația, vă puteți conecta direct �
 ## 3. Conversații
 
 - Este suficient să introduceți mesajul și să îl trimiteți. Se pot trimite și fotografii, stickere și locația.
+- Deschideți „+” de lângă câmpul de introducere și apar împreună atașamentele de fișiere, mesajele vocale, introducerea vocală, informațiile despre locație, stickerele, setarea „nu este nevoie de răspuns” și altele.
 - **Trimiterea de fișiere**: În conversațiile individuale, până la 50 MB. În grup, este mai mică, până la aproximativ 50 KB.
 - Fișierele în formate periculoase, precum fișierele executabile, sunt blocate automat.
 - Dacă cealaltă persoană nu a deschis aplicația, mesajul rămâne criptat în „căsuța de păstrare” și este livrat atunci când o deschide. Serverul care transportă căsuța de păstrare nu poate citi conținutul. Scrisorile nelivrate se șterg automat după **cel mult 7 zile**.
 - Istoricul conversațiilor poate fi exportat într-un fișier sau importat.
 
+### Citirea ecranului
+
+- **Starea trimiterii**: Se vede după semnul de lângă un mesaj. ✓ înseamnă trimis, un ✓ într-un cerc înseamnă că a fost depus în căsuța de păstrare, ✓✓ înseamnă că a ajuns la cealaltă persoană, citit este un semn albastru, iar eșecul este un semn roșu. Se deosebesc și prin formă, nu doar prin culoare.
+- **Lista de contacte**: Ora ultimei conversații este afișată ca oră pentru azi, „Ieri” pentru ieri, lună/zi pentru acest an și an/lună/zi pentru orice este mai vechi. Contactele cu mesaje necitite au numele și ora evidențiate.
+- **Cardul dumneavoastră**: În partea de sus a listei se află cardul propriului profil; apăsați-l pentru a vă deschide profilul. Se derulează împreună cu lista.
+- **Filele de jos pe telefon**: La lățimea telefonului, în partea de jos a ecranului apar filele „Contacte” și „Setări”.
+- **Antetul conversației**: Din pictograma de căutare puteți căuta în conversație. Din meniul „⋮” puteți verifica numărul de siguranță, dezactiva notificările, fixa, crea un sondaj și altele.
+
 ### Comenzi
 
-Dacă introduceți `/help` în câmpul de introducere, apare lista comenzilor utilizabile (peste 60 de tipuri).
+Dacă introduceți `/` în câmpul de introducere, apar candidații de comenzi. Introduceți `/help` pentru lista comenzilor utilizabile (71 de tipuri).
 Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin comenzi.
 
 ---
@@ -73,7 +87,7 @@ Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin come
 ## 4. Grupuri
 
 - Într-un grup pot intra până la **1.000 de persoane**.
-- Modul de creare este doar introducerea unui nume de grup. Invitația se face din „linkul de invitație în grup”. Persoana care a primit linkul poate participa introducându-și numele.
+- Modul de creare este doar introducerea unui nume de grup la „Creează un grup” din „Adaugă prieten” (puteți crea unul și cu comanda `/newgroup`). Invitația se face din „linkul de invitație în grup”. Persoana care a primit linkul poate participa introducându-și numele.
 - Și în grup se pot trimite fișiere, dar limita este mai mică, aproximativ 50 KB. Mesajele vocale nu pot fi trimise încă în grup.
 - Dacă există membri care folosesc o versiune veche a aplicației, în acel grup nu poate fi folosit noul mod, mai sigur (grup v5), iar pe ecran apare o atenționare. Devine activ atunci când toți trec la cea mai nouă versiune.
 
@@ -81,7 +95,7 @@ Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin come
 
 ## 5. Apeluri
 
-- Se pot face apeluri vocale și apeluri video individuale. Există și apeluri de grup.
+- Se pot face apeluri vocale și apeluri video individuale. Există și apeluri de grup (cu până la 8 persoane).
 - **Codul de verificare a apelului**: Pe ecranul apelului este afișat un cod de verificare. Citiți-l împreună cu cealaltă persoană și verificați dacă coincide pe ambele ecrane. Dacă nu coincide, este posibil ca cineva să asculte pe parcurs. În acel caz, închideți apelul.
 - Apelul de grup poate să nu poată fi pornit dacă aplicațiile tuturor nu sunt la cea mai nouă versiune.
 
@@ -91,11 +105,15 @@ Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin come
 
 - Pentru a folosi aceeași identitate pe mai multe dispozitive, legați dispozitivele între ele cu comanda `/link`.
 - Conturile pot fi create mai multe și folosite separat (de exemplu pentru serviciu și pentru uz personal). Atât numărul de dispozitive, cât și numărul de conturi sunt gratuite și nelimitate.
-- Limba este selectată automat dintre 8 limbi: engleză, japoneză, coreeană, chineză (Taiwan), spaniolă, thailandeză, indoneziană, portugheză (Brazilia).
+- **Cum se creează un cont**: Apăsați butonul „+” de lângă filele de conturi din partea de sus a listei de contacte. Introduceți un nume și alegeți un emoji ca pictogramă, iar un cont nou este creat și se trece automat la el.
+- **Schimbarea conturilor**: Filele de conturi sunt afișate întotdeauna în partea de sus a listei de contacte. Apăsați una pentru a schimba (pe un computer puteți schimba și cu Ctrl+1–9). Apăsați lung o filă pentru a o redenumi, a-i schimba pictograma sau a o șterge.
+- Limba este selectată automat dintre 51 de limbi, inclusiv engleza, în funcție de limba dispozitivului dumneavoastră.
 
 ---
 
 ## 7. Setări pentru păstrarea siguranței
+
+Setările se deschid ca un ecran separat. Pe telefon, deschideți-le din fila „Setări” din partea de jos a ecranului; pe computer, din butonul cu roată dințată de pe ecran (le puteți deschide și cu comanda `/settings`). Folosiți acțiunea de întoarcere pentru a reveni la ecranul pe care erați.
 
 - **Blocare automată**: Există o setare de blocare automată la schimbarea filei.
 - **Fraza de acces a cheii**: Cheia din interiorul dispozitivului poate fi protejată înfășurată într-o frază de acces. La deschiderea aplicației vi se cere introducerea ei.
@@ -103,14 +121,31 @@ Unele operațiuni, precum setările și legarea dispozitivelor, se fac prin come
 
 ---
 
-## 8. Copii de rezervă și recuperare (acesta este cel mai important capitol)
+## 8. Baterie și urgențe (moduri de alimentare)
+
+În setarea „Mod de alimentare” puteți alege cum este folosită bateria.
+
+- **Automat (nivelul bateriei)**: Comută automat în funcție de câtă baterie a rămas.
+- **Normal**: Ca de obicei.
+- **Economisire a energiei**: Spațiază verificările de livrare la cel mult o dată la 60 de secunde și oprește semnalul de prezență.
+- **Urgență (pentru dezastre)**: Spațiază verificările de livrare la cel mult o dată la 10 minute. Folosiți-l într-un dezastru sau în alt moment în care nu puteți reîncărca.
+
+Ceea ce consumă bateria nu este cantitatea de comunicare, ci de câte ori se trezește radioul. De aceea partea de trimitere nu este spațiată; doar partea de ascultare este. Trimiterea pleacă totuși imediat, ca întotdeauna. Când începeți să încărcați, revine automat cu un pas spre partea mai ușoară.
+
+Pe dispozitivele care nu pot citi automat nivelul bateriei (cum ar fi un browser pe iPhone), „Automat” se comportă ca Normal, iar o alegere manuală funcționează așa cum a fost aleasă.
+
+---
+
+## 9. Copii de rezervă și recuperare (acesta este cel mai important capitol)
 
 Identitatea Breeze este doar cheia din interiorul dispozitivului dumneavoastră. Pe server nu există o listă de conturi, iar creatorul nu are nici el cheia dumneavoastră.
 **Dacă pierdeți dispozitivul, se pierde și identitatea.** Pentru o identitate importantă, faceți neapărat o copie de rezervă.
 
+Copierea de rezervă și recuperarea se fac din secțiunea „Copii de rezervă și recuperare” a setărilor (există trei butoane: „Copie de rezervă în cloud”, „Restaurează” și „Restaurează dintr-un fișier”). Prima dată când adăugați un contact, apare o singură dată un card care vă îndeamnă să faceți o copie de rezervă.
+
 ### Cum se face o copie de rezervă
 
-1. Alegeți „Creează copie de rezervă”.
+1. Din „Copii de rezervă și recuperare” în setări, alegeți să creați o copie de rezervă.
 2. Setați o frază de acces pentru copia de rezervă (cel puțin 6 caractere).
 3. Alegeți destinația salvării.
    - **Salvare într-un fișier**: Păstrați fișierul copiei de rezervă la dumneavoastră (recomandat).
@@ -130,7 +165,7 @@ Pe un dispozitiv nou, restaurați folosind fișierul copiei de rezervă (sau cop
 
 ---
 
-## 9. Căsuța de păstrare și modul de a gândi costurile
+## 10. Căsuța de păstrare și modul de a gândi costurile
 
 - Scrisorile pentru momentele în care cealaltă persoană este offline sunt puse criptate în „căsuța de păstrare” a serverului releu (cel mult 7 zile).
 - Releul are limite pentru prevenirea abuzurilor (cantitatea și frecvența care pot fi depuse). Când se atinge limita, în acea perioadă nu mai pot fi depuse scrisori noi, dar **scrisorile deja sosite nu dispar**. Pe ecran sunt afișate motivul și timpul de așteptare.
@@ -147,7 +182,7 @@ Amploarea înregistrărilor care rămân pe partea serverului (toate se șterg a
 
 ---
 
-## 10. Cum se actualizează (versiunea pentru desktop)
+## 11. Cum se actualizează (versiunea pentru desktop)
 
 1. Când există o versiune nouă, pe ecran apare o notificare.
 2. Apăsând „Descarcă”, merge să ia versiunea nouă (nu o instalează automat).
@@ -157,7 +192,7 @@ Dacă pe parcursul actualizării apare o eroare (de exemplu valoarea de verifica
 
 ---
 
-## 11. Când aveți probleme
+## 12. Când aveți probleme
 
 | Simptom | Ce să verificați |
 |---|---|
@@ -167,13 +202,13 @@ Dacă pe parcursul actualizării apare o eroare (de exemplu valoarea de verifica
 | Codul de verificare a apelului nu coincide | Închideți apelul și apelați din nou. Nu continuați fără coincidență. |
 | Ați uitat fraza de acces | Restaurarea nu este posibilă. Creați o identitate nouă și anunțați din nou cealaltă persoană. |
 | Ați pierdut dispozitivul | Dacă există o copie de rezervă, puteți recupera pe un dispozitiv nou. Dacă nu, va fi o identitate nouă. |
-| Pagina de probă nu se deschide (404) | În prezent este oprită. Folosiți versiunea de aplicație. |
+| Pagina de probă nu se deschide | Proba se poate opri fără notificare. Folosiți o copie instalată pe propriul server. |
 
 Raportările de probleme se fac, vă rugăm, pe [pagina Issues](https://github.com/shizukutanaka/Breeze/issues).
 
 ---
 
-## 12. Promisiunile Breeze
+## 13. Promisiunile Breeze
 
 - Nu afișăm reclame. Nici în aplicație, nici altundeva.
 - Nu urmărim. Nu există analiză a utilizării, mecanisme de publicitate și nici vânzare de date.
@@ -184,4 +219,4 @@ Comparația detaliată cu alte servicii de mesagerie este scrisă pe „pagina d
 
 ---
 
-*Acest manual prezintă conținutul de la momentul Breeze v3.8.0.*
+*Acest manual reflectă starea Breeze la 2026-11-25.*

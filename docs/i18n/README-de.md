@@ -37,24 +37,17 @@ Die ausführliche Nutzung steht in der [Anleitung](MANUAL-de.md) (weitere Sprach
 
 Auch den Umfang schreiben wir ehrlich. Zur Zustellung bewahrt der Server Dinge für kurze Zeit auf (unzugestellte Umschläge höchstens 7 Tage, Verbindungssignale 5 Minuten, Adress- und Geräteaufzeichnungen 90 Tage, Gruppeninformationen und Benachrichtigungsabonnements 30 Tage. Alles wird automatisch gelöscht, und die Inhalte können nicht gelesen werden). Die Cloud-Sicherung ist anfangs deaktiviert. Wenn Sie es auf Ihrem eigenen Server installieren, liegt auch diese Aufbewahrung unter Ihrer eigenen Kontrolle.
 
-## So gebaut, dass sich eine Nutzung für Straftaten nicht lohnt
-
-Breeze ist so gebaut, dass Missbrauch für die missbrauchende Seite Kosten und Aufwand verursacht. Wir behaupten nicht, dass es „Straftaten unmöglich macht“. Es ist ein Design, das sie „sich nicht lohnen“ lässt.
-
-- **Keine Grundlage zum Trittbrettfahren.** Da es keinen zentralen kostenlosen Server gibt, muss auch jemand, der es missbrauchen will, einen Betrieb mit einem Konto auf den eigenen Namen und auf eigene Kosten vorbereiten.
-- **Senden ist mit Aufwand verbunden.** Bei jedem Senden wird eine kleine Berechnung (Arbeitsnachweis) verlangt, und Mengenobergrenzen sind festgelegt. Massenhaftes Spam-Senden lohnt sich nicht.
-- **Meldungen, die sich nicht wegdiskutieren lassen.** Empfangende können die erhaltene Zustellung selbst als Beweis melden. Die sendende Seite kann nicht behaupten: „Ich habe das nicht gesendet.“
-- **Die Befugnis zum Stoppen liegt bei der installierenden Person.** Was auf Ihrem eigenen Server geschieht, können Sie selbst stoppen. Sie brauchen niemandes Erlaubnis.
-
 ## Was es kann
 
 - Einzelunterhaltungen und Gruppenunterhaltungen (bis zu 1.000 Personen)
-- Sprach- und Videoanrufe
+- Sprach- und Videoanrufe (Gruppenanrufe mit bis zu 8 Personen)
 - Dateiversand (im Einzelgespräch bis zu 50 MB. Auch in Gruppen möglich, aber die Größenobergrenze ist kleiner)
 - Nutzung mit mehreren Geräten und mehreren Konten (z. B. beruflich und privat. Sowohl die Geräteanzahl als auch die Kontenanzahl ist kostenlos und unbegrenzt)
-- Automatische Auswahl aus 8 Sprachen (Englisch, Japanisch, Koreanisch, Chinesisch (Taiwan), Spanisch, Thailändisch, Indonesisch, Portugiesisch)
+- 51 Sprachen (Englisch plus 50 Sprachdateien), automatisch passend zur Sprache Ihres Geräts ausgewählt
 - Profile mit Foto, Sticker, Standortfreigabe
-- Befehlsbedienung wie `/help` (über 60 Arten)
+- Befehlsbedienung wie `/help` (71 Arten)
+- Leistungsmodi passend zu Ihrem Akku (automatisch / normal / Energiesparen / Notfall). Wenn der Akku leerer wird, werden die Empfangsprüfungen weiter auseinandergezogen, damit der Akku länger hält. Eine Vorsorge für Katastrophen und andere Zeiten, in denen Sie nicht aufladen können
+- Gut lesbare Bildschirme (Achtung auf Farbkontrast, Textgröße und Bedienung nur mit der Tastatur)
 
 ## Unterschiede zu anderen Messengern
 

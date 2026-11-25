@@ -37,24 +37,17 @@ Szczegóły użytkowania znajdują się w [instrukcji obsługi](MANUAL-pl.md) (w
 
 Uczciwie podajemy też zakres. Aby dostarczyć wiadomość, serwer przechowuje dane przez krótki czas (niedostarczone koperty — maksymalnie 7 dni, sygnały połączenia — 5 minut, zapisy adresów i urządzeń — 90 dni, informacje o grupach i subskrypcje powiadomień — 30 dni. Wszystko jest automatycznie usuwane, a treści nie da się odczytać). Kopia zapasowa w chmurze jest na początku wyłączona. Jeśli postawisz serwer u siebie, także to przechowywanie znajdzie się pod twoją kontrolą.
 
-## Konstrukcja, przy której przestępstwo się nie opłaca
-
-Breeze jest zbudowany tak, aby nadużycie kosztowało nadużywającego czas i pieniądze. Nie twierdzimy, że „uniemożliwia przestępstwo”. To konstrukcja, która sprawia, że się ono „nie opłaca”.
-
-- **Nie ma darmowej podstawy do pasożytowania.** Skoro nie istnieje centralny darmowy serwer, także osoba nadużywająca musi przygotować miejsce na koncie na własne nazwisko i na własny koszt.
-- **Wysyłanie kosztuje.** Przy każdej wysyłce wymagane jest drobne obliczenie (dowód pracy), a ilości są ograniczone. Masowe wysyłanie spamu się nie opłaca.
-- **Można złożyć zgłoszenie, od którego nie da się wykręcić.** Odbiorca może zgłosić nadużycie, załączając jako dowód samą otrzymaną transmisję. Nadawca nie może powiedzieć „nie wysyłałem”.
-- **Uprawnienie do zatrzymania ma ten, kto postawił serwer.** To, co wydarzyło się na twoim serwerze, możesz zatrzymać sam. Nie potrzebujesz niczyjej zgody.
-
 ## Co potrafi
 
 - Rozmowy jeden na jeden i rozmowy grupowe (do 1 000 osób)
-- Rozmowy głosowe i wideo
+- Rozmowy głosowe i wideo (rozmowy grupowe do 8 osób)
 - Wysyłanie plików (w rozmowach jeden na jeden do 50 MB. W grupach też się da, ale limit rozmiaru jest mniejszy)
 - Wiele urządzeń i wiele kont (np. służbowe i prywatne. Zarówno liczba urządzeń, jak i kont jest bezpłatna i nieograniczona)
-- Automatyczny wybór spośród 8 języków (angielski, japoński, koreański, chiński (Tajwan), hiszpański, tajski, indonezyjski, portugalski)
+- 51 języków (angielski plus 50 plików językowych), wybieranych automatycznie zgodnie z językiem twojego urządzenia
 - Profil ze zdjęciem, naklejki, udostępnianie lokalizacji
-- Polecenia takie jak `/help` (ponad 60 rodzajów)
+- Polecenia takie jak `/help` (71 rodzajów)
+- Tryby zasilania dopasowane do baterii (automatyczny / normalny / oszczędzanie energii / awaryjny). W miarę rozładowywania się baterii kontrole dostarczania są rozkładane w czasie, aby bateria wystarczała dłużej. Zabezpieczenie na wypadek katastrof i innych sytuacji, gdy nie możesz się naładować
+- Czytelne ekrany (dbałość o kontrast kolorów, rozmiar tekstu i obsługę wyłącznie klawiaturą)
 
 ## Różnice względem innych komunikatorów
 

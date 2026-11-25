@@ -207,7 +207,7 @@ wrangler kv:namespace create KV
 # Then deploy again so the binding takes effect:
 wrangler pages deploy . --project-name=breeze
 
-# 5. Visit https://breeze.pages.dev
+# 5. Visit your deployment's URL (https://<your-project>.pages.dev)
 ```
 
 **Shu xolos.** Push bildirishnomalaridan tashqari barcha funksiyalar ishlaydi.
@@ -223,9 +223,9 @@ qarang); dastlab yopiq qadoqlash yuqoridagi Docker yo'lidir.
 | P2P xabar almashish | ✓ | WebRTC DataChannel |
 | Ovozli/video qo'ng'iroqlar | ✓ | WebRTC + bepul STUN |
 | TURN uzatuvchisi | ✓ | Open Relay (oyiga 20GB bepul) |
-| Guruhlar (100 a'zo) | ✓ | Sender Key O(1) |
+| Guruhlar (1,000 a'zo) | ✓ | Sender Key O(1) |
 | Fayl uzatish | ✓ | P2P orqali 50MB gacha |
-| 8 til | ✓ | EN + 7 to'liq til, avtomatik aniqlanadi |
+| 51 til | ✓ | Ingliz tili o'rnatilgan + 50 ta to'liq til fayli, avtomatik aniqlanadi |
 | Oflayn/PWA | ✓ | Service Worker |
 | Push bildirishnomalari | ✗ | VAPID kalitlari kerak |
 
@@ -241,7 +241,7 @@ reja darvozasiz bepul cheksiz mahalliy kichik hisoblar oladi.
 | KV o'qishlari | Kuniga 100 000 | ~Kuniga 200 |
 | KV yozishlari | Kuniga 1 000 | ~Kuniga 350 (optimallashtirilgan) |
 | KV saqlash | 1 GB | ~Foydalanuvchi boshiga 10 KB |
-| Statik aktivlar | Cheksiz | ~400 KB (bitta HTML) |
+| Statik aktivlar | Cheksiz | ~894 KB (bitta HTML) |
 
 **Bepul tarifda ~3 bir vaqtda faol foydalanuvchini qo'llab-quvvatlaydi.**
 

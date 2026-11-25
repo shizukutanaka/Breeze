@@ -37,24 +37,17 @@ Per l'uso dettagliato, consulta il [manuale](MANUAL-it.md) (dall'inizio del manu
 
 Scriviamo onestamente anche la portata. Per poter consegnare i messaggi, il server conserva le cose per un breve periodo (buste non consegnate per al massimo 7 giorni, segnali di connessione per 5 minuti, registrazioni di indirizzi e dispositivi per 90 giorni, informazioni sui gruppi e sottoscrizioni alle notifiche per 30 giorni. Tutto viene eliminato automaticamente e il contenuto non può essere letto). Il backup sul cloud all'inizio è disattivato. Se lo installi sul tuo server, anche questa conservazione temporanea è sotto il tuo controllo.
 
-## Una progettazione per cui usarlo per commettere reati non conviene
-
-Breeze è realizzato in modo che l'uso improprio comporti costi e fatica per chi lo compie. Non affermiamo che «renda impossibile il reato». È una progettazione che fa sì che «non convenga».
-
-- **Non c'è una base gratuita da sfruttare.** Non esistendo un server centrale gratuito, anche chi vuole farne un uso improprio non ha altra scelta che preparare un'installazione con un account a proprio nome e a proprie spese.
-- **Inviare comporta un costo.** A ogni invio viene richiesto un piccolo calcolo (prova di lavoro) e sono fissati limiti di volume. Inviare spam in massa non conviene.
-- **Si possono fare segnalazioni innegabili.** Chi riceve può segnalare come prova la consegna stessa che ha ricevuto. Chi ha inviato non può negare dicendo «non l'ho inviato io».
-- **Il potere di fermarlo spetta a chi lo installa.** Ciò che accade sul tuo server puoi fermarlo tu stesso. Non serve il permesso di nessuno.
-
 ## Cosa può fare
 
 - Conversazioni individuali e conversazioni di gruppo (fino a 1.000 persone)
-- Chiamate vocali e videochiamate
+- Chiamate vocali e videochiamate (chiamate di gruppo fino a 8 persone)
 - Invio di file (fino a 50MB nelle conversazioni individuali. Anche nei gruppi si possono inviare, ma il limite di dimensione è più piccolo)
 - Uso su più dispositivi e con più account (per esempio lavoro e uso personale. Sia il numero di dispositivi sia il numero di account sono gratuiti e illimitati)
-- Selezione automatica tra 8 lingue (inglese, giapponese, coreano, cinese (Taiwan), spagnolo, tailandese, indonesiano, portoghese)
+- 51 lingue (inglese più 50 file di lingua), scelte automaticamente in base alla lingua del tuo dispositivo
 - Profili con foto, adesivi, condivisione della posizione
-- Operazioni a comando come `/help` (oltre 60 tipi)
+- Operazioni a comando come `/help` (71 tipi)
+- Modalità di energia in base alla batteria (automatica / normale / risparmio energetico / emergenza). Quando la batteria cala, i controlli di ricezione si diradano perché la batteria duri più a lungo. Una salvaguardia per le catastrofi e gli altri momenti in cui non puoi ricaricare
+- Schermi facili da leggere (attenzione al contrasto dei colori, alla dimensione del testo e all'uso con la sola tastiera)
 
 ## Differenze rispetto ad altri messenger
 
