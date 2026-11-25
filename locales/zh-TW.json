@@ -909,4 +909,13 @@
  "menuPoll": "建立投票"
 ,
  "skipToContent": "跳至內容"
+,
+ "contactInfo": "Contact info",
+ "peerNameLabel": "Name they set for themselves",
+ "nicknameLabel": "Your nickname for them",
+ "nicknameLocalNote": "Nicknames are stored only on this device. They are never sent to the contact or the relay.",
+ "nicknameClear": "Clear nickname",
+ "toastNicknameSaved": "Nickname saved",
+ "toastNicknameCleared": "Nickname cleared",
+ "showPeerNameLabel": "Also show the name each contact set for themselves"
 }
