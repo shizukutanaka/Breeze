@@ -102,6 +102,9 @@ test('real app encrypts all raw stores, drafts and metadata; unlock restores pre
   test.setTimeout(120_000);
   const seeded = await seed(page);
   await enable(page);
+  await expect(page.locator('#vault-gate .modal')).toBeVisible();
+  await expect(page.locator('#vault-gate .modal')).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  expect((await page.locator('#vault-gate input').boundingBox()).width).toBeLessThan(400);
   noPlaintext(await raw(page), seeded);
   await expect(page.locator('#msg-contacts')).not.toContainText(NAME);
   await expect(page.locator('#msg-messages')).not.toContainText(BODY);

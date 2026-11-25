@@ -683,12 +683,14 @@ export function createVaultRuntime(D) {
 export function vaultGate(D, unlock) {
   return new Promise(resolve => {
     const overlay = document.createElement('dialog'); overlay.id = 'vault-gate'; overlay.className = 'lock-overlay i-flex-col';
-    const title = document.createElement('h2'); title.textContent = D.t('vaultTitle');
-    const hint = document.createElement('p'); hint.textContent = D.t('vaultRecovery');
-    const input = document.createElement('input'); input.type = 'password'; input.className = 'lock-input'; input.autocomplete = 'current-password'; input.setAttribute('aria-label', D.t('vaultUnlock'));
+    overlay.setAttribute('aria-label', D.t('vaultTitle'));
+    const panel = document.createElement('div'); panel.className = 'modal i-max-popup i-flex-col';
+    const title = document.createElement('h2'); title.className = 'modal-title'; title.textContent = D.t('vaultTitle');
+    const hint = document.createElement('p'); hint.className = 'modal-desc'; hint.textContent = D.t('vaultRecovery');
+    const input = document.createElement('input'); input.type = 'password'; input.className = 'modal-input'; input.autocomplete = 'current-password'; input.setAttribute('aria-label', D.t('vaultUnlock'));
     const button = document.createElement('button'); button.className = 'btn btn-g'; button.textContent = D.t('uiUnlock');
-    const error = document.createElement('p'); error.setAttribute('role', 'alert');
-    overlay.append(title, hint, input, button, error); document.body.appendChild(overlay);
+    const error = document.createElement('p'); error.className = 'modal-desc'; error.setAttribute('role', 'alert');
+    panel.append(title, hint, input, button, error); overlay.append(panel); document.body.appendChild(overlay);
     overlay.addEventListener('cancel', e => e.preventDefault()); overlay.showModal(); input.focus();
     const submit = async () => {
       if (button.disabled) return; button.disabled = true;
