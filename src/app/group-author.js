@@ -129,6 +129,7 @@ export function createGroupAuthor(D) {
     if (state.strict) return state;
     const group = await D.get('contacts', groupId);
     if (!group?.isGroup || !group.members?.length || !D.supported()) return state;
+    if (D.authorized && !await D.authorized(group)) return state;
     const others = group.members.filter(m => m.pubB64 !== D.pub());
     const caps = [];
     for (const member of others) {

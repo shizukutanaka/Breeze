@@ -4,6 +4,13 @@
 
 ### Security
 
+- **Certified device revocation and group authors.** Root-signed monotonic checkpoints,
+  consent-backed device ownership, bounded E2EE checkpoint/head gossip and persistent
+  stale-view alerts. Capable contacts reject revoked device sessions and group authors;
+  unlink rotates Sender Keys and excludes revoked mailboxes. Certified secondaries can
+  sign strict group messages. Legacy/no-Web-Locks boundaries, EN/JA/fallback strings,
+  SW/CSP and adversarial/application coverage included; see SECURITY.md for suppression limits.
+
 - **Authenticated device-key linking, first slice.** Opt-in `/link keys` offers and root-signed both-key certificates transfer the root signing pin directly between devices; outstanding challenges, protected persistence, no raw-key downgrade and independently verified registry metadata. Persistent binding/removal alerts reuse device review and `/security`. Legacy raw-key linking remains unchanged. Peer revocation epochs, linked-device strict signed-group sends and unlink-triggered Sender Key rotation are explicitly not enabled yet. EN/JA, English fallback locales, SW/CSP and adversarial/app tests included.
 
 - **Message requests and stranger quarantine.** Unknown senders remain outside chats until accepted, with bounded persistent ciphertext queues, persisted block/delete actions and suppressed message/attachment/call/receipt processing. Explicit adds, pairing, joined groups and authenticated linked-device fan-out retain their trust paths. Generic background push without content/actions and signed private presence prevent pre-consent notification/presence disclosure. EN/JA and English fallback locales included; see SECURITY.md for limits.

@@ -42,11 +42,63 @@ relay-assisted bootstrap; they do NOT establish an authenticated both-key bindin
 Old clients ignore certificate metadata and retain their existing wire behavior.
 No group transcript or deployed crypto mirror is changed.
 
-**Not yet implemented:** revocation epochs, contact/group enforcement of revoked
-device keys, linked-device strict author-signature sending, unlink-triggered Sender
-Key rotation, and cross-device certificate/checkpoint gossip. V1 certificates must
-not be consumed as group-author authority. `/unlink` still revokes fan-out only;
-signed-list removal alerts do not mean past device keys are cryptographically revoked.
+### Device authority and revocation v1
+
+`src/app/device-revocation.js` adds `device-revocation-v1` to prekeys only when
+Web Locks are available. Legacy recipients retain the original plaintext and group
+formats. A linking offer optionally carries `authority:1`; the returned certificate
+then includes the initial signed checkpoint. Old certificates remain readable.
+
+The root signs UTF-8 `BreezeDeviceCheckpoint/v1:` + JSON
+`[root,rootEd,epoch,ts,devices.map(d=>[d.pub,d.binding||null]),revoked]`.
+Epochs and timestamps are positive safe integers; active encryption keys (1–10,
+including the root) and cumulative tombstones (0–256) are disjoint and unique.
+Every included binding is independently verified against the locally authenticated
+root pin. Re-adding a tombstoned key requires a new identity/key, never a rollback.
+The root separately signs `BreezeDeviceCheckpointHead/v1:` + JSON
+`[root,rootEd,epoch,ts,hash]`, where hash is base64 SHA-256 of the checkpoint
+transcript. Same-epoch differing hashes, older checkpoints, and removed tombstones
+are rejected. A newer head without its checkpoint persists an alert and pauses
+linked-device traffic until the matching checkpoint arrives. Root traffic remains
+available for recovery. Root-pin changes invalidate cached device authority.
+
+The secondary proves signing-key consent with `deviceSig` over UTF-8
+`BreezeDeviceConsent/v1:` + JSON `[root,rootEd,pub,ed,nonce,issuedAt,sig]`.
+Only consent received inside a ratchet-authenticated message from that encryption
+key, or locally completed linking, establishes the global device→root association.
+Forwarded certificates/consents authorize a device within the claimed root's group
+role, but cannot let a malicious root revoke an unrelated standalone contact.
+Direct roster identities are verified against their own signing pins, not another
+root's certificate. A signing offer alone does not prove encryption-key possession.
+
+Capable peers exchange `{breezeDeviceAuthority:1,body,checkpoints,heads,consents}`
+inside the existing ratchet ciphertext, unwrapped before application processing or
+franking. Active consents accompany checkpoints. Gossip includes own authority and
+rotating shared-group roots, with a 32 KiB metadata budget and 65,535-byte complete
+UTF-8 frame limit; oversized own checkpoints fail closed. Input array limits are
+64 checkpoints/heads and 640 consents, also bounded by the frame limit. Explicit
+checkpoint broadcasts use the existing encrypted profile-control carrier; the
+non-profile control body is ignored after authority processing, not displayed.
+Only the root may bootstrap automatic checkpoint delivery to its own devices.
+Other automatic targets require a session with authenticated inbound traffic;
+otherwise metadata waits for the next normal E2EE exchange. This avoids competing
+first-message ratchets during linking. Shared-group gossip to an own device uses
+the root's checkpoint membership even before that device has sent consent back;
+this routing lookup does not establish ownership for incoming authorization.
+
+Strict group authors retain `group-author-sig-v1` transcripts. A secondary signs
+as its own encryption identity with its certified signing key; recipients resolve
+`acctRoot` to a roster root and verify current membership, the root certificate and
+device consent before accepting the author signature. Secondary strict sends require
+checkpoints for the other roster roots (proof of upgraded participation). Legacy
+uncertified secondary sends remain unsigned in non-strict groups.
+
+Unlink first persists a newer checkpoint, rotates each existing local group Sender
+Key (new random 32-byte secret, incremented epoch, counter zero), distributes it only
+to active mailboxes, and broadcasts authority through existing E2EE channels before
+updating the relay registry. Peers rotate their own group Sender Keys when learning
+a revocation. Epoch markers make rotation resumable/idempotent on the next send.
+No new Worker endpoint or primitive/inline crypto mirror is introduced.
 
 ## Deployed key/session vault (application storage, no wire change)
 

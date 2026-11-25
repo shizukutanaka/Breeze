@@ -1,10 +1,14 @@
-import { describe, it, expect, vi } from 'vitest';
-import { createDeviceRevocation, checkpointText, verifyCheckpoint, verifyCheckpointHead, deviceConsentText } from '../src/app/device-revocation.js';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { createDeviceRevocation, createDeviceRevocationHost, checkpointText, verifyCheckpoint, verifyCheckpointHead, deviceConsentText } from '../src/app/device-revocation.js';
+import { createDeviceLink } from '../src/app/device-link.js';
+import { createGroupLive } from '../src/app/group-live.js';
 import { bindingText } from '../src/app/device-keys.js';
 import { createGroupAuthor, verifyGroupAuthor } from '../src/app/group-author.js';
 import { negotiateGroup } from '../src/crypto/negotiate.js';
 
 const b64 = bytes => Buffer.from(bytes).toString('base64');
+afterEach(() => vi.unstubAllGlobals());
 async function person() {
   const keys = await crypto.subtle.generateKey('Ed25519', true, ['sign', 'verify']);
   const pub = b64(crypto.getRandomValues(new Uint8Array(32))), ed = b64(await crypto.subtle.exportKey('raw', keys.publicKey));
@@ -103,6 +107,13 @@ describe('signed account checkpoints and monotonic revocation', () => {
     expect(await s.remote.authority.allowed(unrelated.pub)).toBe(null);
     await expect(s.remote.authority.acceptConsent({ ...forged, deviceSig: s.cert.deviceSig })).rejects.toThrow();
   });
+  it('invalidates device authority when its root signing pin changes', async () => {
+    const s = await scenario(), replacement = await person();
+    s.remote.contact({ pub: s.root.pub, ed: replacement.ed });
+    expect(await s.remote.authority.allowed(s.device.pub)).toBe(false);
+    expect(await s.remote.authority.authorPin(s.device.pub, s.root.pub)).toBe(null);
+    await expect(s.remote.authority.accept(s.cp)).rejects.toThrow();
+  });
 });
 
 describe('certified group authors and unlink sender-key rotation', () => {
@@ -133,5 +144,107 @@ describe('certified group authors and unlink sender-key rotation', () => {
     expect(next.epoch).toBe(10); expect(next.counter).toBe(0); expect(next.chainKey || next.raw).not.toEqual(bytes);
     expect(next.skipped || {}).toEqual({}); expect(await s.remote.authority.keyFor(group, next)).toBe(next);
     expect(await s.remote.authority.allowed(s.device.pub, s.root.pub)).toBe(false);
+  });
+});
+
+describe('deployed device-authority boundaries', () => {
+  it('rejects revoked receive, encryption and session bootstrap before application side effects', async () => {
+    const s = await scenario(), html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+    const section = (a, b) => html.slice(html.indexOf(a), html.indexOf(b, html.indexOf(a)));
+    const raw = vi.fn(async () => 'hello'), requests = { admit: vi.fn(async () => true) };
+    const compile = (code, tail) => new Function('_deviceRevocation', '_withPeerLock', '_encryptForRaw', '_decryptFromRaw', '_dbg', '_requests', code + tail)(
+      { ...s.remote.authority, admit: async m => await s.remote.authority.allowed(m.fromPub, m.acctRoot) !== false }, (_id, fn) => fn(), raw, raw, vi.fn(), requests);
+    const decrypt = compile(section('async function decryptFrom(', 'async function _decryptFromRaw('), ';return decryptFrom;');
+    expect(await decrypt('ciphertext', s.device.pub)).toBe('hello');
+    await s.remote.authority.accept(await s.primary.authority.issue([{ pub: s.root.pub }])); raw.mockClear();
+    expect(await decrypt('ciphertext', s.device.pub)).toBe(null);
+    const encrypt = compile(section('async function encryptFor(', 'async function _encryptForRaw('), ';return encryptFor;');
+    expect(await encrypt('secret', s.device.pub)).toBe(null);
+    const receive = compile(section('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact ====='), ';return handleIncoming;');
+    const ack = {}; await receive({ from: s.device.pub.slice(0, 12), fromPub: s.device.pub }, ack);
+    expect(raw).not.toHaveBeenCalled(); expect(requests.admit).not.toHaveBeenCalled(); expect(ack.stored).toBeUndefined();
+  });
+  it('bounds authenticated envelopes, rejects malformed metadata and keeps no-Web-Locks legacy sends unchanged', async () => {
+    const s = await scenario();
+    await expect(s.remote.authority.unwrap(JSON.stringify({ breezeDeviceAuthority: 1, body: 'x', checkpoints: {}, heads: [] }), s.root.pub)).rejects.toThrow();
+    await expect(s.remote.authority.unwrap(JSON.stringify({ breezeDeviceAuthority: 1, body: 'x'.repeat(65536), checkpoints: [], heads: [] }), s.root.pub)).rejects.toThrow('bounds');
+    await expect(s.primary.authority.wrap('x'.repeat(65535), s.peer.pub)).rejects.toThrow('frame');
+    const wire = await s.primary.authority.wrap('hello', s.peer.pub); expect(Buffer.byteLength(wire)).toBeLessThanOrEqual(65535);
+    vi.stubGlobal('navigator', {});
+    const host = createDeviceRevocationHost({ ...s.primary.D, all: async () => [], peerInfo: vi.fn(), dbg: vi.fn() });
+    expect(await host.capable(s.peer.pub)).toBe(false); expect(await host.wrap('legacy', s.peer.pub)).toBe('legacy');
+    const stored = { epoch: 1 }; expect(await host.keyFor({}, stored)).toBe(stored);
+    expect(await host.checkpoint([])).toBeUndefined(); expect(await host.certified({})).toBe(true);
+    await s.primary.authority.issue([{ pub: s.root.pub }]);
+    await expect(host.keyFor({}, stored)).rejects.toThrow('Web Locks');
+  });
+  it('unlink rotates and redistributes the real group Sender Key only to remaining device mailboxes', async () => {
+    const s = await scenario(), other = await person(), cert = await certificate(s.root, other);
+    vi.stubGlobal('navigator', { locks: { request: async (_key, fn) => fn() } });
+    const cp = await s.primary.authority.issue([...s.cp.devices, { pub: other.pub, binding: cert }]);
+    const group = { id: 'unlink-group', isGroup: true, members: [{ id: s.root.pub.slice(0, 12), pubB64: s.root.pub }] };
+    s.primary.rows.set('contacts:' + group.id, group);
+    s.primary.rows.set('identity:gsk:' + group.id, { v: 5, chainKey: Array(32).fill(3), epoch: 4, counter: 3, authorSigV: 1 });
+    const send = vi.fn(), dbg = vi.fn(); let author, live;
+    const host = createDeviceRevocationHost({ ...s.primary.D, all: async () => [group], peerInfo: async () => ({ caps: ['device-revocation-v1'] }), groupAuthor: () => author, dbg,
+      encrypt: async (body, pub) => host.wrap(body, pub), send });
+    author = createGroupAuthor({ ...s.primary.D, sigPub: () => s.root.ed, supported: () => true, negotiate: negotiateGroup, dbg,
+      revocationKey: (g, sk) => host.keyFor(g, sk), distribute: gid => live.distributeOwnKey(gid) });
+    live = createGroupLive({ myPubB64: () => s.root.pub, myId: () => s.root.pub.slice(0, 12), myName: () => 'Root', acctRoot: () => null,
+      myOtherDevices: () => host.targets(s.root.pub), getSenderKey: gid => s.primary.D.get('identity', 'gsk:' + gid), groupRatchetV5: () => true,
+      skRedistEvery: () => 10, encryptFor: async (body, pub) => host.wrap(body, pub), relaySend: send, dbg });
+    const post = vi.fn(async () => ({ ok: true, json: async () => ({ devices: cp.devices }) }));
+    const link = createDeviceLink({ dbGet: s.primary.D.get, dbPut: s.primary.D.put, myPubB64: () => s.root.pub, myId: () => s.root.pub.slice(0, 12), sigPub: () => s.root.ed,
+      signMessage: s.root.sign, fetchDeviceList: async () => cp.devices.map(d => d.pub), checkpoint: devices => host.checkpoint(devices), postAPIRaw: post,
+      showConfirm: async () => true, showToast: vi.fn(), t: k => k, bustDevCache: vi.fn(), dbg });
+    await link.handleCommand('/unlink 2');
+    expect((await host.state(s.root.pub)).revoked).toContain(s.device.pub);
+    const sk = await s.primary.D.get('identity', 'gsk:' + group.id); expect(sk.epoch).toBe(5); expect(sk.counter).toBe(0); expect(sk.chainKey).not.toEqual(Array(32).fill(3));
+    const deliveries = send.mock.calls.filter(([, msg]) => msg.isSenderKey);
+    expect(deliveries.map(([, , pub]) => pub)).toEqual([other.pub]);
+    expect(JSON.parse(JSON.parse(deliveries[0][1].payload).body).chainKey).toEqual(sk.chainKey);
+    expect(send.mock.calls.some(([, , pub]) => pub === s.device.pub)).toBe(false);
+    expect(post).toHaveBeenCalledWith('/device/set', expect.objectContaining({ devices: expect.not.arrayContaining([expect.objectContaining({ pub: s.device.pub })]) }));
+    await author.rotate(group.id); expect((await s.primary.D.get('identity', 'gsk:' + group.id)).epoch).toBe(5);
+  });
+  it('lets only the root bootstrap checkpoint delivery to its devices, deferring other unready sessions', async () => {
+    const s = await scenario();
+    vi.stubGlobal('navigator', { locks: { request: async (_key, fn) => fn() } });
+    const encrypt = vi.fn(async () => 'ciphertext'), send = vi.fn(), dbg = vi.fn();
+    const deps = { peerInfo: async () => ({ caps: ['device-revocation-v1'] }), encrypt, send, dbg };
+    const primary = createDeviceRevocationHost({ ...s.primary.D, ...deps, all: async () => [{ pubB64: s.peer.pub }] });
+    await primary.broadcast();
+    expect(encrypt).toHaveBeenCalledTimes(1); expect(encrypt).toHaveBeenCalledWith(expect.any(String), s.device.pub);
+    encrypt.mockClear(); send.mockClear();
+    const secondary = createDeviceRevocationHost({ ...s.secondary.D, ...deps, all: async () => [{ pubB64: s.root.pub }] });
+    await secondary.broadcast();
+    expect(encrypt).not.toHaveBeenCalled(); expect(send).not.toHaveBeenCalled();
+    s.secondary.rows.set('identity:sess:' + s.root.pub.slice(0, 12), { sendCounter: 1, recvCounter: 0 });
+    await secondary.broadcast();
+    expect(encrypt).not.toHaveBeenCalled();
+    const piggyback = JSON.parse(await secondary.wrap('next message', s.root.pub));
+    expect(piggyback.body).toBe('next message'); expect(piggyback.consents).toContainEqual(s.cert);
+    s.secondary.rows.set('identity:sess:' + s.root.pub.slice(0, 12), { sendCounter: 1, recvCounter: 1 });
+    await secondary.broadcast();
+    expect(encrypt).toHaveBeenCalledTimes(1); expect(encrypt).toHaveBeenCalledWith(expect.any(String), s.root.pub);
+    expect(send).toHaveBeenCalledTimes(1); expect(send).toHaveBeenCalledWith(s.root.pub.slice(0, 12), expect.objectContaining({ isProfile: true, payload: 'ciphertext' }), s.root.pub);
+    expect(dbg).not.toHaveBeenCalled();
+    encrypt.mockClear();
+    const get = async (store, key) => { if (key.startsWith('sess:')) throw new Error('session unavailable'); return s.secondary.D.get(store, key); };
+    await createDeviceRevocationHost({ ...s.secondary.D, ...deps, get, all: async () => [] }).broadcast();
+    expect(encrypt).not.toHaveBeenCalled(); expect(dbg).toHaveBeenCalledWith(expect.any(Error), 'device checkpoint distribution');
+  });
+  it('gossips shared group authority to its own devices before they have sent consent back', async () => {
+    const s = await scenario();
+    vi.stubGlobal('navigator', { locks: { request: async (_key, fn) => fn() } });
+    s.primary.contact(s.peer);
+    const peer = setup(s.peer), cp = await peer.authority.own();
+    await s.primary.authority.accept(cp);
+    s.primary.rows.delete('identity:verify:device-owner:' + s.device.pub);
+    const group = { isGroup: true, members: [{ pubB64: s.root.pub }, { pubB64: s.peer.pub }] };
+    const host = createDeviceRevocationHost({ ...s.primary.D, all: async () => [group], peerInfo: async () => ({ caps: ['device-revocation-v1'] }) });
+    const wrapped = JSON.parse(await host.wrap('sender key', s.device.pub));
+    expect(wrapped.checkpoints.map(c => c.root)).toContain(s.peer.pub);
+    expect(await s.primary.D.get('identity', 'verify:device-owner:' + s.device.pub)).toBeUndefined();
   });
 });

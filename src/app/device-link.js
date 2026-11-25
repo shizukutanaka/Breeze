@@ -24,7 +24,7 @@ export function createDeviceLink(D) {
     }));
   }
   async function linkDevicePub(arg, serialized = false) {
-    if (D.checkpoint && !serialized) return locked(() => linkDevicePub(arg, true));
+    if (D.checkpoint && globalThis.navigator?.locks && !serialized) return locked(() => linkDevicePub(arg, true));
     let offer;
     if (arg.startsWith('breeze-device-offer:')) {
       try { offer = readDeviceToken('offer', arg); if (!await verifyOffer(offer)) throw new Error('invalid offer'); arg = offer.pub; }
@@ -110,7 +110,7 @@ export function createDeviceLink(D) {
   // dispatcher has already claimed the input (preventDefault +
   // clearInput) when the prefix matched.
   async function handleCommand(val, serialized = false) {
-    if (D.checkpoint && val.startsWith('/unlink ') && !serialized) return locked(() => handleCommand(val, true));
+    if (D.checkpoint && globalThis.navigator?.locks && val.startsWith('/unlink ') && !serialized) return locked(() => handleCommand(val, true));
     if (val === '/link keys') {
       try { await locked(async () => {
         const offer = { v: 1, pub: D.myPubB64(), ed: D.sigPub(), nonce: [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('') };

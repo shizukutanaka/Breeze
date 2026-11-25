@@ -162,7 +162,7 @@ function sliceBetween(startMarker, endMarker) {
   if (a < 0 || b < 0) throw new Error(`slice markers not found: ${startMarker} .. ${endMarker}`);
   return html.slice(a, b);
 }
-function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
+function buildBundleBuilder(ed, signingPubB64, configExtra = {}, navigator = { locks: {} }) {
   const stores = new Map();
   const dbPut = async (store, value, key) => { stores.set(`${store}:${key}`, value); return true; };
   let n = 0;
@@ -173,7 +173,7 @@ function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
   const fn = new Function(
     'genRatchetKey', 'dbPut', 'CONFIG', '_signingKey', '_signingPubB64',
     'CAPS_X3DH_V5', 'CAPS_GROUP_V5', 'CAPS_SEAL_V2', 'CAPS_MULTI_RELAY', 'CAPS_PQXDH', 'CAPS_PROFILE', 'CAPS_STICKER', 'CAPS_LOC', '_myHomeWire',
-    'homeRelays', '_dbg',
+    'homeRelays', '_dbg', 'navigator',
     `${sliceBetween('async function generatePreKeyBundle', 'async function createIdentity')}
      return { generatePreKeyBundle };`);
   const { generatePreKeyBundle } = fn(
@@ -181,7 +181,7 @@ function buildBundleBuilder(ed, signingPubB64, configExtra = {}) {
     { PREKEY_OTP_COUNT: 3, X3DH_V5_ENABLED: true, GROUP_RATCHET_V5: true, SEAL_V2_ENABLED: true, MULTI_RELAY_ENABLED: true, ...configExtra },
     { privateKey: ed.privateKey }, signingPubB64,
     'x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'pqxdh', 'profile-v1', 'sticker-v1', 'loc-v1', () => [],
-    () => [], () => {},
+    () => [], () => {}, navigator,
   );
   return { generatePreKeyBundle, stores };
 }
@@ -199,7 +199,7 @@ describe('stage-3 step 5 — pqxdh cap emission (real generatePreKeyBundle, slic
     const { generatePreKeyBundle } = buildBundleBuilder(ed, pubB64, { PQXDH_ENABLED: true });
     const bundle = await generatePreKeyBundle();
     expect(bundle.pqPreKey).toBeTruthy();
-    expect(bundle.caps).toEqual(['x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'profile-v1', 'sticker-v1', 'loc-v1', 'pqxdh']);
+    expect(bundle.caps).toEqual(['device-revocation-v1', 'x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'profile-v1', 'sticker-v1', 'loc-v1', 'pqxdh']);
   });
 
   it('flag ON + helper absent: no pair, and NO pqxdh cap (never advertise an unservable capability)', async () => {
@@ -208,7 +208,7 @@ describe('stage-3 step 5 — pqxdh cap emission (real generatePreKeyBundle, slic
     const { generatePreKeyBundle } = buildBundleBuilder(ed, pubB64, { PQXDH_ENABLED: true });
     const bundle = await generatePreKeyBundle();
     expect('pqPreKey' in bundle).toBe(false);
-    expect(bundle.caps).toEqual(['x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'profile-v1', 'sticker-v1', 'loc-v1']);
+    expect(bundle.caps).toEqual(['device-revocation-v1', 'x3dh-v5', 'group-v5', 'seal-v2', 'multi-relay', 'profile-v1', 'sticker-v1', 'loc-v1']);
   });
 
   it('flag OFF (the shipped default) + pair minted: pair served, cap withheld (step-3 state)', async () => {

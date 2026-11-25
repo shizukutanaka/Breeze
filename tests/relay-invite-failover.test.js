@@ -32,6 +32,7 @@ import worker from '../_worker.js';
 import { makeEnv } from './helpers/mockKV.js';
 import { loadOrCreateRelayIdentity } from '../server/relay-identity.js';
 
+globalThis._deviceRevocation = { allowed: async () => null, admit: async () => true, wrap: async body => body, unwrap: async body => body, targets: async () => null };
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
 const ROOT = path.resolve(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');

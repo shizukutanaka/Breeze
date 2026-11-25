@@ -51,6 +51,7 @@ export function createDeviceRevocation(D) {
   const ownerKey = pub => 'verify:device-owner:' + pub;
   const consentKey = b => 'verify:device-consent:' + b.root + ':' + b.pub;
   const chains = new Map();
+  let gossip = 0;
   async function locked(root, work) {
     const previous = chains.get(root) || Promise.resolve();
     const next = previous.catch(() => {}).then(() => D.lock(root, work)); chains.set(root, next);
@@ -73,8 +74,9 @@ export function createDeviceRevocation(D) {
     return locked(h.root, async () => {
       const old = await D.get('identity', headKey(h.root));
       if (old?.epoch === h.epoch && old.hash !== h.hash) throw new Error('device checkpoint equivocation');
-      if (!old || h.epoch > old.epoch) await put(headKey(h.root), h);
       const current = await state(h.root);
+      if (current?.epoch === h.epoch && await hash(checkpointText(current)) !== h.hash) throw new Error('device checkpoint equivocation');
+      if (!old || h.epoch > old.epoch) await put(headKey(h.root), h);
       if (!current || current.epoch < h.epoch) await D.notice?.('checkpoint', h.root, h.epoch);
     });
   }
@@ -108,12 +110,12 @@ export function createDeviceRevocation(D) {
       return accept(c, D.ed());
     });
   }
-  async function own() {
+  async function own(initialize = true) {
     const link = await D.get('identity', 'verify:device-link');
     const account = await D.get('identity', 'account');
     const root = link?.binding?.root || account?.root || D.pub();
     const existing = await state(root);
-    if (existing || root !== D.pub()) return existing;
+    if (existing || root !== D.pub() || !initialize) return existing;
     const devices = D.initialDevices ? await D.initialDevices() : [{ pub: D.pub() }];
     return devices ? issue(devices) : null;
   }
@@ -124,6 +126,8 @@ export function createDeviceRevocation(D) {
     if (!root) return null;
     if (pub === root) return true;
     const c = await state(root), head = await D.get('identity', headKey(root));
+    const trusted = await pin(root);
+    if (c && c.rootEd !== trusted || head && head.rootEd !== trusted) return false;
     if (head && (!c || head.epoch > c.epoch)) return false;
     return c ? c.devices.some(d => d.pub === pub) && !c.revoked.includes(pub) : null;
   }
@@ -151,6 +155,9 @@ export function createDeviceRevocation(D) {
     return b;
   }
   async function certified(group) {
+    const account = await D.get('identity', 'account');
+    const link = await D.get('identity', 'verify:device-link');
+    if ((link?.binding?.root || account?.root || D.pub()) === D.pub()) return true;
     const c = await own();
     if (!c || c.root === D.pub()) return c?.root === D.pub();
     if (!await authorPin(D.pub())) return false;
@@ -162,21 +169,28 @@ export function createDeviceRevocation(D) {
     const c = await own(), roots = new Set([c?.root, ...(await D.sharedRoots?.(peer) || [])]);
     const owner = await D.get('identity', ownerKey(peer)); roots.add(owner || peer);
     const checkpoints = [], heads = [], consents = [];
-    for (const root of roots) if (root) {
+    const envelope = () => JSON.stringify({ breezeDeviceAuthority: 1, body, checkpoints, heads, consents });
+    const fits = () => encoder.encode(envelope()).length <= Math.min(65535, encoder.encode(JSON.stringify(body)).length + 32768);
+    const others = [...roots].filter(root => root && root !== c?.root);
+    const offset = others.length ? gossip++ % others.length : 0;
+    for (const root of [c?.root, ...others.slice(offset), ...others.slice(0, offset)]) if (root) {
       const cp = await state(root), head = await D.get('identity', headKey(root));
       if (cp) {
         checkpoints.push(cp);
-        for (const pub of [...cp.devices.map(d => d.pub), ...cp.revoked]) {
-          const consent = await D.get('identity', consentKey({ root, pub })); if (consent) consents.push(consent);
+        if (!fits()) { checkpoints.pop(); if (root === c?.root) throw new Error('device checkpoint frame too large'); }
+        else for (const pub of cp.devices.map(d => d.pub)) {
+          const consent = await D.get('identity', consentKey({ root, pub }));
+          if (consent) { consents.push(consent); if (!fits()) consents.pop(); }
         }
       }
-      if (head) heads.push(head);
+      if (head) { heads.push(head); if (!fits()) heads.pop(); }
     }
-    return JSON.stringify({ breezeDeviceAuthority: 1, body, checkpoints, heads, consents });
+    return envelope();
   }
   async function unwrap(body, peer) {
     let value; try { value = JSON.parse(body); } catch { return body; }
     if (value?.breezeDeviceAuthority !== 1) return body;
+    if (encoder.encode(body).length > 65535) throw new Error('device authority frame bounds');
     if (typeof value.body !== 'string' || !Array.isArray(value.checkpoints) || !Array.isArray(value.heads) || value.checkpoints.length > 64 || value.heads.length > 64) throw new Error('device authority envelope');
     if (value.consents !== undefined && (!Array.isArray(value.consents) || value.consents.length > 640)) throw new Error('device consent bounds');
     for (const b of value.consents || []) if (await pin(b?.root)) await acceptConsent(b, peer);
@@ -187,12 +201,13 @@ export function createDeviceRevocation(D) {
   }
   async function keyFor(group, stored) {
     const epochs = { ...(stored.deviceEpochs || {}) }; let rotate = false;
-    const c = await own(), roots = new Set([c?.root, ...(group?.members || []).map(m => m.pubB64)]);
+    const c = await own(D.enabled?.() !== false), roots = new Set([c?.root, ...(group?.members || []).map(m => m.pubB64)]);
     for (const root of roots) if (root) {
       const cp = await state(root);
       if (cp && cp.revoked.length && (epochs[root] || 0) < cp.epoch) { epochs[root] = cp.epoch; rotate = true; }
     }
     if (!rotate) return stored;
+    if (D.enabled?.() === false) throw new Error('device revocation rotation requires Web Locks');
     if (!Number.isInteger(stored.epoch) || stored.epoch >= 0xFFFFFFFF) throw new Error('sender key epoch exhausted');
     const bytes = Array.from(crypto.getRandomValues(new Uint8Array(32)));
     return { ...(stored.v === 5 ? { v: 5, chainKey: bytes, skipped: {} } : { raw: bytes }), epoch: stored.epoch + 1, counter: 0, authorSigV: stored.authorSigV, deviceEpochs: epochs };
@@ -201,18 +216,20 @@ export function createDeviceRevocation(D) {
 }
 
 export function createDeviceRevocationHost(D) {
+  const enabled = !!globalThis.navigator?.locks;
   let authority;
   async function groups(root) {
     return (await D.all('contacts')).filter(g => g.isGroup && g.members?.some(m => m.pubB64 === root));
   }
   async function capable(pub) {
+    if (!enabled) return false;
     try { return (await D.peerInfo(pub.slice(0, 12))).caps?.includes(DEVICE_REVOCATION_CAP) === true; }
     catch (e) { D.dbg(e, 'device checkpoint capability'); return false; }
   }
   async function rotate(root) {
     for (const g of await groups(root)) await D.groupAuthor()?.rotate(g.id);
   }
-  authority = createDeviceRevocation({ ...D, capable,
+  authority = createDeviceRevocation({ ...D, capable, enabled: () => enabled,
     lock: (root, work) => {
       if (!globalThis.navigator?.locks) throw new Error('device revocation requires Web Locks');
       return navigator.locks.request('breeze-device-authority:' + D.pub() + ':' + root, work);
@@ -224,7 +241,8 @@ export function createDeviceRevocationHost(D) {
       return registry.list.map(pub => ({ pub, ...(registry.bindings?.[pub] ? { binding: registry.bindings[pub] } : {}) }));
     },
     sharedRoots: async peer => {
-      const owner = await D.get('identity', 'verify:device-owner:' + peer) || peer;
+      const own = await authority.own();
+      const owner = await D.get('identity', 'verify:device-owner:' + peer) || (own?.devices.some(d => d.pub === peer) ? own.root : peer);
       return [...new Set((await groups(owner)).flatMap(g => g.members.map(m => m.pubB64)))].slice(0, 60);
     },
     changed: rotate,
@@ -245,12 +263,16 @@ export function createDeviceRevocationHost(D) {
     }
     for (const pub of pubs) if (pub && pub !== D.pub() && await authority.allowed(pub) !== false && await capable(pub)) {
       try {
+        const session = await D.get('identity', 'sess:' + pub.slice(0, 12));
+        if (!session?.recvCounter && (cp.root !== D.pub() || !cp.devices.some(d => d.pub === pub))) continue;
         const payload = await D.encrypt(JSON.stringify({ type: 'device_checkpoint' }), pub);
         if (payload) await D.send(pub.slice(0, 12), { to: pub.slice(0, 12), from: D.pub().slice(0, 12), fromPub: D.pub(), payload, ts: Date.now(), isProfile: true, ...(cp.root !== D.pub() ? { acctRoot: cp.root } : {}) }, pub);
       } catch (e) { D.dbg(e, 'device checkpoint distribution'); }
     }
   }
   async function checkpoint(devices) {
+    if (!enabled) return;
+    if (!await authority.own()) throw new Error('device checkpoint baseline unavailable');
     const cp = await authority.issue(devices);
     await broadcast(); return cp;
   }
@@ -258,5 +280,7 @@ export function createDeviceRevocationHost(D) {
     const pub = msg.fromPub || (await D.get('contacts', msg.from))?.pubB64;
     return !pub || await authority.allowed(pub, msg.acctRoot) !== false;
   }
-  return { ...authority, capable, targets, checkpoint, broadcast, admit };
+  return { ...authority, capable, targets, checkpoint, broadcast, admit,
+    wrap: (body, peer) => enabled ? authority.wrap(body, peer) : Promise.resolve(body),
+  };
 }
