@@ -4,6 +4,8 @@
 
 ### Security
 
+- **Persistent new-device/account alerts.** Extracted registry verification into deployed `src/app/device-alerts.js`; root-signed previously unseen linked devices, independently verified upgraded-client session/restore and push claims, local acknowledgement, review/unlink and `/security` device/activity lists. Added a small rate-limited owner-authenticated activity endpoint and public-key comparison through no-OTP status. Relay key discrepancies are explicitly unverified, not fabricated access evidence. EN/JA and English locale fallbacks, offline precache and tests included. Relay omission, legacy/noncooperating clients, background delays and lack of copied-key/session revocation remain documented limitations.
+
 - **Self-hosted relay: `TRUST_PROXY` no longer trusts a client-forged address.** The Node host took the *first* `X-Forwarded-For` entry as the client address. Common proxies (nginx `$proxy_add_x_forwarded_for`, Traefik) append to whatever the client sent, so a client could put any value first and get a fresh per-IP rate-limit bucket on every request — or spend someone else's. The host now uses the last entry, the one the operator's proxy appended.
 
 ### Fixed

@@ -155,6 +155,10 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .mb-3 { margin-bottom: 12px }
 
 /* ─── Messenger layout ─── */
+.device-alert { flex: none; max-height: 30dvh; overflow: auto; background: var(--s1); border: 2px solid var(--r); border-radius: var(--rad); color: var(--t1); padding: 12px; font-size: 14px; line-height: 1.5 }
+.device-alert > b { color: var(--r) }
+#msg-main:has(> .device-alert):not(.hidden) { display: flex; flex-direction: column; height: calc(100dvh - 100px) }
+#msg-main:has(> .device-alert) .msg-layout { flex: 1; min-height: 0; height: auto }
 .msg-layout {
   display: flex; gap: 0;
   height: calc(100vh - 100px); height: calc(100dvh - 100px);
@@ -1362,6 +1366,7 @@ window.__breezeProfile = { sanitizeProfile, buildProfilePayload, parseProfilePay
 window.__breezeProfileUI = { createProfileUI };
 import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
+import { createDeviceAlerts, activityHash } from './src/app/device-alerts.js'; window.__breezeDeviceAlerts = { createDeviceAlerts, activityHash };
 import { createDeviceLink } from './src/app/device-link.js';
 window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel, createStickersUI } from './src/app/stickers.js';
@@ -1573,6 +1578,7 @@ const _scrollBehavior = () => _prefersReducedMotion() ? 'auto' : 'smooth';
 
 const _I = {
   en: {
+    daTitle: "Account security alert",     daLinked: "Previously unseen linked device (root signature verified)",     daSession: "Another installation used this identity (signature verified)",     daPush: "Another installation announced a push subscription (signature verified)",     daRelayKeys: "Relay reports different or missing account keys — unverified discrepancy",     daAck: "Acknowledge",     daReview: "Review devices",     daRevoke: "Unlink",     daUnavailable: "Account activity checking is unavailable or incomplete. The relay may be withholding activity. This is not proof of a new device.",     daLimit: "Only signed, observed activity can be verified. The relay can withhold records. Session and push reports require upgraded, cooperating clients.",     daRecovery: "Unlinking revokes linked-device fan-out only. A copied identity or push subscription cannot be remotely revoked here: recover onto a fresh identity, notify contacts and stop using the compromised identity.",
     opTitle: "Offline contact pairing", opScope: "Exchange these identity invites BOTH ways in person. They expire in 30 minutes. Compare the fingerprint on both devices and confirm only if it matches. Keep this app open until /rendezvous finishes; reloading cancels pending pairing. No alias lookup or relay verification.", opImport: "Import peer invite", opMatches: "I compared both devices: the fingerprint matches", opConfirm: "Verify and add contact", opCompare: "Compare this fingerprint on both devices. It binds both encryption keys, signing keys and invite nonces.", opConfirmed: "Contact verified. Open their chat and exchange /rendezvous codes. Messaging unlocks after encrypted key confirmation.", opInvalid: "Offline pairing failed: invalid, expired, used or mismatched code/key, or unsupported cryptography. Cancel pending pairing and exchange fresh invites.", opPending: "Finish offline pairing with /rendezvous before sending. Use /offlinepair cancel to cancel.", opCancelled: "Pending offline pairing cancelled. Exchange fresh invites on both devices to retry.", opOutput: "Your offline identity invite", opInput: "Peer offline identity invite",
     rvTitle: 'Manual connection', rvScope: 'Requires an existing encrypted session or confirmed /offlinepair invitation. Exchange connection codes privately by QR or copy/paste; they expire in 10 minutes.',
     rvQRTooLarge: 'This code is too large for one QR. Use copy/paste instead.', rvScanUnavailable: 'Camera QR scanning is unavailable in this browser. Use copy/paste instead.',
@@ -4880,6 +4886,7 @@ async function initMessenger(dbName) {
     return store === 'messages' && rec ? _msgOpenRecord(rec) : rec;
   }
   async function dbPut(store, val, key) {
+    if (store === 'settings' && key === 'device-alerts:v1') return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => resolve(true); tx.onabort = tx.onerror = () => reject(tx.error || new Error('activity persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
     if (store === 'messages') val = await _msgSealRecord(val);
     if (store === 'identity' && _keywrapSlots.includes(key)) {
       try {
@@ -6408,40 +6415,8 @@ async function initMessenger(dbName) {
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
   // Returns { list, ts }: verified device pubs + the registry's signed revision ts (D14).
-  async function _fetchDeviceRegistry(accountId, rootPubB64) {
-    if (!API) return null;
-    try {
-      const resp = await postAPIRaw('/device/list', { accountId });
-      if (!resp.ok) return null;
-      const rec = await resp.json();
-      if (!rec || !rec.root || !Array.isArray(rec.devices)) return null;
-      if (rootPubB64 && rec.root !== rootPubB64) return null; // registry for a different root
-      // Recompute the signed digest and verify against the ROOT's registered signing key.
-      const digestBuf = await crypto.subtle.digest('SHA-256',
-        new TextEncoder().encode(JSON.stringify(rec.devices.map(d => d.pub))));
-      const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16)
-        .map(b => b.toString(16).padStart(2, '0')).join('');
-      if (!rec.devices.some(d => d.pub === rec.root)) return null;
-      // Verify under the account's PINNED signing key (TOFU pin from message signatures), or my
-      // own signing key when the registry is mine. No pinned key -> DO NOT trust extra devices:
-      // an unverifiable registry falls back to single-device rather than letting the relay
-      // inject a listening device. (Withholding degrades to today's behaviour either way.)
-      let sigPub = null;
-      if (accountId === myId) sigPub = _signingPubB64;
-      if (!sigPub) sigPub = (await dbGet('contacts', accountId).catch(() => null))?.sigPub || null;
-      if (!sigPub) {
-        // Secondary device verifying its OWN account: use the root signing key pinned at link
-        // time (TOFU anchored to the physically-pasted root pub, like adding a contact by key).
-        const acct = await dbGet('identity', 'account').catch(() => null);
-        if (acct?.root && acct.root.slice(0, 12) === accountId && acct.rootEd) sigPub = acct.rootEd;
-      }
-      if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
-      const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
-      if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
-      if (accountId === myId && rec.ts) _ownRegistryTs = rec.ts; // my next presence beat advertises this revision (D14)
-      return { list: rec.devices.map(d => d.pub), ts: rec.ts || 0 };
-    } catch(e) { _dbg(e, 'device-list'); return null; }
-  }
+  const _deviceAlerts = globalThis.__breezeDeviceAlerts?.createDeviceAlerts({ api: () => !!API, post: postAPIRaw, get: dbGet, put: dbPut, verify: verifySignature, sign: signMessage, myId: () => myId, me: () => myPubB64, ed: () => _signingPubB64, minute: MS.MIN, ownTs: ts => { _ownRegistryTs = ts; }, dbg: _dbg, t, esc, safeSetHTML, root: () => _ac.signal.aborted ? null : _DOM.get('msg-main'), unlink: i => _deviceLink.handleCommand('/unlink ' + i) });
+  async function _fetchDeviceRegistry(accountId, rootPubB64) { return await _deviceAlerts?.registry(accountId, rootPubB64) || null; }
   // A camera-scan button for the link panels, mirroring the rendezvous
   // dialog's availability rule: no BarcodeDetector (or no QR helper)
   // means the button stays disabled with the reason shown, and the
@@ -7603,6 +7578,7 @@ async function initMessenger(dbName) {
   // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
   // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
+    _deviceAlerts?.check(); _intervals.push(setInterval(() => _deviceAlerts?.check(), MS.MIN));
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
     if (shortIdEl) {
@@ -10777,7 +10753,7 @@ async function initMessenger(dbName) {
   // The /security and /who panels live in src/app/info-panels.js
   // (stage 5 step 5 line-budget move); the dispatcher delegates to them.
   const _infoPanels = globalThis.__breezeInfoPanels?.createInfoPanels({
-    dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML,
+    dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML, deviceAlerts: _deviceAlerts,
     cmdPanel: (id) => _cmdPanelEl(id),
     cryptoStack: () => _cryptoStack, activeContact: () => activeContact,
     atRestIsWrapped: _atRestIsWrapped, p2pStats: () => _p2pStats, turnCredential: () => _turnCredential,
@@ -13108,8 +13084,9 @@ async function initMessenger(dbName) {
           if (!await ensureRelayVerified(relay)) continue;
           if (_relayHealthByUrl.get(relay.url)?.vapidPublicKey !== boundKey) continue;
         }
-        await postAPIRelay(relay, '/push/subscribe', { userId: myId, subscription: subJson,
+        const subscribed = await postAPIRelay(relay, '/push/subscribe', { userId: myId, subscription: subJson,
           ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJson.endpoint || ''}:${subJson.keys?.p256dh || ''}:${subJson.keys?.auth || ''}`)) }).catch(e => _dbg(e));
+        if (subscribed?.ok && isOriginRelay(relay)) await _deviceAlerts?.announce('push', await globalThis.__breezeDeviceAlerts.activityHash(JSON.stringify([subJson.endpoint, subJson.keys?.p256dh])));
       }
     } catch(e) { _dbg(e, 'push'); }
   }

@@ -74,6 +74,7 @@ export function createInfoPanels(D) {
         D.t('cmdLblKeyExchange') + ': <span class="i-g">' + cs.keyExchange + '</span> ' + (D.hasX25519() ? D.t('secBrowserNative') : D.t('secWebCryptoFallback')),
         D.t('secLblMsgSigning') + ': <span class="i-g">' + cs.signing + '</span>' + (D.hasEd25519() ? ' ' + D.t('secBrowserNative') : ''),
         D.t('secLblSigningKey') + ': ' + (D.signingPubB64() ? '✓ ' + D.signingPubB64().slice(0, 8) + '...' : '✗ ' + D.t('secNotAvail')),
+        await D.deviceAlerts?.security() || '',
         D.t('secLblEncryption') + ': <span class="i-g">' + cs.encryption + '</span> ' + D.t('secBrowserNative'),
         D.t('secLblKDF') + ': ' + cs.kdf + ' ' + D.t('secBrowserNative'),
         D.t('secLblRatchet') + ': ' + cs.ratchet + ' ' + D.t('secFwdSecParen'),
