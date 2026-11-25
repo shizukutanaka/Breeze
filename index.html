@@ -7664,7 +7664,7 @@ async function initMessenger(dbName) {
   // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
   // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
-    _deviceAlerts?.check(); _intervals.push(setInterval(() => _deviceAlerts?.check(), MS.MIN));
+    _deviceAlerts?.check(); _intervals.push(setInterval(() => { if (!_powerPresenceOff()) _deviceAlerts?.check(); }, MS.MIN));
     await _contactVerify.migrate();
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
