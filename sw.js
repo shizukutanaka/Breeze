@@ -1,5 +1,5 @@
 const VERSION = '3.8.0';
-const CACHE = 'breeze-v' + VERSION + '-lookalike-names';
+const CACHE = 'breeze-v' + VERSION + '-vault-history';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   '/src/app/device-alerts.js',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
@@ -9,7 +9,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // (pqxdh.js → pq.js → mlkem.js/bytes.js, already listed).
   '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js',
   '/src/crypto/pqxdh.js', '/src/crypto/pq.js',
-  '/src/app/group-author.js', '/src/app/vault.js', '/src/app/contact-verify.js',
+  '/src/app/group-author.js', '/src/app/vault.js', '/src/app/vault-history.js', '/src/app/vault-browser.js', '/src/app/contact-verify.js',
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.

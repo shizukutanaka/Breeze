@@ -129,7 +129,7 @@ export function historyDatabase(db, codec, runtime) {
       };
       tx.addEventListener('complete', () => {
         runtime.transactions.delete(tx);
-        if (!failure) for (const [name, rows] of views) cache.set(name, { revision: catalog.stores[name].revision, rows });
+        if (!failure && runtime.epoch() === epoch) for (const [name, rows] of views) cache.set(name, { revision: catalog.stores[name].revision, rows });
       });
       tx.addEventListener('abort', () => { live = false; cache.clear(); runtime.transactions.delete(tx); });
       const initialize = async () => {

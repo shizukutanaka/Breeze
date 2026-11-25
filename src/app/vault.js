@@ -1,4 +1,5 @@
 import { stageHistory, snapshotHistory, inspectHistory, commitHistory, historyDatabase } from './vault-history.js';
+import { createBrowserVault, commitBrowserVault } from './vault-browser.js';
 
 const VERSION = 1, ITERATIONS = 600000;
 const CONTROL = 'breeze-vault', MANIFEST = 'vault:manifest';
@@ -99,10 +100,13 @@ const historyCodec = (key, manifest) => ({
 export async function sealVaultState(key, manifest, stages = []) {
   const state = { phase: manifest.phase, accounts: manifest.accounts || [], accountIndex: manifest.accountIndex || null, inventories: stages.map(([name, rows]) => [name, rows.map(([slot]) => slot)]) };
   if (manifest.historyV !== undefined) state.historyV = manifest.historyV;
+  if (manifest.storageV !== undefined) state.storageV = manifest.storageV;
+  if (manifest.browser !== undefined) state.browser = manifest.browser;
   return { ...manifest, auth: await sealVaultRecord(key, manifest, CONTROL, 'meta', 'state', state) };
 }
 export async function openVaultState(key, manifest) {
   const state = await openVaultRecord(key, manifest, CONTROL, 'meta', 'state', manifest.auth);
+  if (state.storageV !== manifest.storageV || JSON.stringify(state.browser) !== JSON.stringify(manifest.browser)) throw new Error('vault browser journal authentication');
   if (state.phase !== manifest.phase || state.historyV !== manifest.historyV || JSON.stringify(state.accounts) !== JSON.stringify(manifest.accounts || []) || JSON.stringify(state.accountIndex) !== JSON.stringify(manifest.accountIndex || null)) throw new Error('vault journal authentication');
   return state;
 }
@@ -236,6 +240,8 @@ export function vaultDatabase(db, runtime) {
 let singleton;
 export function getVault(D) { return singleton ||= createVaultRuntime(D); }
 export function createVaultRuntime(D) {
+  const bootstrap = D.browser || globalThis.__breezeBrowser;
+  let browser;
   let control, manifest = null, key = null, blocked = false, generation = 0, release, lease, quiesce = D.quiesce || (() => {});
   const transactions = new Set(), aborters = new Set(), expected = new Map(), timers = new Set();
   let cancelTimer;
@@ -250,16 +256,20 @@ export function createVaultRuntime(D) {
     await done; manifest = state;
   };
   const read = () => request(control.transaction('meta').objectStore('meta').get('state'));
-  async function freeze(reload = false) {
+  async function freeze(reload = false, keepBrowser = false) {
     blocked = true; generation++; key = null;
     for (const tx of transactions) { try { tx.abort(); } catch { /* completed */ } }
     for (const ac of aborters) ac.abort();
     for (const timer of timers) cancelTimer?.(timer);
     timers.clear();
-    for (const cache of caches) cache.clear();
     try { quiesce(); } catch (e) { D.dbg(e, 'vault-quiesce'); }
-    release?.(); release = null; lease = null;
-    if (reload) D.reload();
+    try { return await browser?.freeze(keepBrowser); }
+    finally {
+      for (const cache of caches) { try { cache.clear(); } catch (e) { D.dbg(e, 'vault-cache'); } }
+      caches.clear(); expected.clear();
+      release?.(); release = null; lease = null;
+      if (reload) D.reload();
+    }
   }
   if (channel) channel.onmessage = e => { if (e.data?.type === 'freeze') freeze(true); };
   async function hold() {
@@ -277,12 +287,15 @@ export function createVaultRuntime(D) {
     const clients = new Set(locks.held.filter(l => l.name === 'breeze-vault-runtime').map(l => l.clientId));
     if ([...locks.held, ...locks.pending].some(l => l.name === 'breeze-leader' && !clients.has(l.clientId))) throw new Error(D.t('vaultOldTabs'));
     const epoch = generation + 1;
-    const result = navigator.locks.request('breeze-vault-runtime', () => {
+    let freezing;
+    const result = navigator.locks.request('breeze-vault-runtime', async () => {
+      const snapshot = await freezing;
       if (generation !== epoch) throw new Error('vault changed concurrently');
-      return work();
+      return work(snapshot);
     });
     channel.postMessage({ type: 'freeze' });
-    await freeze();
+    freezing = freeze(false, true);
+    await freezing;
     return result;
   }
   async function names() {
@@ -333,16 +346,16 @@ export function createVaultRuntime(D) {
   }
   async function upgradeHistory() {
     const current = manifest, unlocked = key;
-    await exclusive(async () => {
+    await exclusive(async snapshot => {
       key = unlocked;
-      const next = { ...current, historyV: 2 }, stages = [];
+      const next = { ...current, historyV: 2, storageV: 1 }, stages = [];
       for (const name of await names()) {
         const db = await connect(name);
         try {
           if (db.objectStoreNames.contains('identity')) stages.push([name, [['history:v2', await historyStage(db, next, current, '')]]]);
         } finally { db.close(); }
       }
-      await save({ ...next, phase: 'enabling', accounts: stages.map(([name]) => name) }, stages);
+      await save({ ...next, phase: 'enabling', accounts: stages.map(([name]) => name), ...(snapshot ? { browser: await sealVaultRecord(key, next, CONTROL, 'meta', 'browser-journal', snapshot) } : {}) }, stages);
       await resume();
     });
   }
@@ -372,7 +385,8 @@ export function createVaultRuntime(D) {
         await atomicVaultRows(db, output, marker);
       } finally { db.close(); }
     }
-    const next = manifest.phase === 'disabling' ? null : await sealVaultState(key, { v: VERSION, id: manifest.id, wrapped: manifest.wrapped, phase: 'ready', ...(manifest.historyV === 2 ? { historyV: 2 } : {}) });
+    if (manifest.browser) await commitBrowserVault(bootstrap, await openVaultRecord(key, manifest, CONTROL, 'meta', 'browser-journal', manifest.browser), manifest.phase === 'disabling' ? null : historyCodec(key, manifest));
+    const next = manifest.phase === 'disabling' ? null : await sealVaultState(key, { v: VERSION, id: manifest.id, wrapped: manifest.wrapped, phase: 'ready', ...(manifest.historyV === 2 ? { historyV: 2 } : {}), ...(manifest.storageV === 1 ? { storageV: 1 } : {}) });
     if (manifest.phase === 'restoring' && manifest.accountIndex) D.restoreAccounts?.(manifest.accountIndex);
     const tx = control.transaction('meta', 'readwrite'), done = complete(tx), os = tx.objectStore('meta');
     for (const name of manifest.accounts) os.delete('stage:' + name);
@@ -391,8 +405,10 @@ export function createVaultRuntime(D) {
         await exclusive(async () => { key = unlocked; await resume(); });
         D.reload(); return new Promise(() => {});
       }
-      if (manifest.historyV !== 2) { await upgradeHistory(); D.reload(); return new Promise(() => {}); }
+      browser = await createBrowserVault(bootstrap, manifest.storageV === 1 ? historyCodec(key, manifest) : null, e => { D.dbg(e, 'vault-browser'); freeze(true).catch(error => D.dbg(error, 'vault-freeze')); });
+      if (manifest.historyV !== 2 || manifest.storageV !== 1) { await upgradeHistory(); D.reload(); return new Promise(() => {}); }
     } else {
+      browser = await createBrowserVault(bootstrap, null);
       for (const name of await names()) {
         const db = await connect(name);
         let old = false;
@@ -418,6 +434,7 @@ export function createVaultRuntime(D) {
     open: async (db, slot, value) => { const epoch = generation; assert(epoch); if (!key) throw new Error('vault unavailable'); const plain = await openVaultRecord(key, manifest, db, 'identity', slot, value); assert(epoch); return plain; },
     seal: async (db, slot, value) => { const epoch = generation; assert(epoch); if (!key) throw new Error('vault unavailable'); const sealed = await sealVaultRecord(key, manifest, db, 'identity', slot, value); assert(epoch); return sealed; },
     async boot() { await (ready ||= initialize()); assert(); return runtime; },
+    async flushBrowser() { await browser?.flush(); },
     async database(db) {
       assert();
       const marker = await request(db.transaction('identity').objectStore('identity').get(MANIFEST));
@@ -455,9 +472,9 @@ export function createVaultRuntime(D) {
       if (!control) await runtime.boot();
       const current = manifest;
       let nextKey, next;
-      if (enable) { if (current) throw new Error('vault already enabled'); ({ key: nextKey, manifest: next } = await newVault(pass)); next.historyV = 2; }
+      if (enable) { if (current) throw new Error('vault already enabled'); ({ key: nextKey, manifest: next } = await newVault(pass)); next.historyV = 2; next.storageV = 1; }
       else { if (!current) return; nextKey = await unlockVault(current, pass); next = current; }
-      return exclusive(async () => {
+      return exclusive(async snapshot => {
         key = nextKey;
         const stages = [];
         for (const name of await names()) {
@@ -487,7 +504,7 @@ export function createVaultRuntime(D) {
             stages.push([name, stage]);
           } finally { db.close(); }
         }
-        await save({ ...next, phase: enable ? 'enabling' : 'disabling', accounts: stages.map(([n]) => n) }, stages);
+        await save({ ...next, phase: enable ? 'enabling' : 'disabling', accounts: stages.map(([n]) => n), ...(snapshot ? { browser: await sealVaultRecord(key, next, CONTROL, 'meta', 'browser-journal', snapshot) } : {}) }, stages);
         await resume(); key = null; D.reload();
       });
     },
@@ -541,7 +558,7 @@ export function createVaultRuntime(D) {
         }
         finally { db.close(); }
       }
-      const catalog = await sealVaultRecord(key, manifest, CONTROL, 'meta', 'backup:accounts', { accounts: accounts.map(a => a.name), accountIndex: D.accounts() });
+      const catalog = await sealVaultRecord(key, manifest, CONTROL, 'meta', 'backup:accounts', { accounts: accounts.map(a => a.name), accountIndex: D.accounts(), ...(browser ? { browser: await browser.snapshot() } : {}) });
       return { vaultBackupV: VERSION, manifest, accounts, catalog };
     },
     async restore(data, pass) {
@@ -587,7 +604,10 @@ export function createVaultRuntime(D) {
           }
           finally { db.close(); }
         }
-        key = restored; await save({ ...data.manifest, phase: 'restoring', accounts: stages.map(([n]) => n), accountIndex: catalog.accountIndex }, stages); await resume(); D.reload();
+        key = restored;
+        const snapshot = catalog.browser || [[], []];
+        snapshot[0] = snapshot[0].filter(([k]) => k !== 'brz-accounts'); snapshot[0].push(['brz-accounts', JSON.stringify(catalog.accountIndex)]);
+        await save({ ...data.manifest, storageV: 1, phase: 'restoring', accounts: stages.map(([n]) => n), browser: await sealVaultRecord(key, data.manifest, CONTROL, 'meta', 'browser-journal', snapshot) }, stages); await resume(); D.reload();
       });
     },
     async command(value) {

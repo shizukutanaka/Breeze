@@ -1372,6 +1372,7 @@ window.__breezeProfileUI = { createProfileUI };
 import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
 import { createNameTools, safeName } from './src/app/lookalike-names.js'; window.__breezeNames = { createNameTools, safeName };
+import { browserBootstrap } from './src/app/vault-browser.js'; globalThis.__breezeBrowser = browserBootstrap(localStorage, sessionStorage, globalThis.__breezeBrowserBoot.methods, globalThis.__breezeBrowserBoot.pending); globalThis.__breezeBrowserBoot.current = globalThis.__breezeBrowser;
 import { createDeviceAlerts, activityHash } from './src/app/device-alerts.js'; window.__breezeDeviceAlerts = { createDeviceAlerts, activityHash };
 import { createDeviceLink } from './src/app/device-link.js';
 window.__breezeDeviceLink = { createDeviceLink };
@@ -1425,8 +1426,17 @@ window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set(
 </script>
 
 <script>
-
 'use strict';
+const _browserBoot = { methods: Object.fromEntries(['getItem', 'setItem', 'removeItem', 'key', 'clear'].map(k => [k, Storage.prototype[k]])), pending: [new Map(), new Map()], current: null };
+globalThis.__breezeBrowserBoot = _browserBoot;
+for (const method of ['getItem', 'setItem', 'removeItem', 'clear']) Storage.prototype[method] = function(key, value) {
+  if (_browserBoot.current) return _browserBoot.current.invoke(this, method, key, value);
+  if (method === 'clear') throw new Error('storage not ready');
+  const i = this === localStorage ? 0 : 1, pending = _browserBoot.pending[i]; key = String(key);
+  if (['brz-theme', 'brz-consent', 'brz-lang', 'brz-vault-browser-v1'].includes(key)) return _browserBoot.methods[method].call(this, key, value);
+  if (method === 'getItem') return pending.has(key) ? pending.get(key) : _browserBoot.methods.getItem.call(this, key);
+  pending.set(key, method === 'removeItem' ? null : String(value));
+};
 
 // BREEZE v3.0 — Configuration
 const _startTime = Date.now(); // v3.6: Track app uptime
@@ -3494,7 +3504,6 @@ async function _atRestMigrate(record, passphrase, context = '') {
 const _MSG_AAD_DOMAIN = 'breeze-msgstore-v1';
 let _msgStoreKey = null;
 const _msgMigrated = new Set();
-// R02: _diagBump is declared outside this mirrored block and test harnesses slice the block standalone — resolve it defensively, never throw.
 function _msgDiagBump(field) { if (typeof _diagBump === 'function') _diagBump(field); }
 function _msgAad(msgId) { return new TextEncoder().encode(_MSG_AAD_DOMAIN + ':' + msgId); }
 function _msgIsSealed(rec) { return !!(rec && rec.enc && rec.enc.v === 1 && typeof rec.enc.iv === 'string' && typeof rec.enc.ct === 'string'); }
@@ -3515,7 +3524,6 @@ async function _msgOpenRecord(rec) {
     return { ...rest, text: new TextDecoder().decode(new Uint8Array(pt)) };
   } catch(e) { _dbg(e, 'msg-open'); _msgDiagBump('msgOpenFail'); return rec; } // S03: an open failure (e.g. key mismatch) leaves every sealed body '' — count it like the seal side, never silent
 }
-// Open a batch from a read helper; legacy plaintext records (the STORED form had no enc — an opened record is not legacy) go to `migrate` for re-sealing.
 async function _msgOpenAll(records, migrate) {
   const list = records || [];
   const out = await Promise.all(list.map(r => _msgOpenRecord(r)));
@@ -3821,11 +3829,7 @@ function queueOutbox(peerId, text, meta) {
   _dbg(null, `Outbox: queued for ${peerId.slice(0, 8)} (${queue.length} pending)`);
 }
 
-// Persistence lives in the per-account IndexedDB 'settings' store — NOT localStorage: queued
-// entries hold plaintext until flushed, and AGENTS.md keeps sensitive data out of localStorage.
-// _currentAccountDb is already scoped to the active account, which retires the old
-// 'brz-outbox-<id>' localStorage key. Uses _currentAccountDb directly because dbPut/dbGet live
-// inside initMessenger's closure (tools/closure-boundary.mjs forbids reaching in from here).
+// The per-account settings store holds the outbox; vault interception seals it.
 function _persistOutbox(d = _currentAccountDb) {
   try {
     const obj = {};
@@ -3857,8 +3861,6 @@ async function _restoreOutbox(accountId) {
       });
       if (obj === undefined) return;
     }
-    // One-time migration: an outbox persisted by the old localStorage path is adopted when
-    // IDB has none. Other accounts retain their keys until their own migration.
     const legacyKeys = ['brz-outbox-' + accountId, 'brz-outbox'];
     let migrated = false;
     if (!obj && legacyKeys.length) {
@@ -3871,8 +3873,6 @@ async function _restoreOutbox(accountId) {
     for (const [k, v] of Object.entries(obj)) {
       if (Array.isArray(v) && v.length > 0) _outbox.set(k, v);
     }
-    // Persist AFTER filling the map — _persistOutbox snapshots _outbox, so calling it
-    // before this loop would write an empty object over the record being migrated.
     if (migrated && !await _persistOutbox(d)) return;
     for (const k of legacyKeys) { try { localStorage.removeItem(k); } catch(e) { _dbg(e); } }
     if (_outbox.size > 0) _dbg(null, `Outbox: restored ${_outbox.size} peer queues`);
@@ -4171,6 +4171,7 @@ async function initMessenger(dbName) {
   initMessenger._vault = _vault;
   if (!initMessenger._vaultGuards) { _vault.installGuards(); initMessenger._vaultGuards = true; }
   await _vault.boot();
+  _userId = localStorage.getItem('brz-uid') || ''; Object.assign(_crossAccountUnread, JSON.parse(localStorage.getItem('brz-cross-unread') || '{}'));
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
   dbName = dbName || 'breeze-messenger';
@@ -5040,9 +5041,7 @@ async function initMessenger(dbName) {
       return true;
     } catch(e) { _dbg(e, 'keywrap-change'); return false; }
   }
-  // C9 (D23): load or create the message-store key ('msgkey' slot = ordinary keywrap material,
-  // unwrapped with the boot passphrase — the _unlockPqSeed pattern; a missing record is created via
-  // the keywrap-aware dbPut). Failure NEVER blocks sign-in; since R02 every failure exit bumps msgkeyInitFail.
+  // Legacy body encryption is independent of the mandatory vault history envelope.
   async function _initMsgStoreKey(passphrase, prompt = false) {
     if (_msgStoreKey) return true;
     try {
@@ -8761,10 +8760,10 @@ async function initMessenger(dbName) {
   }
 
   let _notifRequested = false;
-  // v3.6: Persistent drafts (survive page reload)
   let _drafts = {};
   try { _drafts = JSON.parse(localStorage.getItem('brz-drafts') || '{}'); } catch { _drafts = {}; }
   function _persistDrafts() { try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts)); } catch {} }
+  _vault.caches.add({ clear: () => { _drafts = {}; _settings = {}; _retryQueue.length = 0; _userId = ''; activeContact = null; _attribDevCache.clear(); _sealCapsCache.clear(); _relayInfoCache.clear(); _myDevCache = null; for (const k in _crossAccountUnread) delete _crossAccountUnread[k]; for (const id of ['msg-input', 'msg-messages', 'msg-contacts', 'msg-conv-name']) { const el = _DOM.get(id); if (el) { el.replaceChildren(); if ('value' in el) el.value = ''; } } } });
 
   let openConversation = async function(contact) {
     // v3.3: Save draft for current contact before switching
