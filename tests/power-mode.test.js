@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createGroupCreate } from '../src/app/group-create.js';
 
 // Power saving (emergency design phase 1): the decision logic lives inline in
 // index.html next to _adaptiveConfig. Extract it verbatim and exercise it —
@@ -209,5 +210,56 @@ describe('power mode — network quality probe', () => {
     h.timers[0].fn();
     await flushMicrotasks();
     expect(h.fetchT).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+describe('power mode — group member poll', () => {
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  function groupPollHarness(powerOff) {
+    const groupId = 'g_test';
+    const postAPIRaw = vi.fn(() => ({ ok: true, json: async () => ({ members: [] }) }));
+    const deps = {
+      hasApi: () => true,
+      postAPIRaw,
+      dbGet: async () => ({ id: groupId, members: [{ id: 'me' }] }),
+      pushInterval: () => {},
+      minMs: () => 60000,
+      myId: () => 'me',
+      dbg: () => {},
+    };
+    if (powerOff) deps.powerOff = powerOff;
+    createGroupCreate(deps).startGroupMemberPoll('token123', groupId);
+    return { postAPIRaw };
+  }
+
+  it('never calls /group/info while power mode keeps background presence off', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => true);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+  });
+
+  it('calls /group/info on the normal tick when power is on', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('keeps polling when the optional powerOff dep is absent', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('wires the deployed power-presence gate into the group-create deps', () => {
+    const depsBlock = slice('globalThis.__breezeGroupCreate?.createGroupCreate({', '\n  });');
+    expect(depsBlock).toContain('powerOff: () => _powerPresenceOff()');
   });
 });
