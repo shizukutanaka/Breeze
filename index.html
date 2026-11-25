@@ -10389,7 +10389,7 @@ async function initMessenger(dbName) {
   const _originalTitle = document.title;
   function updateTabTitle() {
     try {
-      const contacts = document.querySelectorAll('.contact .unread');
+      const contacts = document.querySelectorAll('.cbadge');
       let total = 0;
       contacts.forEach(el => { const n = parseInt(el.textContent); if (n > 0) total += n; });
       _unreadTotal = total;
