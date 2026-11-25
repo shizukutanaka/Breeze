@@ -3560,13 +3560,13 @@ function avatarSlice(s, max = 2) {
   catch { return [...s].slice(0, max).join(''); }
 }
 
-// v3.6: DRY download helper (13 blob URL + download patterns → 1)
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+function downloadBlob(blob, filename, options = {}) {
+  if (initMessenger._vault?.enabled() && !options.vault) { showToast(t('vaultBackupOnly'), 'error'); return; }
+  const url = URL.createObjectURL(blob), a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
   setTimeout(() => URL.revokeObjectURL(url), MS.SEC * 30);
 }
+document.addEventListener('click', e => { if (e.isTrusted && initMessenger._vault?.enabled() && e.target.closest('a[download]')) { e.preventDefault(); e.stopImmediatePropagation(); showToast(t('vaultBackupOnly'), 'error'); } }, true);
 
 // _ttPolicy + safeSetHTML are declared earlier (near _perf, before the dead-drop handler) — see comment there for why. _safeReplace/_safeAppend stay here.
 function _safeReplace(el, html) {
@@ -10764,7 +10764,7 @@ async function initMessenger(dbName) {
 
   // Disappearing message cleanup: run every 10s
   _intervals.push(setInterval(async () => {
-    if (!db) return;
+    if (!db || _vault.isBlocked()) return;
     const now = Date.now();
     try {
       const tx = db.transaction('messages', 'readwrite');
@@ -13887,7 +13887,7 @@ async function initMessenger(dbName) {
   // v1 INTEGRATION: Message Search
 
   const _historyTools = globalThis.__breezeHistoryTools?.createHistoryTools({
-    dbGet, dbGetAll, dbGetByIndex, dbPut, openConversation, auditLog, contactDisplayName,
+    vault: _vault, dbGet, dbGetAll, dbGetByIndex, dbPut, openConversation, auditLog, contactDisplayName,
     db: () => db, activeContact: () => activeContact, myName: () => myName, myAlias: () => myAlias,
   });
   const importChat = _historyTools?.importChat || (async () => {});

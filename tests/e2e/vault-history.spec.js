@@ -35,6 +35,7 @@ test('opaque history transactions preserve indexed reads and atomic mixed-store 
     const staged = await H.stageHistory(db, codec);
     await H.commitHistory(db, staged, codec);
     const wrapped = H.historyDatabase(db, codec, runtime);
+    wrapped.onversionchange = () => {};
     const read = wrapped.transaction('messages'), readDone = done(read);
     const index = read.objectStore('messages').index('contact_ts');
     const recent = await request(index.getAllRecords({ query: IDBKeyRange.bound(['alice', 0], ['alice', Infinity]), direction: 'prev', count: 2 }));

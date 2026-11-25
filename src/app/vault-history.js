@@ -218,5 +218,5 @@ export function historyDatabase(db, codec, runtime) {
       pump(); initialize().catch(fail);
       return result;
     };
-  } });
+  }, set(target, property, value) { target[property] = value; return true; } });
 }

@@ -1,4 +1,4 @@
-import { stageHistory, snapshotHistory, inspectHistory, commitHistory } from './vault-history.js';
+import { stageHistory, snapshotHistory, inspectHistory, commitHistory, historyDatabase } from './vault-history.js';
 
 const VERSION = 1, ITERATIONS = 600000;
 const CONTROL = 'breeze-vault', MANIFEST = 'vault:manifest';
@@ -256,6 +256,7 @@ export function createVaultRuntime(D) {
     for (const ac of aborters) ac.abort();
     for (const timer of timers) cancelTimer?.(timer);
     timers.clear();
+    for (const cache of caches) cache.clear();
     try { quiesce(); } catch (e) { D.dbg(e, 'vault-quiesce'); }
     release?.(); release = null; lease = null;
     if (reload) D.reload();
@@ -402,8 +403,9 @@ export function createVaultRuntime(D) {
     }
   }
   let ready;
+  const caches = new Set();
   const runtime = {
-    assert, enabled, epoch: () => generation, transactions,
+    assert, enabled, epoch: () => generation, transactions, caches,
     expected: (db, slot) => expected.get(db)?.has(slot),
     async metadata(os, db, slot, add) {
       if (!vaultSlot('identity', slot)) return;
@@ -419,6 +421,18 @@ export function createVaultRuntime(D) {
     async database(db) {
       assert();
       const marker = await request(db.transaction('identity').objectStore('identity').get(MANIFEST));
+      if (manifest?.historyV === 2) {
+        const codec = historyCodec(key, manifest);
+        if (!marker) {
+          for (const store of db.objectStoreNames) if ((await entries(db, store)).length) throw new Error('unmigrated history account');
+          await commitHistory(db, await stageHistory(db, codec), codec);
+        } else await snapshotHistory(db, codec);
+        const guarded = Object.fromEntries(Object.entries(codec).map(([method, operation]) => [method, async (...args) => {
+          const epoch = generation; assert(epoch);
+          const value = await operation(...args); assert(epoch); return value;
+        }]));
+        return historyDatabase(db, guarded, runtime);
+      }
       if (manifest && !marker) {
         const rows = await entries(db);
         if (rows.some(([k]) => vaultSlot('identity', k))) throw new Error('unmigrated vault account');
