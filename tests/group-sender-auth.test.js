@@ -83,7 +83,7 @@ function harness({ version = 5, members = [A, B, C], localC = true, strict = fal
       if (auth.replay) await dbPut('identity', auth.replay.value, auth.replay.key);
       return true;
     } });
-  const deps = { dbGet, dbPut, dbGetAll: async () => [...contacts.values()], _replayCache,
+  const deps = { _requests: { admit: async () => true }, contactDisplayName: c => c?.name || '', dbGet, dbPut, dbGetAll: async () => [...contacts.values()], _replayCache,
     decryptGroupMsg, decryptFrom, _dbg, MS, activeContact: null, myName: B.name, myAlias: 'bob',
     _shouldAlert: () => true, playNotif: vi.fn(), Notification: notifications,
     appendMsg: vi.fn(), showSmartReplies: vi.fn(), _renderContactsThrottled: vi.fn(),

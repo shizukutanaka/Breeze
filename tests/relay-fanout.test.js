@@ -176,7 +176,8 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
     'showKeyChangeWarning', 'genRatchetKey', '_x3dhInitiator', 'ecdhBits', 'hkdf', 'myKeys',
     '_hasEd25519', '_signingKey', '_signingPubB64', 'updateMsgStatus', 'registerBackgroundSync',
     '_updateOutboxBadge', 'setTimeout', '_peerSealV2', '_saveRetryQueue', '_ktHeadC',
-    `let _retryTimer = null;
+    `const _nameTools = null, _requests = null;
+     let _retryTimer = null;
      const _retryQueue = [];
      const _isOffline = false;
      ${sliceBetween('const CAPS_X3DH_V5', 'function _negotiateGroupCaps')}

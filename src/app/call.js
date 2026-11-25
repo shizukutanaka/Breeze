@@ -1,3 +1,5 @@
+import { safeName } from './lookalike-names.js';
+
 // ============================================================================
 // 1:1 VOICE / VIDEO CALLS — the call state machine (idle / calling / ringing
 // / connected), its RTCPeerConnection lifecycle, the signal-room polling and
@@ -441,7 +443,7 @@ export function createCallManager(D) {
     stateEl.textContent = state === 'ringing' ? t('incoming') : t('calling');
 
     const nameEl = document.createElement('div');
-    nameEl.className = 'call-name'; nameEl.textContent = (name || '').slice(0, 64);
+    nameEl.className = 'call-name'; nameEl.textContent = safeName(name).slice(0, 64);
 
     const timerEl = document.createElement('div');
     timerEl.className = 'call-timer'; timerEl.id = 'call-timer'; timerEl.textContent = '00:00';

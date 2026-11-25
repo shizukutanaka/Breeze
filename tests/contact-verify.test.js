@@ -17,6 +17,19 @@ function setup() {
   return { D, records, api: createContactVerify(D) };
 }
 describe('contact verification persistence', () => {
+  it('only the newest concurrent header paint appends a badge and changed-key warning', async () => {
+    const { api, D } = setup();
+    await api.invalidate(bob.id);
+    const parent = { parentElement: { querySelector: () => null }, insertAdjacentElement: vi.fn() };
+    const header = { querySelector: () => null, appendChild: vi.fn(), closest: () => parent };
+    D.active = () => bob; D.header = () => header; D.safeSetHTML = vi.fn();
+    vi.stubGlobal('document', { createElement: () => ({ firstElementChild: {}, dataset: {} }) });
+    try {
+      await Promise.all([api.paintHeader(bob), api.paintHeader(bob)]);
+      expect(header.appendChild).toHaveBeenCalledTimes(1);
+      expect(parent.insertAdjacentElement).toHaveBeenCalledTimes(1);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('binds both full pins and compares symmetrically without changing the legacy number', async () => {
     expect(await contactBinding(bob)).not.toBe(await contactBinding({ ...bob, sigPub: key(5) }));
     expect(await contactBinding(bob)).not.toBe(await contactBinding({ ...bob, pubB64: key(5) }));
