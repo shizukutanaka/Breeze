@@ -16,7 +16,7 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 |-----------|--------|-------------|
 | Performance-first, data-oriented | John Carmack | _DOM cache, _H constant, MS.* time constants, CONFIG centralization |
 | Clean architecture, SOLID | Robert C. Martin | Single-responsibility functions, DRY helpers (postAPIRaw, _signal, _autoHeight) |
-| Simplicity, composition | Rob Pike | Single HTML file, no build step, no framework, no external AI dependency |
+| Simplicity, composition | Rob Pike | Single-file client plus ES modules, no build step, no framework, no external AI dependency |
 
 ### 1.2 File Inventory (596 tracked files)
 
@@ -505,7 +505,7 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 | Optimization | Impact |
 |-------------|--------|
-| _DOM.get() memoized cache | 131 getElementById calls cached with isConnected validation |
+| _DOM.get() memoized cache | 255 getElementById calls cached with isConnected validation |
 | requestAnimationFrame render coalescing | 3 render paths avoid forced layout |
 | DocumentFragment batch insertion | 2 batch DOM operations |
 | renderContacts throttle (200ms) | Prevents 38+ calls/cycle jank |
