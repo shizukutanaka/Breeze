@@ -6,10 +6,11 @@
 > **Before you start: the standard setup needs a Cloudflare account.**
 > The standard setup in this guide — the Cloudflare deployment
 > below — runs on Cloudflare, so have a Cloudflare account ready
-> before you begin. The free tier is enough, and you do not need to
-> register a payment method. If you do not want to use Cloudflare,
-> the Docker and bare-Node setups in this guide do not need a
-> Cloudflare account.
+> before you begin. It runs within Cloudflare's free tier, which
+> Cloudflare makes available; the free tier is Cloudflare's own
+> offering, not something Breeze can guarantee. If you do not
+> want to use Cloudflare, the Docker and bare-Node setups in this
+> guide do not need a Cloudflare account.
 
 There are two ways to run a Breeze relay:
 
