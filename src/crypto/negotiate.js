@@ -17,6 +17,7 @@
 export const CAPS = {
   X3DH_V5:   'x3dh-v5',   // authenticated X3DH, I1 (sign/verify SPK)
   GROUP_V5:  'group-v5',  // group FS + PCS + per-msg auth, I2/I3/N2
+  GROUP_AUTHOR_SIG: 'group-author-sig-v1',
   FRANKING:  'franking',  // message franking send/report, I17
   PQXDH:     'pqxdh',     // PQXDH hybrid session establishment, stage-3 D5
 };
@@ -80,6 +81,7 @@ export function negotiateGroup(localCaps, memberCapsList = []) {
   const all = (cap) => sets.every((s) => s.has(cap));
   return {
     useGroupV5: all(CAPS.GROUP_V5),
+    useAuthorSig: all(CAPS.GROUP_AUTHOR_SIG),
     useFranking: all(CAPS.FRANKING),
   };
 }

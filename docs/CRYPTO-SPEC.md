@@ -267,6 +267,14 @@ the `Nr` reset** — see §9.
 
 ## 5. Group sender keys
 
+**Deployment boundary:** the two-layer scheme below remains the reference experiment.
+The browser now deploys the simpler, separately negotiated `BreezeGroupAuthor/v1`
+Ed25519 identity signature via `src/app/group-author.js`. Its exact binary transcript,
+published byte/signature vector, pinned-key authority, strict AND policy, durable replay
+window, legacy label and rollout limits are specified in [GROUP_AUTHOR_SIG.md](GROUP_AUTHOR_SIG.md).
+It signs the existing v3/v5 ciphertext string without changing Sender-Key KDFs; it is
+not an implementation of the reference per-message/epoch signing-key ratchets below.
+
 ```
 { v:5, g:true, ep:epoch, c:counter, i:[iv], d:[ct‖tag], cm:[keyCommitment],
   s:[perMsgSig], es:[epochSig], spk:[perMsgPub], nsk:[nextPerMsgPub] }

@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Appariement de contact hors ligne",
  "opScope": "Échangez ces invitations d'identité DANS LES DEUX SENS en personne. Elles expirent dans 30 minutes. Comparez l'empreinte sur les deux appareils et ne confirmez que si elle correspond. Gardez cette application ouverte jusqu'à la fin de /rendezvous ; un rechargement annule l'appariement en attente. Aucune recherche d'alias ni vérification par relais.",
  "opImport": "Importer l'invitation du pair",

@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Abbinamento contatti offline",
  "opScope": "Scambiate questi inviti di identità IN ENTRAMBE LE DIREZIONI di persona. Scadono tra 30 minuti. Confrontate l'impronta su entrambi i dispositivi e confermate solo se coincide. Tenete questa app aperta finché /rendezvous non finisce; ricaricare annulla l'abbinamento in sospeso. Nessuna ricerca alias né verifica tramite relay.",
  "opImport": "Importa invito del peer",

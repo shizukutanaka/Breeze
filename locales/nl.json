@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Offline contacten koppelen",
  "opScope": "Wissel deze identiteitsuitnodigingen persoonlijk in BEIDE richtingen uit. Ze verlopen na 30 minuten. Vergelijk de vingerafdruk op beide apparaten en bevestig alleen als deze overeenkomt. Houd deze app open tot /rendezvous klaar is; opnieuw laden annuleert de wachtende koppeling. Geen aliasopzoeking of relayverificatie.",
  "opImport": "Uitnodiging van contact importeren",

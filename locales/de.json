@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Offline-Kontaktkopplung",
  "opScope": "Tauschen Sie diese Identitäts-Einladungen in BEIDE Richtungen persönlich aus. Sie laufen in 30 Minuten ab. Vergleichen Sie den Fingerabdruck auf beiden Geräten und bestätigen Sie nur bei Übereinstimmung. Lassen Sie diese App geöffnet, bis /rendezvous abgeschlossen ist; Neuladen bricht eine ausstehende Kopplung ab. Keine Alias-Suche oder Relay-Prüfung.",
  "opImport": "Einladung des Peers importieren",

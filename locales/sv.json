@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Koppling av kontakter offline",
  "opScope": "Utbyt dessa identitetsinbjudningar BÅDA vägarna personligen. De går ut om 30 minuter. Jämför fingeravtrycket på båda enheterna och bekräfta endast om det stämmer. Håll appen öppen tills /rendezvous är klart; omladdning avbryter väntande koppling. Ingen aliasuppslagning eller reläverifiering.",
  "opImport": "Importera motpartens inbjudan",

@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "จับคู่ผู้ติดต่อแบบออฟไลน์",
  "secTurnUsage": "สัดส่วน TURN ของการโทรในเดือนนี้",
  "secDiagPersist": "ความล้มเหลวในการบันทึก (dead-letter / กู้คืนคิวส่งซ้ำ)",

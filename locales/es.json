@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Emparejamiento sin conexión",
  "secTurnUsage": "Proporción TURN del tráfico de llamadas este mes",
  "secDiagPersist": "Fallos de persistencia (dead-letter / restauración de reintentos)",

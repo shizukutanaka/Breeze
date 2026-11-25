@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "离线联系人配对",
  "opScope": "请当面双向交换这些身份邀请。邀请30分钟内有效。在两台设备上比对指纹，只有完全一致时才确认。在 /rendezvous 完成之前请保持此应用打开；重新加载会取消待处理的配对。不提供别名查询或中继验证。",
  "opImport": "导入对方邀请",

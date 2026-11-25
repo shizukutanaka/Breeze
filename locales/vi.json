@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Ghép nối liên hệ ngoại tuyến",
  "opScope": "Trao đổi các lời mời danh tính này theo CẢ HAI chiều trực tiếp. Chúng hết hạn sau 30 phút. So sánh dấu vân tay trên cả hai thiết bị và chỉ xác nhận nếu khớp. Giữ ứng dụng mở cho đến khi /rendezvous hoàn tất; tải lại sẽ hủy ghép nối đang chờ. Không tra cứu bí danh hoặc xác minh qua máy chủ chuyển tiếp.",
  "opImport": "Nhập lời mời của đối phương",

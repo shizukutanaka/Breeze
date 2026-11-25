@@ -1,4 +1,5 @@
 {
+ "groupAuthorLegacy": "Legacy — author not verified",
  "opTitle": "Łączenie kontaktów offline",
  "opScope": "Wymieńcie się tymi zaproszeniami tożsamości OSOBIŚCIE w obie strony. Wygasają po 30 minutach. Porównajcie odcisk na obu urządzeniach i potwierdźcie tylko, jeśli się zgadza. Zostaw tę aplikację otwartą do zakończenia /rendezvous; odświeżenie anuluje oczekujące łączenie. Bez wyszukiwania aliasów i weryfikacji przez przekaźnik.",
  "opImport": "Importuj zaproszenie rozmówcy",
