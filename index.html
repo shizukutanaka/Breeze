@@ -1377,6 +1377,7 @@ import { createMessageRequests, installNotificationActions } from './src/app/mes
 import { createNameTools, safeName } from './src/app/lookalike-names.js'; window.__breezeNames = { createNameTools, safeName };
 import { createDeviceAlerts, activityHash } from './src/app/device-alerts.js'; window.__breezeDeviceAlerts = { createDeviceAlerts, activityHash };
 import { createDeviceLink } from './src/app/device-link.js';
+import { createDeviceRevocationHost } from './src/app/device-revocation.js'; window.__breezeDeviceRevocation = { createDeviceRevocationHost };
 window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel, createStickersUI } from './src/app/stickers.js';
 window.__breezeStickers = { BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel };
@@ -5475,7 +5476,7 @@ async function initMessenger(dbName) {
       if (pqRecord && !await dbPut('identity', pqRecord, 'pq-priv')) { _dbg(null, 'keywrap: prekey rotation skipped'); throw new Error('keywrap: PQ persistence failed'); }
       if (!await dbPut('identity', { priv: spk.priv }, 'spk-priv') || !await dbPut('identity', { keys: otpPrivs }, 'otp-priv')) throw new Error('prekey persistence failed');
     }
-    const caps = [];
+    const caps = navigator.locks ? ['device-revocation-v1'] : [];
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
     if (typeof _groupAuthor !== 'undefined' && _groupAuthor?.supported()) caps.push('group-author-sig-v1');
@@ -5779,7 +5780,8 @@ async function initMessenger(dbName) {
   }
   const _groupAuthor = globalThis.__breezeGroupAuthor?.createGroupAuthor({
     get: (s, k) => s === 'messages' ? dbGet(s, k) : globalThis.__breezeGroupAuthor.readGroupAuthorRecord(db, s, k), put: dbPut,
-    pub: () => myPubB64, sigPub: () => _signingPubB64, supported: () => !!_signingKey?.privateKey && !_isSecondaryDevice && !!navigator.locks,
+    pub: () => myPubB64, sigPub: () => _signingPubB64, supported: () => !!_signingKey?.privateKey && !!navigator.locks,
+    authorized: g => _deviceRevocation.certified(g), devicePin: (pub, root) => _deviceRevocation.authorPin(pub, root), allowed: (pub, root) => _deviceRevocation.allowed(pub, root), revocationKey: (g, sk) => _deviceRevocation.keyFor(g, sk),
     sign: async bytes => new Uint8Array(await crypto.subtle.sign('Ed25519', _signingKey.privateKey, bytes)),
     negotiate: _negotiateGroupCaps, attributeDevice: _deviceAttributionOk, dbg: _dbg,
     establishPin: pub => _fetchSessionBundleV5(pub),
@@ -6155,10 +6157,10 @@ async function initMessenger(dbName) {
     _peerLocks.set(peerId, next.then(() => {}, () => {}));
     return next;
   }
-  function encryptFor(text, peerPubB64, frank, pairing = false) {
-    return _withPeerLock((peerPubB64 || '').slice(0, 12), async () => { const wire = await _encryptForRaw(text, peerPubB64, frank, pairing); if (!pairing && typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', (peerPubB64 || '').slice(0, 12)); if (c && !await _contactVerify.permit(c)) return null; } return wire; });
+  async function encryptFor(text, peerPubB64, frank, pairing = false) {
+    try { if (await _deviceRevocation.allowed(peerPubB64) === false) return null; const wireText = pairing ? text : await _deviceRevocation.wrap(text, peerPubB64); return await _withPeerLock((peerPubB64 || '').slice(0, 12), async () => { const wire = await _encryptForRaw(text, peerPubB64, frank, pairing, wireText); if (!pairing && typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', (peerPubB64 || '').slice(0, 12)); if (c && !await _contactVerify.permit(c)) return null; } return wire; }); } catch(e) { _dbg(e, 'device encrypt'); return null; }
   }
-  async function _encryptForRaw(text, peerPubB64, frank, pairing = false) {
+  async function _encryptForRaw(text, peerPubB64, frank, pairing = false, wireText = text) {
     try {  
       const peerId = peerPubB64.slice(0, 12);
       const contact = await dbGet('contacts', peerId);
@@ -6181,7 +6183,7 @@ async function initMessenger(dbName) {
       // length. New messages are always sent uncompressed (flags bit0 = 0); the receive
       // path keeps decompressing legacy (flag-set) messages for backward compatibility.
       // This matches src/crypto/ratchet.js (frameEncrypt defaults compressMin: Infinity).
-      const raw = new TextEncoder().encode(text);
+      const raw = new TextEncoder().encode(wireText); if (raw.length > 65535) throw new Error('encrypted frame too large');
       const compressed = false;
       // Pad plaintext into a size bucket (traffic analysis protection, D02)
       const padded = new Uint8Array(_padBucketSize(raw.length + 3, CONFIG.MSG_PAD_BOUNDARY));
@@ -6227,8 +6229,8 @@ async function initMessenger(dbName) {
   // Track decrypt failures per peer for auto-reset
   const _decryptFailures = {};
 
-  function decryptFrom(payload, peerPubB64, frank, pairing = null) {
-    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank, pairing));
+  async function decryptFrom(payload, peerPubB64, frank, pairing = null) {
+    try { if (await _deviceRevocation.allowed(peerPubB64) === false) return null; const body = await _withPeerLock((peerPubB64 || '').slice(0, 12), () => _decryptFromRaw(payload, peerPubB64, frank, pairing)); return !body || pairing ? body : await _deviceRevocation.unwrap(body, peerPubB64); } catch(e) { _dbg(e, 'device decrypt'); return null; }
   }
   async function _decryptFromRaw(payload, peerPubB64, frank, pairing = null) {
     try {
@@ -6489,8 +6491,8 @@ async function initMessenger(dbName) {
   // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
-  // Returns { list, ts }: verified device pubs + the registry's signed revision ts (D14).
   const _deviceAlerts = globalThis.__breezeDeviceAlerts?.createDeviceAlerts({ api: () => !!API, post: postAPIRaw, get: dbGet, put: dbPut, verify: verifySignature, sign: signMessage, myId: () => myId, me: () => myPubB64, ed: () => _signingPubB64, minute: MS.MIN, ownTs: ts => { _ownRegistryTs = ts; }, dbg: _dbg, t, esc, safeSetHTML, root: () => _ac.signal.aborted ? null : _DOM.get('msg-main'), unlink: i => _deviceLink.handleCommand('/unlink ' + i) });
+  const _deviceRevocation = globalThis.__breezeDeviceRevocation.createDeviceRevocationHost({ get: dbGet, put: dbPut, all: dbGetAll, pub: () => myPubB64, ed: () => _signingPubB64, sign: signMessage, peerInfo: _peerRelayInfo, registry: _fetchDeviceRegistry, encrypt: encryptFor, send: relaySend, groupAuthor: () => _groupAuthor, dbg: _dbg, notice: (kind, root, epoch) => _deviceAlerts?.notice(kind, root, epoch), invalidate: () => { _attribDevCache.clear(); _myDevCache = null; } });
   async function _fetchDeviceRegistry(accountId, rootPubB64) { return await _deviceAlerts?.registry(accountId, rootPubB64) || null; }
   // A camera-scan button for the link panels, mirroring the rendezvous
   // dialog's availability rule: no BarcodeDetector (or no QR helper)
@@ -6531,7 +6533,7 @@ async function initMessenger(dbName) {
   // Device linking lives in src/app/device-link.js.
   const _deviceLink = globalThis.__breezeDeviceLink?.createDeviceLink({
     dbGet, dbPut, postAPIRaw, signMessage, sigPub: () => _signingPubB64, showToast, showConfirm, t, esc, safeSetHTML,
-    cmdPanel: (id) => _cmdPanelEl(id), deviceScanButton: _deviceScanButton,
+    cmdPanel: (id) => _cmdPanelEl(id), deviceScanButton: _deviceScanButton, checkpoint: devices => _deviceRevocation.checkpoint(devices), acceptCheckpoint: (cp, pin) => _deviceRevocation.accept(cp, pin), bindDevice: b => _deviceRevocation.bindDevice(b), linked: () => _deviceRevocation.broadcast(),
     fetchDeviceList: async (a, r) => (await _fetchDeviceRegistry(a, r))?.list || null, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
     bustDevCache: () => { _myDevCache = null; },
     clipboardWrite: (text) => navigator.clipboard.writeText(text),
@@ -6604,6 +6606,7 @@ async function initMessenger(dbName) {
   // (D14: was 5 min; the presence devTs push below invalidates sooner).
   async function _devicesFor(contact) {
     if (!contact?.pubB64) return [];
+    const certified = await _deviceRevocation.targets(contact.pubB64); if (certified) return certified;
     const now = Date.now();
     if (contact._devCache && now - contact._devCacheTs < MS.MIN) return contact._devCache;
     const reg = await _fetchDeviceRegistry(contact.id, contact.pubB64);
@@ -6620,6 +6623,7 @@ async function initMessenger(dbName) {
   // that root's SIGNED device registry (verified inside _fetchDeviceRegistry).
   async function _deviceAttributionOk(rootPubB64, devicePub) {
     if (!rootPubB64 || !devicePub) return false;
+    const verdict = await _deviceRevocation.allowed(devicePub, rootPubB64); if (verdict !== null) return verdict;
     const rootId = rootPubB64.slice(0, 12);
     let devs = _attribDevCache.get(rootId);
     if (!devs || Date.now() - devs.ts > MS.MIN) {
@@ -6636,6 +6640,7 @@ async function initMessenger(dbName) {
     try {
       const acct = await dbGet('identity', 'account');
       if (!acct?.root) return [];
+      const certified = await _deviceRevocation.targets(acct.root); if (certified) return certified.filter(pub => pub !== myPubB64);
       const now = Date.now();
       if (_myDevCache && now - _myDevCacheTs < MS.MIN) return _myDevCache;
       const rootId = acct.root.slice(0, 12);
@@ -7086,6 +7091,7 @@ async function initMessenger(dbName) {
 
   async function relaySend(to, payload, sealPub, contactHint) {
     if (!API) return;
+    if (sealPub && await _deviceRevocation.allowed(sealPub) === false) return;
     if (typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', to); if (c && !await _contactVerify.permit(c)) return; }
     // Stage 6 step 2: a multi-relay account asserts its home list in
     // the envelope (sealed for v2 peers); default-only stays identical.
@@ -11242,6 +11248,7 @@ async function initMessenger(dbName) {
   // on which a Step-2 sender stakes its mailbox deposit — is sent only
   // when the flag is set. Relay-path callers pass nothing.
   async function handleIncoming(msg, ackOut) {
+    if (!await _deviceRevocation.admit(msg)) return;
     if (!await _requests?.admit(msg)) return;
     if (msg.isGroupSK || (msg.groupId && !msg.isSignal && !msg.isGroupInvite && !msg.isGroupKick && !msg.isSenderKey)) return _groupAuthor?.receive(msg, ackOut, author => _handleIncoming(msg, ackOut, author));
     return _handleIncoming(msg, ackOut);
@@ -11767,14 +11774,7 @@ async function initMessenger(dbName) {
         const rootId = msg.acctRoot.slice(0, 12);
         const rootContact = rootId !== contactId ? await dbGet('contacts', rootId) : null;
         if (rootContact?.pubB64 === msg.acctRoot) {
-          let devs = _attribDevCache.get(rootId);
-          if (!devs || Date.now() - devs.ts > MS.MIN) {
-            const reg = await _fetchDeviceRegistry(rootId, msg.acctRoot);
-            if (reg?.ts) _devRegTs[rootId] = reg.ts;
-            devs = { list: reg?.list || [], ts: Date.now() };
-            _attribDevCache.set(rootId, devs);
-          }
-          if (devs.list.includes(msg.fromPub)) { contact = rootContact; contactId = rootContact.id; _attribPub = msg.fromPub; }
+          if (await _deviceAttributionOk(msg.acctRoot, msg.fromPub)) { contact = rootContact; contactId = rootContact.id; _attribPub = msg.fromPub; }
         }
       } catch(e) { _dbg(e, 'device-attribution'); }
     }

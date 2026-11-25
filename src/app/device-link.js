@@ -23,7 +23,8 @@ export function createDeviceLink(D) {
       return { pub, name: pub === D.myPubB64() ? 'primary' : '', ...(valid ? { binding: proof } : {}) };
     }));
   }
-  async function linkDevicePub(arg) {
+  async function linkDevicePub(arg, serialized = false) {
+    if (D.checkpoint && !serialized) return locked(() => linkDevicePub(arg, true));
     let offer;
     if (arg.startsWith('breeze-device-offer:')) {
       try { offer = readDeviceToken('offer', arg); if (!await verifyOffer(offer)) throw new Error('invalid offer'); arg = offer.pub; }
@@ -44,6 +45,7 @@ export function createDeviceLink(D) {
         if (!await verifyBinding(binding, { root: D.myPubB64(), rootEd: D.sigPub(), pub: arg })) throw new Error('binding signing failed');
       }
       const devices = await devicesWithBindings([...new Set([D.myPubB64(), ...current, arg])], binding);
+      const checkpoint = await D.checkpoint?.(devices);
       const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
       const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
       const sig = await D.signMessage(`breeze-device-set:${D.myId()}:${ts}:${digest}`);
@@ -53,7 +55,7 @@ export function createDeviceLink(D) {
         await D.dbPut('identity', acct, 'account');
         D.bustDevCache(); // bust the cache so self-sync starts immediately
         D.showToast(D.t('devAdded'), 'success');
-        if (binding) tokenPanel(deviceToken('binding', binding), 'dkReturn');
+        if (binding) tokenPanel(deviceToken('binding', { ...binding, ...(offer.authority === 1 && checkpoint ? { checkpoint } : {}) }), 'dkReturn');
         // Stage 4 step 3: offer the history transfer right after the link.
         if (await D.showConfirm(D.t('histSendAsk'))) {
           const r = await D.sendHistoryTo(arg);
@@ -66,16 +68,23 @@ export function createDeviceLink(D) {
   async function linkToRoot(rootPub) {
     if (rootPub.startsWith('breeze-device-binding:')) {
       try { await locked(async () => {
-        const binding = readDeviceToken('binding', rootPub), state = await D.dbGet('identity', 'verify:device-link');
+        const { checkpoint, ...certificate } = readDeviceToken('binding', rootPub), state = await D.dbGet('identity', 'verify:device-link');
+        let binding = certificate;
         const expected = { root: binding.root, rootEd: binding.rootEd, pub: D.myPubB64(), ed: D.sigPub(), nonce: state?.offer?.nonce };
         if (!state?.offer || !await verifyBinding(binding, expected) || state.binding && (state.binding.root !== binding.root || state.binding.rootEd !== binding.rootEd || state.binding.issuedAt > binding.issuedAt)) throw new Error('binding or root pin mismatch');
         if (!await D.showConfirm(D.t('dkTrust', binding.root.slice(0, 16)))) return;
         const resp = await D.postAPIRaw('/device/list', { accountId: binding.root.slice(0, 12) });
         if (!resp?.ok || !await verifyBindingRegistry(await resp.json(), binding)) throw new Error('binding registry mismatch');
+        if (D.bindDevice) binding = await D.bindDevice(binding);
         if (!await D.dbPut('identity', { ...state, binding }, 'verify:device-link')) throw new Error('binding persistence failed');
+        if (checkpoint && D.acceptCheckpoint) {
+          if (checkpoint.root !== binding.root || !checkpoint.devices?.some(d => d.pub === binding.pub && d.binding?.sig === binding.sig)) throw new Error('certificate checkpoint mismatch');
+          await D.acceptCheckpoint(checkpoint, binding.rootEd);
+        }
         if (!await D.dbPut('identity', { root: binding.root, rootEd: binding.rootEd, isPrimary: false }, 'account')) throw new Error('account persistence failed');
         if (!await D.dbPut('identity', { binding }, 'verify:device-link')) throw new Error('offer consumption failed');
         D.bustDevCache(); await D.refreshDeviceRole(); D.showToast(D.t('dkLinked'), 'success');
+        await D.linked?.();
       }); } catch(e) { D.dbg(e, 'device-binding'); D.showToast(D.t('dkInvalid'), 'error'); }
       return;
     }
@@ -100,10 +109,12 @@ export function createDeviceLink(D) {
   // The /link, /linkto, /devices and /unlink command bodies. The
   // dispatcher has already claimed the input (preventDefault +
   // clearInput) when the prefix matched.
-  async function handleCommand(val) {
+  async function handleCommand(val, serialized = false) {
+    if (D.checkpoint && val.startsWith('/unlink ') && !serialized) return locked(() => handleCommand(val, true));
     if (val === '/link keys') {
       try { await locked(async () => {
         const offer = { v: 1, pub: D.myPubB64(), ed: D.sigPub(), nonce: [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('') };
+        if (D.checkpoint) offer.authority = 1;
         offer.sig = await D.signMessage(offerText(offer));
         if (!await verifyOffer(offer)) throw new Error('offer signing failed');
         const state = await D.dbGet('identity', 'verify:device-link');
@@ -168,6 +179,7 @@ export function createDeviceLink(D) {
       if (!await D.showConfirm(D.t('devUnlinkConfirm', victim.slice(0, 16) + '…'), { danger: true })) return;
       try {
         const devices = await devicesWithBindings(current.filter(p => p !== victim));
+        await D.checkpoint?.(devices);
         const ts = Date.now();
         const digestBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(devices.map(d => d.pub))));
         const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16).map(b => b.toString(16).padStart(2, '0')).join('');
