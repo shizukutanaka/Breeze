@@ -172,18 +172,7 @@ export function createProfileUI(D) {
         dlg.querySelector('[value="ok"]').onclick = async () => {
           const clean = sanitizeProfile({ name: dlg.querySelector('.pf-name').value.trim() || D.myName(), emoji: dlg.querySelector('.pf-emoji').value.trim(), img });
           if (clean) {
-            await D.dbPut('settings', { ...clean, pv: Date.now() }, 'profile');
-            if (clean.name !== D.myName()) {
-              D.setMyName(clean.name);
-              const stored = await D.dbGet('identity', 'keys');
-              if (stored) { stored.name = clean.name; await D.dbPut('identity', stored, 'keys'); }
-              D.domGet('msg-my-name').textContent = clean.name;
-            }
-            _distributeProfile().catch(e => D.dbg(e, 'profile-dist'));
-            // The self card in the contact list renders from this same
-            // record — refresh it now or it shows the pre-edit profile
-            // until the next unrelated list render.
-            if (D.refreshSelfCard) D.refreshSelfCard();
+            await _saveProfile(clean);
             D.showToast(D.t('profileSaved'), 'success');
           }
           close(true);
@@ -192,11 +181,40 @@ export function createProfileUI(D) {
         D.wireDialogDismiss(dlg, close);
       });
     }
+    // THE profile save path — the panel above and the settings view's
+    // display-name field both write through here, so the name lives in
+    // exactly the same places no matter which door edited it: the
+    // settings 'profile' record, the identity record's name, the live
+    // myName, the header, and the E2EE fan-out.
+    async function _saveProfile(clean) {
+      await D.dbPut('settings', { ...clean, pv: Date.now() }, 'profile');
+      if (clean.name !== D.myName()) {
+        D.setMyName(clean.name);
+        const stored = await D.dbGet('identity', 'keys');
+        if (stored) { stored.name = clean.name; await D.dbPut('identity', stored, 'keys'); }
+        D.domGet('msg-my-name').textContent = clean.name;
+      }
+      _distributeProfile().catch(e => D.dbg(e, 'profile-dist'));
+      // The self card in the contact list renders from this same
+      // record — refresh it now or it shows the pre-edit profile
+      // until the next unrelated list render.
+      if (D.refreshSelfCard) D.refreshSelfCard();
+    }
+    // Change ONLY the display name (the settings view's field): the
+    // current emoji/photo ride along untouched via _myProfile, and the
+    // write itself is _saveProfile — no second store, no second path.
+    async function _setDisplayName(name) {
+      const prof = await _myProfile();
+      const clean = sanitizeProfile({ name, emoji: prof.emoji, img: prof.img });
+      if (!clean) return false;
+      await _saveProfile(clean);
+      return true;
+    }
     async function _distributeProfile() {
       const contacts = (await D.dbGetAll('contacts').catch(() => [])) || [];
       let sent = 0;
       for (const c of contacts) if (await _sendProfileTo(c)) sent++;
       return sent;
     }
-  return { showPanel: _showProfilePanel, sendTo: _sendProfileTo, myProfile: _myProfile };
+  return { showPanel: _showProfilePanel, sendTo: _sendProfileTo, myProfile: _myProfile, setDisplayName: _setDisplayName };
 }

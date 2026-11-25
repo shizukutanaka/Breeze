@@ -106,7 +106,12 @@ describe('(b) profile editing is unified on the profile panel', () => {
 describe('(c) first run leads with one primary action', () => {
   it('creation stays the big CTA and the restore entries sit in the expander', () => {
     const setup = sliceBetween('<div id="msg-setup"', '<!-- Main UI -->');
-    expect(setup).toContain('class="btn btn-g setup-cta" id="b-msg-setup"');
+    // The one big CTA is now the random-ID start (2026-11-25); the named
+    // phrase-mode creation is the secondary button below it. Exactly one
+    // primary CTA on the screen, as before.
+    expect(setup).toContain('class="btn btn-g setup-cta" id="b-msg-setup-random"');
+    expect(setup).toContain('class="btn btn-o setup-restore" id="b-msg-setup"');
+    expect(setup.split('setup-cta')).toHaveLength(2);
     expect(setup).toContain('id="b-msg-setup-restore-toggle"');
     expect(setup).toContain('data-i18n="setupRestoreToggle"');
     const more = setup.indexOf('id="setup-restore-more"');
@@ -115,11 +120,14 @@ describe('(c) first run leads with one primary action', () => {
       expect(setup.indexOf(`id="${id}"`), id).toBeGreaterThan(more);
     }
     // The alternative create modes stay outside the restore expander.
-    expect(setup.indexOf('id="b-msg-setup-none"')).toBeLessThan(more);
+    expect(setup.indexOf('id="b-msg-setup-simple"')).toBeLessThan(more);
+    // The disposable creation entry is gone entirely (2026-11-25).
+    expect(setup).not.toContain('b-msg-setup-none');
+    expect(setup).not.toContain('setupDisposable');
   });
 
   it('the toggle wires aria-expanded to the expander', () => {
-    const fn = sliceBetween("_DOM.get('b-msg-setup-restore-toggle')?.addEventListener('click'", '// Disposable mode:');
+    const fn = sliceBetween("_DOM.get('b-msg-setup-restore-toggle')?.addEventListener('click'", '// Recovery plan step 2');
     expect(fn).toContain("classList.toggle('hidden')");
     expect(fn).toContain("setAttribute('aria-expanded'");
   });
