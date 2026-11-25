@@ -1,5 +1,45 @@
 # Security Policy
 
+## Lookalike display names
+
+The deployed `src/app/lookalike-names.js` warns locally when a contact's name,
+distributed profile name or alias resembles another contact or group member.
+It compares NFKC/case/whitespace variants and a compact Latin/Greek/Cyrillic
+confusable skeleton. The mapping subset is adapted from
+https://www.unicode.org/Public/security/16.0.0/confusables.txt (Unicode License
+v3, included in docs/UNICODE-LICENSE.txt), with additional visual heuristics
+(i/l/1, 0/o, rn/m, vv/w and Latin accent folding). It is not a complete UTS #39
+implementation and appearance varies by font. Indexed skeleton/deletion keys
+avoid an all-pairs edit-distance scan on each list render.
+
+One insertion, deletion or substitution is warned for ASCII-letter skeletons
+of 4–12 characters; shorter names, numbers and non-Latin scripts get exact
+skeleton matching only. Japanese Han/kana combinations and Latin mixed with
+Han/kana are not inherently suspicious. Japanese names differing by one kanji
+are not fuzzy-matched. Latin/Greek/Cyrillic mixtures and hidden/control
+characters also warn without a matching contact. Identical IDs/full public
+keys never collide with themselves. Generic Contact/Unknown placeholders are
+excluded from similarity matching; ordinary people sharing a real name may
+still warn. Warnings are advisory: verify full fingerprints over a trusted,
+independent channel; a matching name, alias or short ID proves no identity.
+
+Add via link/alias shows a confirmation naming up to three existing contacts
+and their IDs. Incoming first contacts are never blocked by a confirmation:
+they receive a toast and persistent derived list/header warnings. Group
+headers, /members, mentions and message sender labels use safe names; group
+headers/member and sender labels warn about collisions. Name/profile/alias
+changes and reload recompute warnings from local records, not a relay verdict.
+No acknowledgement or trust override is persisted, no names are sent out for
+analysis, and no wire/signature format or stored original name is rewritten.
+Displayed names strip Unicode Default_Ignorable_Code_Point and C0/C1 controls,
+including bidi overrides/isolation, zero-width characters and variation
+selectors. This can simplify legitimate emoji/joining forms; raw names remain
+available in backups. This protection is not a general sanitizer for message
+bodies, file names, imported HTML or OS push payloads.
+
+Full confusable data, language-specific fuzzy matching, font analysis,
+cross-device trust/override sync and OS push-name handling are deferred.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Breeze, please report it responsibly.

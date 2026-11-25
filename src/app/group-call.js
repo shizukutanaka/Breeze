@@ -1,3 +1,5 @@
+import { safeName } from './lookalike-names.js';
+
 // ============================================================================
 // GROUP VOICE CALLS — small-scale full mesh (SHARE_PLAN stage 5 step 2).
 // Audio only; video is a later step. No SFU and no new server surface:
@@ -106,7 +108,7 @@ export function createGroupCallManager(D) {
     ov.id = 'gcall-overlay'; ov.className = 'call-overlay';
     const st = document.createElement('div'); st.className = 'call-state'; st.id = 'gcall-state';
     st.textContent = mode === 'ringing' ? t('gcallIncoming') : t('calling');
-    const nm = document.createElement('div'); nm.className = 'call-name'; nm.textContent = (_group?.name || '').slice(0, 64);
+    const nm = document.createElement('div'); nm.className = 'call-name'; nm.textContent = safeName(_group?.name).slice(0, 64);
     const tm = document.createElement('div'); tm.className = 'call-timer'; tm.id = 'gcall-timer'; tm.textContent = '00:00';
     const list = document.createElement('div'); list.className = 'call-name'; list.id = 'gcall-list';
     const actions = document.createElement('div'); actions.className = 'call-actions';
@@ -134,7 +136,7 @@ export function createGroupCallManager(D) {
   function _hideOverlay() { _DOM.get('gcall-overlay')?.remove(); }
   function _updateList() {
     const el = _DOM.get('gcall-list');
-    if (el) el.textContent = [..._roster.values()].map(m => (m.name || m.id)).join(' · ') || t('gcallWaiting');
+    if (el) el.textContent = [..._roster.values()].map(m => (safeName(m.name) || m.id)).join(' · ') || t('gcallWaiting');
     const st = _DOM.get('gcall-state');
     if (st && _state === 'in') st.textContent = t('calling');
   }

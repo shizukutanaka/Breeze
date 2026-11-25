@@ -1007,5 +1007,8 @@
  "cfErrWorkerSource": "同梱された Worker ソースを読み込めませんでした",
  "cfErrHealth": "ヘルスチェックが ok を返しませんでした",
  "cfErrHttp": "HTTP {0}",
- "helpSetCloudflareSetup": "breeze-presence KV 名前空間を作成または再利用し、同梱の Breeze Worker を必要な KV バインディング付きで breeze スクリプトとしてアップロードし、workers.dev アドレスを有効化して /api/health を確認します。トークンにはアカウント読み取り（アカウント一覧）、Workers Scripts 編集、Workers KV Storage 編集の権限が必要です。サーバー URL はこの端末だけに保存されます。使う場合は「ホームリレー」から追加してください。プッシュ通知、TURN、リレー識別キーの任意シークレットは構築では設定されないため、Cloudflare ダッシュボードで設定するまで、それらの機能はオフまたは既定のフォールバックのままです。"
+ "helpSetCloudflareSetup": "breeze-presence KV 名前空間を作成または再利用し、同梱の Breeze Worker を必要な KV バインディング付きで breeze スクリプトとしてアップロードし、workers.dev アドレスを有効化して /api/health を確認します。トークンにはアカウント読み取り（アカウント一覧）、Workers Scripts 編集、Workers KV Storage 編集の権限が必要です。サーバー URL はこの端末だけに保存されます。使う場合は「ホームリレー」から追加してください。プッシュ通知、TURN、リレー識別キーの任意シークレットは構築では設定されないため、Cloudflare ダッシュボードで設定するまで、それらの機能はオフまたは既定のフォールバックのままです。",
+  "lnSimilar": "「{0}」は既存の連絡先「{1}」（{2}）に似ています。名前を信用する前にフィンガープリントを照合してください。",
+  "lnUnsafe": "「{0}」には不可視・制御文字、または紛らわしい文字体系の混在があります。名前を信用する前にフィンガープリントを照合してください。",
+  "lnContinue": "それでも追加"
 }

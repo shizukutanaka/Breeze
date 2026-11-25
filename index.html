@@ -245,6 +245,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); max-width: 100% }
 .conv-header { padding: 12px 16px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--b1); min-height: 52px; backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); background: var(--s1) }
 .conv-header .name { flex: 1; font-weight: 700; font-size: 15px }
+.ln-warning { display: block; white-space: normal; overflow-wrap: anywhere; color: var(--r); font-size: 12px; font-weight: 500; line-height: 1.4; max-height: 6em; overflow: auto; unicode-bidi: plaintext }
 
 /* ─── Messages ─── */
 .msg {
@@ -1362,6 +1363,7 @@ window.__breezeProfile = { sanitizeProfile, buildProfilePayload, parseProfilePay
 window.__breezeProfileUI = { createProfileUI };
 import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
+import { createNameTools, safeName } from './src/app/lookalike-names.js'; window.__breezeNames = { createNameTools, safeName };
 import { createDeviceLink } from './src/app/device-link.js';
 window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel, createStickersUI } from './src/app/stickers.js';
@@ -1573,6 +1575,7 @@ const _scrollBehavior = () => _prefersReducedMotion() ? 'auto' : 'smooth';
 
 const _I = {
   en: {
+    lnSimilar: "“{0}” resembles existing contact “{1}” ({2}). Compare fingerprints before trusting this name.", lnUnsafe: "“{0}” contains hidden/control characters or a risky mixture of scripts. Compare fingerprints before trusting this name.", lnContinue: "Add anyway",
     opTitle: "Offline contact pairing", opScope: "Exchange these identity invites BOTH ways in person. They expire in 30 minutes. Compare the fingerprint on both devices and confirm only if it matches. Keep this app open until /rendezvous finishes; reloading cancels pending pairing. No alias lookup or relay verification.", opImport: "Import peer invite", opMatches: "I compared both devices: the fingerprint matches", opConfirm: "Verify and add contact", opCompare: "Compare this fingerprint on both devices. It binds both encryption keys, signing keys and invite nonces.", opConfirmed: "Contact verified. Open their chat and exchange /rendezvous codes. Messaging unlocks after encrypted key confirmation.", opInvalid: "Offline pairing failed: invalid, expired, used or mismatched code/key, or unsupported cryptography. Cancel pending pairing and exchange fresh invites.", opPending: "Finish offline pairing with /rendezvous before sending. Use /offlinepair cancel to cancel.", opCancelled: "Pending offline pairing cancelled. Exchange fresh invites on both devices to retry.", opOutput: "Your offline identity invite", opInput: "Peer offline identity invite",
     rvTitle: 'Manual connection', rvScope: 'Requires an existing encrypted session or confirmed /offlinepair invitation. Exchange connection codes privately by QR or copy/paste; they expire in 10 minutes.',
     rvQRTooLarge: 'This code is too large for one QR. Use copy/paste instead.', rvScanUnavailable: 'Camera QR scanning is unavailable in this browser. Use copy/paste instead.',
@@ -8131,7 +8134,7 @@ async function initMessenger(dbName) {
   // (The call-signal wrap/unwrap live in src/app/call.js since stage 5
   // step 1 — createCallSignal there holds the negotiated rollout.)
 
-  async function addContact(pubB64, name, homeHint) {
+  async function addContact(pubB64, name, homeHint, alias = '') {
     try {
       const safePub = typeof pubB64 === 'string' ? pubB64.slice(0, 200) : '';
       if (!safePub) return;
@@ -8152,10 +8155,10 @@ async function initMessenger(dbName) {
         return;
       }
       const safeName = typeof name === 'string' ? name.slice(0, 64) : 'Contact';
-      await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0, ...(home.length ? { home } : {}) });
+      await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0, ...(home.length ? { home } : {}), ...(alias ? { alias } : {}) });
       _profileUI?.sendTo({ id, pubB64: safePub }).catch(e => _dbg(e, 'profile-add')); // stage 5 step 4: greet with my profile (cap-gated inside; skipped until a session exists)
       auditLog('contact', 'Added: ' + name + ' (' + id + ')');
-      await renderContacts();
+      await renderContacts(); await _nameTools?.added({ id, pubB64: safePub, name: safeName, alias });
       // First contact ever: the account now holds something worth losing.
       // Show the backup reminder exactly once (the flag is set BEFORE the
       // card renders, so a failure here can never make it repeat).
@@ -8342,51 +8345,15 @@ async function initMessenger(dbName) {
     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.onclick(); } };
   }
 
-  // Contact display names — ONE resolution path for every surface
-  // (contact list, chat header, group sender names via c.name).
-  // c.name is the primary name: it holds the local nickname when the
-  // user renamed the contact (nameLocked — the store the context-menu
-  // rename has always used), and otherwise it tracks the name the
-  // contact set for themselves. c.profileName always holds the
-  // contact's own latest distributed name, so it can ride alongside
-  // the nickname (Settings: showPeerName, default on) in a muted
-  // span. Groups have no peer name — their name is the group's own.
-  function contactDisplayName(c) { return (c && typeof c.name === 'string') ? c.name : ''; }
-  function contactPeerName(c) {
-    if (!c || c.isGroup || !c.nameLocked) return '';
-    const p = typeof c.profileName === 'string' ? c.profileName : '';
-    return p && p !== c.name ? p : '';
-  }
-  function contactPeerNameHtml(c) {
-    if (_settings.showPeerName === false) return '';
-    const p = contactPeerName(c);
-    return p ? ' <span class="i-t3-10">(' + esc(p) + ')</span>' : '';
-  }
-  // The chat header's name element, rendered through the same path
-  // everywhere (open, rename, profile update, unblock).
-  function _setConvName(contact) {
-    const nameEl = _DOM.get('msg-conv-name');
-    if (!nameEl || !contact) return;
-    const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length} ${esc(t('cmdMembersLabel'))}</span>` : '';
-    safeSetHTML(nameEl, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contactDisplayName(contact)) + contactPeerNameHtml(contact) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>'));
-  }
-  // Local nickname write path — writes the SAME fields the
-  // context-menu rename has always written (c.name + nameLocked);
-  // there is no second store. An empty name clears the nickname:
-  // the lock drops and the contact's own name takes over again.
-  // Nicknames never leave this device.
-  async function setContactNickname(c, name) {
-    const clean = (name || '').trim().slice(0, 64);
-    if (clean) { c.name = clean; c.nameLocked = true; }
-    else { c.nameLocked = false; if (c.profileName) c.name = c.profileName; }
-    await dbPut('contacts', c);
-    renderContacts();
-    if (activeContact?.id === c.id) _setConvName(c);
-  }
+  const _nameTools = globalThis.__breezeNames?.createNameTools({ settings: () => _settings, esc, t, dom: id => _DOM.get(id), html: safeSetHTML, put: dbPut, render: () => renderContacts(), active: () => activeContact, list: () => dbGetAll('contacts'), confirm: showConfirm, toast: showToast, dbg: _dbg });
+  const contactDisplayName = _nameTools?.contactDisplayName || (c => (c?.name || '').replace(/[\p{Default_Ignorable_Code_Point}\p{Cc}]/gu, ''));
+  const contactPeerNameHtml = _nameTools?.contactPeerNameHtml || (() => '');
+  function _setConvName(c) { if (_nameTools) _nameTools._setConvName(c); else if (c) _DOM.get('msg-conv-name').textContent = contactDisplayName(c); }
+  const setContactNickname = _nameTools?.setContactNickname || (async () => {});
 
   async function renderContacts() {
     renderSelfCard().catch(e => _dbg(e, 'self-card-render')); if (_listTab === 'calls') { await globalThis.__breezeCallHistoryUI?.render(); return; } // Calls mode: the history module owns the list surface
-    const contacts = await dbGetAll('contacts');
+    const contacts = await dbGetAll('contacts'); _nameTools?.setContacts(contacts);
     const el = _DOM.get('msg-contacts');
     // v3.3: PERFORMANCE — Use DocumentFragment for batch DOM insertion
     const frag = document.createDocumentFragment();
@@ -8450,10 +8417,10 @@ async function initMessenger(dbName) {
       // v3.3: Roving tabindex (WCAG 2.1.1 keyboard navigation)
       div.tabIndex = (activeContact?.id === c.id || (!activeContact && ci === 0)) ? 0 : -1;
       div.setAttribute('role', 'listitem');
-      div.setAttribute('aria-label', c.name + (c.unread ? ', ' + t('ariaUnread', c.unread) : '') + (c.isGroup ? '' : isOnline ? ', ' + t('statusOnline') : ', ' + t('statusOffline')));
+      div.setAttribute('aria-label', contactDisplayName(c) + (c.unread ? ', ' + t('ariaUnread', c.unread) : '') + (c.isGroup ? '' : isOnline ? ', ' + t('statusOnline') : ', ' + t('statusOffline')));
       // v3.5: Presence dot (online/away/offline)
       // v3.6: Enhanced presence dot — shows P2P quality when connected
-      const initial = c.isGroup ? '👥' : (c.avatarImg ? `<img class="avatar-img" src="${esc(c.avatarImg)}" alt="">` : esc((c.name || '?')[0].toUpperCase()));
+      const initial = c.isGroup ? '👥' : (c.avatarImg ? `<img class="avatar-img" src="${esc(c.avatarImg)}" alt="">` : esc((contactDisplayName(c) || '?')[0].toUpperCase()));
       const avatarBg = c.isGroup ? 'var(--gd)' : `hsl(${(c.name||'').charCodeAt(0) * 37 % 360}, 40%, 30%)`;
       let presenceClass = '';
       let presenceTitle = '';
@@ -8483,9 +8450,9 @@ async function initMessenger(dbName) {
       const isTyping = _typingContacts[c.id] && (Date.now() - _typingContacts[c.id]) < 5000;
       if (isTyping) previewText = `<span class="color-g"><em>${t('typing')}</em></span>`;
       else if (draftText) previewText = `<span class="color-r">${t('draftLabel')}:</span> ${esc(draftText.slice(0, 30))}`;
-      else if (c.isGroup && c.lastMsgSender && c.lastMsg) previewText = `<span class="color-t2">${esc(c.lastMsgSender)}:</span> ${esc(c.lastMsg)}`;
+      else if (c.isGroup && c.lastMsgSender && c.lastMsg) previewText = `<span class="color-t2">${esc(contactDisplayName({ name: c.lastMsgSender }))}:</span> ${esc(c.lastMsg)}`;
       else previewText = esc(c.lastMsg || '');
-      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
+      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${_nameTools?.warningHtml(c) || ''}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
       div.onclick = () => openConversation(c);
       // v3.6: Swipe-left-to-archive on contact (iOS Mail/WhatsApp pattern)
       if (IS_TOUCH) {
@@ -8632,7 +8599,7 @@ async function initMessenger(dbName) {
           renderContacts();
         } else if (action === 'label') {
           const current = (c.labels || []).join(', ');
-          const val = await showPrompt(t('labelPrompt') + ' — ' + esc(c.name) + ':', current, { placeholder: t('labelPrompt') });
+          const val = await showPrompt(t('labelPrompt') + ' — ' + esc(contactDisplayName(c)) + ':', current, { placeholder: t('labelPrompt') });
           if (val !== null) {
             c.labels = val.split(',').map(s => s.trim()).filter(Boolean);
             await dbPut('contacts', c);
@@ -8820,7 +8787,7 @@ async function initMessenger(dbName) {
         const m = msgs[i];
         appendMsg(m.text, m.mine, m.ts, box, m.fileData, {
           msgId: m.msgId, replyTo: m.replyTo, edited: m.edited,
-          deleted: m.deleted, pinned: m.pinned, senderName: m.senderName,
+          deleted: m.deleted, pinned: m.pinned, senderName: m.senderName, senderId: m.senderId,
           disappearAt: m.disappearAt, voice: m.voice, reactions: m.reactions, sticker: m.sticker,
           loc: m.loc, liveUntil: m.liveUntil, liveEnded: m.liveEnded,
           forwarded: m.forwarded, bookmarked: m.bookmarked,
@@ -9060,8 +9027,8 @@ async function initMessenger(dbName) {
 
     // Group: show sender name (skip if grouped with same sender)
     if (meta.senderName && !isMine && !isGrouped) {
-      const badge = '';
-      content += `<div class="msg-sender">${esc(meta.senderName)}${badge}</div>`;
+      const sender = { id: meta.senderId || (activeContact?.isGroup ? activeContact.members?.find(m => m.name === meta.senderName)?.id : activeContact?.id), name: meta.senderName };
+      content += `<div class="msg-sender">${esc(contactDisplayName(sender))}${_nameTools?.warningHtml(sender) || ''}</div>`;
     }
 
     // Reply/quote
@@ -9715,7 +9682,7 @@ async function initMessenger(dbName) {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     const list = contacts.filter(c => !c.blocked).map(c =>
-      `<label class="contact i-ctx-item" data-cid="${c.id}"><input type="checkbox" class="i-accent-g"><div class="cname">${c.pinned ? '📌 ' : ''}${esc(c.name)}</div></label>`
+      `<label class="contact i-ctx-item" data-cid="${c.id}"><input type="checkbox" class="i-accent-g"><div class="cname">${c.pinned ? '📌 ' : ''}${esc(contactDisplayName(c))}</div></label>`
     ).join('');
     safeSetHTML(overlay, `<div class="modal i-max-popup">
       <div class="i-heading-b">${esc(t('forwardTo'))}</div>
@@ -10508,7 +10475,7 @@ async function initMessenger(dbName) {
       input.parentElement.appendChild(pk);
     }
     safeSetHTML(pk, members.slice(0, 5).map(m =>
-      `<div class="mention-item i-ctx-row" data-name="${esc(m.name)}">${esc(m.name)}</div>`
+      `<div class="mention-item i-ctx-row" data-name="${esc(contactDisplayName(m))}">${esc(contactDisplayName(m))}</div>`
     ).join(''));
     pk.querySelectorAll('.mention-item').forEach(item => {
       item.onmouseenter = () => { pk.querySelectorAll('.mention-item').forEach(i => i.classList.remove('i-bg-s2')); item.classList.add('i-bg-s2'); };
@@ -11382,7 +11349,7 @@ async function initMessenger(dbName) {
       // A ringing call is inherently important; only strict focus ("/focus N all") silences it.
       if (!(_focusActive() && _settings.focusStrict)) playNotif();
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-        new Notification(contact.name, { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
+        new Notification(contactDisplayName(contact), { body: msg.isVideoCall ? t('videoCall') : t('voiceCall'), tag: 'breeze-call' });
       }
       return;
     }
@@ -11591,7 +11558,7 @@ async function initMessenger(dbName) {
       const senderContact = await dbGet('contacts', member.id);
       const senderName = (senderContact?.pubB64 === member.pubB64 && typeof senderContact.name === 'string')
         ? senderContact.name : (typeof member.name === 'string' ? member.name : member.id);
-      const meta = { msgId, senderName, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
+      const meta = { msgId, senderName, senderId: member.id, replyTo: msg.replyTo, disappearAt: msg.disappearAt };
       const locP = globalThis.__breezeLocation?.parseGroupLocationText(text);
       if (locP) { // Stage 5 step 6: group location — collapses into the live/one-shot record, never text.
         await _locUI?.applyLocation(msg.groupId, member.id, locP, msg.ts, senderName);
@@ -11638,7 +11605,7 @@ async function initMessenger(dbName) {
         // mention (or a VIP group) gets through, and never in strict mode.
         if (_shouldAlert(group, mentionsMe ? '@' + myName : text)) playNotif();
         if (mentionsMe && _shouldAlert(group, '@' + myName) && Notification?.permission === 'granted') {
-          new Notification(group.name, { body: `@${senderName}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
+          new Notification(contactDisplayName(group), { body: `@${contactDisplayName({ name: senderName })}: ${text.slice(0, 80)}`, tag: 'breeze-' + msg.groupId });
         }
       }
       await dbPut('contacts', group);
@@ -11902,14 +11869,14 @@ async function initMessenger(dbName) {
           const body = unread > 1
             ? `(${unread}) ${text.slice(0, 60)}`
             : text.slice(0, 80);
-          new Notification(contact.name, {
+          new Notification(contactDisplayName(contact), {
             body, tag: 'breeze-' + contactId, renotify: true, silent: false,
             data: { contactId, url: '/?open=' + contactId }
           });
         }
       }
       // v3.6: Screen reader announcement for unread messages (research: ARIA23)
-      announceToSR(`${contact.name}: ${text.slice(0, 60)}`);
+      announceToSR(`${contactDisplayName(contact)}: ${text.slice(0, 60)}`);
     }
     await dbPut('contacts', contact);
     if (activeContact?.id === contactId) { meta._animate = true; appendMsg(text, false, msg.ts, null, storedFileData, meta); showSmartReplies(text); }
@@ -12948,7 +12915,9 @@ async function initMessenger(dbName) {
     }
     // Step 6: a pasted invite URL names the contact's home relay by its
     // origin (null for bare keys/aliases — no carrier, no hint).
-    await addContact(pubB64, name, homeHint);
+    const alias = aliasResolved ? (addr?.alias || input.slice(1).split('@')[0]) : '';
+    if (_nameTools && !await _nameTools.confirm({ id: pubB64.slice(0, 12), pubB64, name, alias })) return;
+    await addContact(pubB64, name, homeHint, alias);
   }
   // PRESENCE POLLING — single batch check (P2 FIX: no rate limit issue)
   const _presenceCache = {};
@@ -13490,10 +13459,10 @@ async function initMessenger(dbName) {
     const peerName = contactPeerName(contact);
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('contactInfo'))}</div>
       <div class="fw-700 text-sm mb-2">${esc(contactDisplayName(contact))}</div>
-      ${contact.alias ? '<div class="text-xs color-t3 mb-2">@' + esc(contact.alias) + '</div>' : ''}
+      ${contact.alias ? '<div class="text-xs color-t3 mb-2">@' + esc(contactDisplayName({ name: contact.alias })) + '</div>' : ''}
       ${peerName ? '<div class="text-xs color-t3 mb-2">' + esc(t('peerNameLabel')) + ': ' + esc(peerName) + '</div>' : ''}
       <label class="i-tiny-meta">${esc(t('nicknameLabel'))}</label>
-      <input class="modal-input" type="text" maxlength="64" value="${contact.nameLocked ? esc(contact.name) : ''}" placeholder="${esc(contact.profileName || contact.name || '')}" autocomplete="off">
+      <input class="modal-input" type="text" maxlength="64" value="${contact.nameLocked ? esc(contactDisplayName(contact)) : ''}" placeholder="${esc(contactDisplayName({ name: contact.profileName || contact.name || '' }))}" autocomplete="off">
       <div class="i-tiny-meta">${esc(t('nicknameLocalNote'))}</div>
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
@@ -14317,7 +14286,7 @@ async function initMessenger(dbName) {
               } catch(e) { _dbg(e, 'server-promote'); }
             }
             auditLog('group', 'Promoted ' + member.name + ' to admin in ' + activeContact.name);
-            d.textContent = t('promotedAdmin', member.name);
+            d.textContent = t('promotedAdmin', contactDisplayName(member));
           } else { d.textContent = t('uiMemberNotFound', target); }
         }
       } else if (sub.startsWith('demote ')) {
@@ -14337,7 +14306,7 @@ async function initMessenger(dbName) {
               } catch(e) { _dbg(e, 'server-demote'); }
             }
             auditLog('group', 'Demoted ' + member.name + ' in ' + activeContact.name);
-            d.textContent = t('demotedAdmin', member.name);
+            d.textContent = t('demotedAdmin', contactDisplayName(member));
           } else { d.textContent = t('uiMemberNotFound', target); }
         }
       } else {
@@ -14720,12 +14689,12 @@ async function initMessenger(dbName) {
           const cls = m.mine ? 'me' : 'them';
           return `<div class="${cls}"><b>${esc(sender)}</b> <span class="ts">${esc(time)}</span><br>${esc(m.text || t('htmlExportFileLabel'))}</div>`;
         }).join('\n');
-        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(activeContact.name)}</title>
+        const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(contactDisplayName(activeContact))}</title>
 <style>body{font-family:system-ui;max-width:700px;margin:0 auto;padding:20px;background:#f5f5f5}
 .me,.them{padding:8px 14px;border-radius:12px;margin:4px 0;max-width:80%}
 .me{background:#d1fae5;margin-left:auto;text-align:right}.them{background:#fff}
 b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
-<body><h1>🌊 ${esc(activeContact.name)}</h1><p>${t('htmlExportMeta', msgs.length, new Date().toLocaleDateString())}</p>${rows}</body></html>`;
+<body><h1>🌊 ${esc(contactDisplayName(activeContact))}</h1><p>${t('htmlExportMeta', msgs.length, new Date().toLocaleDateString())}</p>${rows}</body></html>`;
         downloadBlob(new Blob([html], { type: 'text/html' }), 'breeze-' + activeContact.name.replace(/\s+/g, '-') + '-' + new Date().toISOString().slice(0, 10) + '.html');
         showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
       } else {
@@ -15052,7 +15021,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       auditLog('contact', 'Unblocked ' + activeContact.name);
       _setConvName(activeContact);
       _DOM.get('msg-input-bar').classList.remove('hidden');
-      showToast(t('toastUnblockedName', activeContact.name), 'success');
+      showToast(t('toastUnblockedName', contactDisplayName(activeContact)), 'success');
       renderContacts();
     }
 
@@ -15177,7 +15146,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       if (!noteText) return;
       activeContact.notes = noteText.slice(0, 1024);
       await dbPut('contacts', activeContact);
-      showToast(t('toastNoteSavedFor', activeContact.name), 'success');
+      showToast(t('toastNoteSavedFor', contactDisplayName(activeContact)), 'success');
     }
 
     // v3.3: /note (no args) — Show contact note
@@ -15252,11 +15221,11 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const contactShortId = c.pubB64 ? await generateShortId(c.pubB64) : c.id.slice(0, 12);
       safeSetHTML(d, [
-        '<b class="i-g13">' + esc(c.name) + '</b>',
+        '<b class="i-g13">' + esc(contactDisplayName(c)) + '</b>',
         '<div class="i-muted12">' + contactShortId + '</div>',
         '',
         c.isGroup ? t('infoMembers') + ': ' + (c.members?.length || 0) : t('infoDirect'),
-        c.alias ? '@' + esc(c.alias) : '',
+        c.alias ? '@' + esc(contactDisplayName({ name: c.alias })) : '',
         c.notes ? t('noteLabel') + ': ' + esc(c.notes) : '',
         '',
         '<b>' + t('infoMessages') + '</b>',
@@ -15499,10 +15468,10 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
       }
       const [box, d] = _cmdPanelEl('cmd-panel-mono');
       const members = activeContact.members || [];
-      safeSetHTML(d, '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' ' + t('cmdMembersLabel') + '</b><br>' +
+      safeSetHTML(d, '<b class="i-g">' + esc(contactDisplayName(activeContact)) + ' — ' + members.length + ' ' + t('cmdMembersLabel') + '</b><br>' +
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
-          return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
+          return (isOn ? '🟢' : '⚫') + ' ' + esc(contactDisplayName(m) || m.id) + (_nameTools?.warningHtml(m) || '') + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
         }).join('<br>') + (CONFIG.GROUP_RATCHET_V5 && !_computeGroupV5(activeContact) ? '<br><span class="i-t3-10">' + t('groupLegacyNoFs') + '</span>' : '')); // D30: a legacy member holds the whole group on v3 (no FS) — say so, and what fixes it
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }

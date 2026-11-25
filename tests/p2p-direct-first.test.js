@@ -239,7 +239,8 @@ function buildHandleIncoming({ stored = null, decrypt = 'hello text' } = {}) {
     'activeContact', '_shouldAlert', 'playNotif', 'Notification', 'announceToSR',
     'appendMsg', 'showSmartReplies', '_renderContactsThrottled', 'broadcastToTabs',
     't', '_dbg', '_myOtherDevices', '_focusActive', '_attribDevCache', 'MS', '_myAcctRoot',
-    `${sliceBetween('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact =====')}
+    `const contactDisplayName = c => c?.name || '';
+     ${sliceBetween('async function handleIncoming(msg, ackOut) {', '// ===== P2P connection per contact =====')}
      return handleIncoming;`);
   const handleIncoming = fn(
     async (store, key) => {

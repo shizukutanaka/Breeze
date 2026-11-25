@@ -1,3 +1,5 @@
+import { safeName } from './lookalike-names.js';
+
 // Breeze — the /security and /who information panels (moved out of
 // index.html in the stage 5 step 5 line-budget pass; content and
 // wording unchanged). Both panels render only state this device
@@ -90,7 +92,7 @@ export function createInfoPanels(D) {
         'PQXDH: ' + (sess ? (sess.pq ? '<span class="i-g">✓ ' + D.t('secPqxdhInUse') + '</span>' : D.t('secPqxdhClassical')) : '—'),
         '',
         '<b>' + D.t('cmdSectionSession') + '</b>',
-        D.activeContact() ? D.t('cmdLblPeer') + ': ' + D.activeContact().name : D.t('cmdNoContact'),
+        D.activeContact() ? D.t('cmdLblPeer') + ': ' + D.esc(safeName(D.activeContact().name)) : D.t('cmdNoContact'),
         D.t('cmdLblSession') + ': ' + (sess ? '<span class="i-g">✓ ' + D.t('statusActive') + ' (counter: ' + (sess.sendCounter || 0) + ')</span>' : '✗ ' + D.t('statusNoSession')),
         D.t('secLblFwdSec') + ': ' + (sess ? D.t('cmdCryptoFwdSec') : '—'),
         D.t('secLblReplay') + ': ' + D.replayCacheSize() + '/' + D.config().REPLAY_CACHE_SIZE + ' ' + D.t('secInLruCache'),
@@ -202,7 +204,7 @@ export function createDataPanels(D) {
       d.textContent = D.t('uiNoFiles');
     } else {
       const contactMap = {};
-      for (const c of await D.dbGetAll('contacts')) contactMap[c.id] = c.name;
+      for (const c of await D.dbGetAll('contacts')) contactMap[c.id] = safeName(c.name);
       D.safeSetHTML(d, '<b class="i-g">' + D.t('sharedFiles', files.length) + '</b><br>' +
         files.slice(0, 30).map(f => {
           const date = new Date(f.ts).toLocaleDateString();
