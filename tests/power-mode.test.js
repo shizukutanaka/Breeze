@@ -92,11 +92,12 @@ const createPolling = new Function(
 function presenceHarness(settings) {
   const power = create({ MIN: 60000 }, settings, {}, () => {});
   const postAPIRaw = vi.fn(async () => ({ ok: true, json: async () => ({ online: { c1: true } }) }));
+  const dbGetAll = vi.fn(async () => [{ id: 'c1', pubB64: 'pub1', isGroup: false }]);
   const timers = [];
   const renderContacts = vi.fn();
   const start = createPolling(
     'https://api.test',
-    async () => [{ id: 'c1', pubB64: 'pub1', isGroup: false }],
+    dbGetAll,
     {},
     {},
     {},
@@ -113,7 +114,7 @@ function presenceHarness(settings) {
     power._powerPresenceOff,
   );
   start();
-  return { postAPIRaw, renderContacts, timers };
+  return { postAPIRaw, dbGetAll, renderContacts, timers };
 }
 async function flushMicrotasks() {
   for (let i = 0; i < 10; i++) await Promise.resolve();
@@ -126,20 +127,29 @@ describe('power mode — presence checks', () => {
     await flushMicrotasks();
     expect(h.timers).toHaveLength(1);
     expect(h.timers[0].ms).toBe(30000);
-    expect(h.renderContacts).toHaveBeenCalled();
+    // The pre-fix request-only gate still read IndexedDB and re-rendered in saver;
+    // presence polling must now return before every one of those side effects.
+    expect(h.dbGetAll).not.toHaveBeenCalled();
+    expect(h.renderContacts).not.toHaveBeenCalled();
     expect(h.postAPIRaw).not.toHaveBeenCalled();
 
     await h.timers[0].fn();
+    expect(h.dbGetAll).not.toHaveBeenCalled();
+    expect(h.renderContacts).not.toHaveBeenCalled();
     expect(h.postAPIRaw).not.toHaveBeenCalled();
 
     settings.powerMode = 'normal';
     await h.timers[0].fn();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
     expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
+    const dbCallsInNormal = h.dbGetAll.mock.calls.length;
+    const renderCallsInNormal = h.renderContacts.mock.calls.length;
 
     settings.powerMode = 'emergency';
     await h.timers[0].fn();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+    expect(h.dbGetAll).toHaveBeenCalledTimes(dbCallsInNormal);
+    expect(h.renderContacts).toHaveBeenCalledTimes(renderCallsInNormal);
   });
 
   it('keeps the immediate check in normal mode', async () => {
