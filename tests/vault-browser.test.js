@@ -44,6 +44,7 @@ describe('vault browser storage', () => {
     local.setItem('brz-theme', 'dark'); local.setItem('brz-accounts', 'private-account');
     session.setItem('brz-shared-text', 'private-share');
     const plain = await createBrowserVault(boot, null), snapshot = await plain.freeze(true);
+    expect(session.getItem('brz-shared-text')).toBe('private-share');
     await commitBrowserVault(boot, snapshot, codec);
     expect(JSON.stringify([...local.rows, ...session.rows])).not.toContain('private-');
     expect(local.getItem('brz-theme')).toBe('dark');
@@ -73,6 +74,12 @@ describe('vault browser storage', () => {
     expect(() => first.getItem(0, 'brz-drafts')).toThrow('locked');
     expect(() => first.setItem(0, 'brz-drafts', 'leak')).toThrow('locked');
     expect(local.getItem('brz-drafts')).toBeNull();
+  });
+  it.each([null, [[], [['brz-theme', 'not-private']]], [[['duplicate', 'one'], ['duplicate', 'two']], []], [[['value', 1]], []]])('rejects malformed browser journals before any writes (%j)', async snapshot => {
+    const { boot, local } = setup();
+    if (snapshot === null) snapshot = [[], null];
+    await expect(commitBrowserVault(boot, snapshot, null)).rejects.toThrow('snapshot');
+    expect(local.length).toBe(0);
   });
   it('rejects missing, tampered and cross-scope ciphertext instead of using plaintext', async () => {
     const { boot, local, session } = setup();

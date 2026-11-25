@@ -3,12 +3,13 @@ import { expect, test } from '@playwright/test';
 async function harness(page) {
   await page.goto('/manifest.json');
   await page.evaluate(async () => {
-    const V = await import('/src/app/vault.js'), H = await import('/src/app/vault-history.js');
+    const V = await import('/src/app/vault.js'), H = await import('/src/app/vault-history.js'), B = await import('/src/app/vault-browser.js');
+    const bootstrap = B.browserBootstrap(localStorage, sessionStorage, Object.fromEntries(['getItem', 'setItem', 'removeItem', 'key', 'clear'].map(k => [k, Storage.prototype[k]])));
     const pass = 'a separate strong vault passphrase';
     const request = r => new Promise((resolve, reject) => { r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
     const done = tx => new Promise((resolve, reject) => { tx.oncomplete = resolve; tx.onabort = tx.onerror = () => reject(tx.error || new Error('abort')); });
     const open = name => request(indexedDB.open(name));
-    const make = (options = {}) => V.createVaultRuntime({ accounts: () => [], gate: unlock => unlock(pass), reload: () => {}, dbg: () => {}, quiesce: () => {}, ...options });
+    const make = (options = {}) => V.createVaultRuntime({ browser: bootstrap, accounts: () => [], gate: unlock => unlock(pass), reload: () => {}, dbg: () => {}, quiesce: () => {}, ...options });
     const seed = async name => {
       const db = await open(name), tx = db.transaction(['identity', 'contacts', 'messages'], 'readwrite'), completed = done(tx);
       tx.objectStore('identity').put({ priv: { d: 'private-identity' } }, 'keys');
@@ -18,7 +19,7 @@ async function harness(page) {
       await completed; db.close();
     };
     const resumed = () => new Promise((resolve, reject) => { make({ reload: resolve }).boot().catch(reject); });
-    window.LT = { V, H, pass, request, done, open, make, seed, resumed };
+    window.LT = { V, H, bootstrap, pass, request, done, open, make, seed, resumed };
   });
 }
 
@@ -26,6 +27,7 @@ test('history lifecycle enables, exports only ciphertext, disables and restores 
   await harness(page);
   const result = await page.evaluate(async () => {
     const { H, pass, request, open, make, seed } = LT;
+    localStorage.setItem('brz-drafts', 'private-draft'); sessionStorage.setItem('brz-shared-text', 'private-share');
     const initial = make(); await initial.boot(); await seed('breeze-messenger');
     await initial.change(pass, true);
     const unlocked = make(); await unlocked.boot();
@@ -40,6 +42,7 @@ test('history lifecycle enables, exports only ciphertext, disables and restores 
     await unlocked.change(pass, false);
     const plainDb = await open('breeze-messenger');
     const plain = await request(plainDb.transaction('messages').objectStore('messages').get('private-message-id')); plainDb.close();
+    if (localStorage.getItem('brz-drafts') !== 'private-draft') throw new Error('draft disable failed');
     await request(indexedDB.deleteDatabase('breeze-messenger'));
     const empty = make(); await empty.boot();
     const broken = structuredClone(backup); broken.accounts[0].snapshot.stores.find(([name]) => name === 'messages')[1].pop();
@@ -47,9 +50,9 @@ test('history lifecycle enables, exports only ciphertext, disables and restores 
     if (!rejected) throw new Error('missing encrypted row accepted');
     await empty.restore(backup, pass);
     const restored = make(); await restored.boot(); const again = await restored.backup();
-    return { historyV: backup.manifest.historyV, stores: opened.stores.size, plain: plain.text, restored: again.accounts[0].snapshot.stores.length };
+    return { historyV: backup.manifest.historyV, stores: opened.stores.size, plain: plain.text, restored: again.accounts[0].snapshot.stores.length, draft: LT.bootstrap.invoke(localStorage, 'getItem', 'brz-drafts'), share: LT.bootstrap.invoke(sessionStorage, 'getItem', 'brz-shared-text') };
   });
-  expect(result).toEqual({ historyV: 2, stores: 6, plain: 'private-body', restored: 6 });
+  expect(result).toEqual({ historyV: 2, stores: 6, plain: 'private-body', restored: 6, draft: 'private-draft', share: 'private-share' });
 });
 
 test('authenticated history journal recovers an interrupted atomic account commit', async ({ page }) => {

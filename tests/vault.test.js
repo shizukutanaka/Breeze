@@ -54,9 +54,9 @@ describe('vault authenticated records and explicit codec', () => {
   });
   it('authenticates migration phase, account list, restore index and staged-slot inventories', async () => {
     const { manifest, key } = await newVault(pass);
-    const pending = await sealVaultState(key, { ...manifest, phase: 'enabling', accounts: ['breeze-messenger'], accountIndex: [{ id: 'default' }] }, [['breeze-messenger', [['keys', {}], ['sess:a', {}]]]]);
+    const pending = await sealVaultState(key, { ...manifest, phase: 'enabling', historyV: 2, storageV: 1, browser: { vaultV: 1, ct: 'encrypted' }, accounts: ['breeze-messenger'], accountIndex: [{ id: 'default' }] }, [['breeze-messenger', [['keys', {}], ['sess:a', {}]]]]);
     expect((await openVaultState(key, pending)).inventories).toEqual([['breeze-messenger', ['keys', 'sess:a']]]);
-    for (const change of [{ phase: 'ready' }, { accounts: [] }, { accountIndex: [] }, { auth: { ...pending.auth, ct: pending.auth.ct.slice(4) } }]) {
+    for (const change of [{ phase: 'ready' }, { historyV: undefined }, { storageV: undefined }, { browser: undefined }, { browser: { ...pending.browser, ct: 'substituted' } }, { accounts: [] }, { accountIndex: [] }, { auth: { ...pending.auth, ct: pending.auth.ct.slice(4) } }]) {
       await expect(openVaultState(key, { ...pending, ...change })).rejects.toThrow();
     }
     const ready = await sealVaultState(key, manifest);

@@ -1,5 +1,6 @@
 export const BROWSER_SLOT = 'brz-vault-browser-v1';
 export const privateBrowserKey = key => key !== BROWSER_SLOT && !['brz-theme', 'brz-consent', 'brz-lang'].includes(key);
+const validRows = rows => Array.isArray(rows) && rows.every(r => Array.isArray(r) && r.length === 2 && typeof r[0] === 'string' && privateBrowserKey(r[0]) && typeof r[1] === 'string') && new Set(rows.map(r => r[0])).size === rows.length;
 
 export function browserBootstrap(local, session, methods, pending = [new Map(), new Map()]) {
   const raw = [local, session].map(target => Object.fromEntries(['getItem', 'setItem', 'removeItem', 'key', 'clear'].map(name => [name, (...args) => methods[name].apply(target, args)])));
@@ -35,7 +36,7 @@ export async function createBrowserVault(bootstrap, codec, onError = () => {}) {
     const record = raw[i].getItem(BROWSER_SLOT);
     if (!record) { if (sealed && i === 0) throw new Error('vault browser inventory missing'); return []; }
     const rows = await codec.open('breeze-vault', 'browser', String(i), JSON.parse(record));
-    if (!Array.isArray(rows) || rows.some(r => !Array.isArray(r) || r.length !== 2 || typeof r[0] !== 'string' || !privateBrowserKey(r[0]) || typeof r[1] !== 'string') || new Set(rows.map(r => r[0])).size !== rows.length) throw new Error('vault browser format');
+    if (!validRows(rows)) throw new Error('vault browser format');
     return rows;
   };
   for (let i = 0; i < 2; i++) {
@@ -70,7 +71,7 @@ export async function createBrowserVault(bootstrap, codec, onError = () => {}) {
         return keep ? (sealed ? [await decode(0), await decode(1)] : [0, 1].map(i => bootstrap.keys(i).map(k => [k, raw[i].getItem(k)]).filter(([, v]) => v !== null))) : null;
       } finally {
         for (const map of values) map.clear();
-        for (const key of bootstrap.keys(1)) raw[1].removeItem(key);
+        if (!keep) for (const key of bootstrap.keys(1)) raw[1].removeItem(key);
         codec = null;
       }
     },
@@ -93,7 +94,7 @@ export async function createBrowserVault(bootstrap, codec, onError = () => {}) {
 
 export async function commitBrowserVault(bootstrap, snapshot, codec) {
   if (!bootstrap || !snapshot) return;
-  if (!Array.isArray(snapshot) || snapshot.length !== 2) throw new Error('vault browser snapshot');
+  if (!Array.isArray(snapshot) || snapshot.length !== 2 || snapshot.some(rows => !validRows(rows))) throw new Error('vault browser snapshot');
   for (let i = 0; i < 2; i++) {
     if (codec) bootstrap.raw[i].setItem(BROWSER_SLOT, JSON.stringify(await codec.seal('breeze-vault', 'browser', String(i), snapshot[i])));
     for (const key of bootstrap.keys(i)) bootstrap.raw[i].removeItem(key);

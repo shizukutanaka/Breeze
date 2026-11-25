@@ -400,12 +400,13 @@ export function createVaultRuntime(D) {
       await gate();
       await openVaultState(key, manifest);
       if (manifest.historyV !== undefined && manifest.historyV !== 2) throw new Error('unsupported history format');
+      if (manifest.storageV !== undefined && manifest.storageV !== 1) throw new Error('unsupported browser format');
       if (manifest.phase !== 'ready') {
         const unlocked = key;
         await exclusive(async () => { key = unlocked; await resume(); });
         D.reload(); return new Promise(() => {});
       }
-      browser = await createBrowserVault(bootstrap, manifest.storageV === 1 ? historyCodec(key, manifest) : null, e => { D.dbg(e, 'vault-browser'); freeze(true).catch(error => D.dbg(error, 'vault-freeze')); });
+      browser = await createBrowserVault(bootstrap, manifest.storageV === 1 ? historyCodec(key, manifest) : null, e => { D.dbg(e, 'vault-browser'); channel?.postMessage({ type: 'freeze' }); freeze(true).catch(error => D.dbg(error, 'vault-freeze')); });
       if (manifest.historyV !== 2 || manifest.storageV !== 1) { await upgradeHistory(); D.reload(); return new Promise(() => {}); }
     } else {
       browser = await createBrowserVault(bootstrap, null);

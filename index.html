@@ -1973,18 +1973,18 @@ const _I = {
     cvBlocked: "Sending blocked: a contact’s keys changed. Compare safety numbers and re-verify, or turn off strict mode in /verify.",
     cvAuditChanged: "Contact verification invalidated:",
     cvAuditVerified: "Contact verified:",
-    vaultTitle: 'Key vault locked',
+    vaultTitle: 'Vault locked',
     vaultUnlock: 'Enter the separate vault passphrase',
     vaultNew: 'New vault passphrase (at least 12 characters; not your /lock password)',
     vaultConfirm: 'Repeat the new vault passphrase',
     vaultLegacy: 'Existing /keywrap passphrase, or leave blank if none',
-    vaultScope: 'Protect private keys and sessions for all accounts? History, contacts and drafts remain outside the vault. Save your recovery phrase and a vault file backup first. /vault lock locks every tab; /vault password changes the passphrase.',
-    vaultDisable: 'Disable the key vault for every account? Authentication is required. Private keys and sessions will be stored in plaintext.',
+    vaultScope: 'Protect keys, messages/files, contacts, drafts and private browser settings for all accounts? Save your recovery phrase and a vault file backup first. Theme, language and consent stay public. /vault lock locks every tab; /vault password changes the passphrase.',
+    vaultDisable: 'Disable the vault for every account? Authentication is required. History, files, contacts, keys, drafts and private browser settings will return to vault-off storage.',
     vaultMismatch: 'The vault passphrases do not match.',
     vaultFailed: 'Vault operation failed. Check the passphrase and storage; no plaintext fallback is allowed.',
     vaultRecovery: 'This is not the /lock password. If forgotten, recover your identity using your recovery phrase on a fresh install. Existing vault sessions cannot be recovered without this passphrase.',
     vaultOldTabs: 'Close older Breeze tabs before changing the vault.',
-    vaultBackupOnly: 'While the vault is enabled, use the vault file backup. Cloud, automatic and recovery-kit exports are disabled.',
+    vaultBackupOnly: 'While the vault is enabled, exports contain only encrypted vault snapshots. Attachment downloads, cloud, automatic and recovery-kit exports are disabled.',
     draftLabel: 'Draft',
     dropUsage: 'Usage: /drop <secret message>',
     dropTooLong: 'Secret too long (max 50,000 characters)',
@@ -4171,7 +4171,7 @@ async function initMessenger(dbName) {
   initMessenger._vault = _vault;
   if (!initMessenger._vaultGuards) { _vault.installGuards(); initMessenger._vaultGuards = true; }
   await _vault.boot();
-  _userId = localStorage.getItem('brz-uid') || ''; Object.assign(_crossAccountUnread, JSON.parse(localStorage.getItem('brz-cross-unread') || '{}'));
+  try { _userId = localStorage.getItem('brz-uid') || ''; Object.assign(_crossAccountUnread, JSON.parse(localStorage.getItem('brz-cross-unread') || '{}')); } catch(e) { _dbg(e); }
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
   dbName = dbName || 'breeze-messenger';
