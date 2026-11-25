@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 // Power saving (emergency design phase 1): the decision logic lives inline in
@@ -77,5 +77,75 @@ describe('power mode — manual setting wins over the battery', () => {
     const p = harness('bogus');
     p._powerState.level = 0.1;
     expect(p._effectivePowerMode()).toBe('emergency');
+  });
+});
+
+// The presence CHECK is listening, not sending, so the same power gate applies.
+// Slice the deployed polling loop and drive it with the real power-mode helpers.
+const pollingBlock = slice('  function startPresencePolling() {', '\n  startPresencePolling();');
+const createPolling = new Function(
+  'API', 'dbGetAll', 'peers', '_presenceCache', '_lastSeenCache', 'renderContacts', 'postAPIRaw', '_dbg', '_devRegTs',
+  '_attribDevCache', 'deliverPeerRelayQueue', 'connectPeer', 'CONFIG', '_intervals',
+  'setInterval', '_powerPresenceOff',
+  pollingBlock + '\nreturn startPresencePolling;');
+
+function presenceHarness(settings) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const postAPIRaw = vi.fn(async () => ({ ok: true, json: async () => ({ online: { c1: true } }) }));
+  const timers = [];
+  const renderContacts = vi.fn();
+  const start = createPolling(
+    'https://api.test',
+    async () => [{ id: 'c1', pubB64: 'pub1', isGroup: false }],
+    {},
+    {},
+    {},
+    renderContacts,
+    postAPIRaw,
+    () => {},
+    {},
+    new Map(),
+    () => {},
+    () => {},
+    { PRESENCE_INTERVAL_MS: 30000 },
+    [],
+    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    power._powerPresenceOff,
+  );
+  start();
+  return { postAPIRaw, renderContacts, timers };
+}
+async function flushMicrotasks() {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
+describe('power mode — presence checks', () => {
+  it('skips the /presence request in saver and emergency, then resumes live in normal', async () => {
+    const settings = { powerMode: 'saver' };
+    const h = presenceHarness(settings);
+    await flushMicrotasks();
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(30000);
+    expect(h.renderContacts).toHaveBeenCalled();
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+
+    await h.timers[0].fn();
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    await h.timers[0].fn();
+    expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+    expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
+
+    settings.powerMode = 'emergency';
+    await h.timers[0].fn();
+    expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the immediate check in normal mode', async () => {
+    const h = presenceHarness({ powerMode: 'normal' });
+    await flushMicrotasks();
+    expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+    expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
   });
 });
