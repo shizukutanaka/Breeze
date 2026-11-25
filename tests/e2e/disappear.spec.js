@@ -17,7 +17,7 @@
 // Playwright's virtual clock does not reliably drive in this environment (confirmed:
 // fast-forwarding past even a 30s TTL left the message showing as still present).
 import { test, expect } from '@playwright/test';
-import { submitSetup } from './helpers.mjs';
+import { submitSetup, openAddContact } from './helpers.mjs';
 
 test('a message set to disappear in 1h is not deleted within the first 90 seconds', async ({ page }) => {
   // Inherently real-time-bound (see file header for why page.clock can't substitute):
@@ -28,14 +28,14 @@ test('a message set to disappear in 1h is not deleted within the first 90 second
   await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible();
 
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
   await dialog.locator('.modal-input').fill(fakePub);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  await page.locator('#msg-contacts .contact').first().click();
+  await page.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();
 
   // The timer button cycles Off -> 30s -> 5min -> 1h -> 24h.

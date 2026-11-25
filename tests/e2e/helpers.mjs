@@ -2,6 +2,21 @@
 // copies had drifted: some seeded the consent banner, some didn't; some rejected on
 // IndexedDB errors, some swallowed them. This is the canonical version.
 import { expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+const dbVersion = Number(readFileSync(new URL('../../index.html', import.meta.url), 'utf8').match(/\bconst DB_VER = (\d+);/)[1]);
+
+export async function openAddContact(page, choice = 'add') {
+  await page.locator('#b-msg-add').click();
+  await page.locator(`dialog[open] [data-choice="${choice}"]`).click();
+}
+
+export async function enableDirectConnections(page) {
+  await page.locator('#b-msg-settings').click();
+  await page.locator('input[data-setting="relay-only"]').uncheck();
+  await page.locator('#b-settings-back').click();
+  await expect(page.locator('#settings-view')).toBeHidden();
+}
 
 // Pre-accept the consent banner (it renders bottom-fixed and intercepts clicks on elements
 // the specs drive — consent UX itself is covered by account.spec, not every spec's setup).
@@ -30,7 +45,7 @@ export async function submitSetup(page) {
 // Drives the real identity-creation UI and returns the new identity's pubB64 read straight
 // from IndexedDB (app internals live inside initMessenger()'s closure — unreachable from
 // page.evaluate — but IndexedDB is a standard Web API). Mirrors initMessenger's own open
-// (dbName 'breeze-messenger', DB_VER 5) and the 'identity' store's 'keys' record.
+// (dbName 'breeze-messenger', DB_VER from index.html) and the 'identity' store's 'keys' record.
 // `navigate: false` for callers that already goto'd a deep link (e.g. ?join= URLs), where
 // re-navigating to '/' would discard the token.
 export async function createIdentity(page, name, { navigate = true, alias = '' } = {}) {
@@ -44,8 +59,8 @@ export async function createIdentity(page, name, { navigate = true, alias = '' }
   if (alias) await page.locator('#msg-alias').fill(alias);
   await submitSetup(page);
   await expect(page.locator('#msg-main')).toBeVisible(alias ? { timeout: 60_000 } : {});
-  return page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
+  return page.evaluate(version => new Promise((resolve, reject) => {
+    const req = indexedDB.open('breeze-messenger', version);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
       const getReq = req.result.transaction('identity', 'readonly')
@@ -53,7 +68,7 @@ export async function createIdentity(page, name, { navigate = true, alias = '' }
       getReq.onsuccess = () => resolve(getReq.result?.pubB64);
       getReq.onerror = () => reject(getReq.error);
     };
-  }));
+  }), dbVersion);
 }
 
 // Every stored message, with its body opened. Since D23 (C9) the 'messages' store holds
@@ -63,9 +78,9 @@ export async function createIdentity(page, name, { navigate = true, alias = '' }
 // _msgOpenRecord (AES-GCM, AAD 'breeze-msgstore-v1:<msgId>'); legacy plaintext rows pass
 // through unchanged, exactly as the app treats them.
 export function readMessages(page) {
-  return page.evaluate(() => new Promise((resolve, reject) => {
+  return page.evaluate(version => new Promise((resolve, reject) => {
     const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
-    const req = indexedDB.open('breeze-messenger', 5);
+    const req = indexedDB.open('breeze-messenger', version);
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
       const tx = req.result.transaction(['messages', 'identity'], 'readonly');
@@ -86,5 +101,5 @@ export function readMessages(page) {
         } catch (e) { reject(e); }
       };
     };
-  }));
+  }), dbVersion);
 }

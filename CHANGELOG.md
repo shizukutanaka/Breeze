@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- **Add-contact dialog: Enter submits only once.** Cancel the input's default Enter action before closing the dialog, so restored focus cannot activate the Add friend opener again. The group-name input uses the same guard.
+- **Baseline test compatibility.** E2E database helpers read the deployed `DB_VER`; existing-database reads no longer request schema v5. Browser tests follow the current add-contact dialog and account switcher, distinguish the self card from contacts, close the Settings overlay before returning to a chat, explicitly opt into direct connections where required, and use an actually unsupported locale for fallback coverage. Production privacy defaults are unchanged. Vietnamese includes CLDR 49's new `one` plural forms; validation remains stable on older ICU releases.
+
 - **A new release no longer runs with the previous release's modules.** `index.html` (always revalidated) imports `src/crypto/*.js` and `src/app/*.js` by unversioned URL, but `_headers` served every `*.js` as `immutable` for 7 days, and the service worker precached and re-cached through that HTTP cache. For up to a week after a deploy a returning browser could pair the new shell with old modules; one missing export fails the whole module block and every bridge (PQXDH, calls, backup) degrades silently. Scripts and locale files are now `no-cache` (revalidated by ETag), the service worker installs with `cache: 'reload'` and revalidates with `cache: 'no-cache'`, and the Node host answers revalidations with `304`.
 
 ### Documentation checked by tests

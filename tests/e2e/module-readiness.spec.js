@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createIdentity, seedConsent } from './helpers.mjs';
+import { createIdentity, seedConsent, openAddContact } from './helpers.mjs';
 
 test('delayed app modules are used by the first messenger session', async ({ page }) => {
   let release;
@@ -17,13 +17,13 @@ test('delayed app modules are used by the first messenger session', async ({ pag
   await page.waitForLoadState('domcontentloaded');
   await createIdentity(page, 'Delayed Modules', { navigate: false });
 
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   const pub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))));
   await dialog.locator('.modal-input').fill(pub);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  await page.locator('#msg-contacts .contact').click();
+  await page.locator('#msg-contacts .contact:not(.self-card)').click();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('brz-p2p-signal') || '{}').preEstablished || 0)).toBeGreaterThan(0);
   await page.locator('#msg-input').fill('/security');
   await page.locator('#msg-input').press('Enter');
@@ -44,8 +44,8 @@ test('a failed app-module dependency still boots, and says features are missing'
   await createIdentity(page, 'Failed Modules');
   await expect(page.locator('.toast', { hasText: 'Some features failed to load. Please reload.' })).toBeVisible();
   // Booted for real: the composer is live and the add-contact surface (classic script) works.
-  await page.locator('#b-msg-add').click();
-  await expect(page.locator('#msg-messages .cmd-panel .modal-input')).toBeVisible();
+  await openAddContact(page);
+  await expect(page.locator('dialog[open] .add-form-contact .modal-input')).toBeVisible();
 });
 
 test('no missing-features notice when every app module loads', async ({ page }) => {

@@ -15,7 +15,7 @@
 // IndexedDB (a standard Web API, unlike the app's own closure state) and every other
 // step is driven through real clicks/inputs against the shipped UI.
 import { test, expect } from '@playwright/test';
-import { createIdentity, readMessages } from './helpers.mjs';
+import { createIdentity, readMessages, openAddContact } from './helpers.mjs';
 import { createHash } from 'node:crypto';
 
 
@@ -25,13 +25,13 @@ import { createHash } from 'node:crypto';
 // field in that flow) — each test page adds exactly one contact, so selecting the sole
 // rendered .contact item is unambiguous without matching on name.
 async function addAndOpen(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB64);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
 
-  const contact = page.locator('#msg-contacts .contact');
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)');
   await expect(contact).toBeVisible();
   await contact.click();
 }

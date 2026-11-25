@@ -1,9 +1,9 @@
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, enableDirectConnections } from './helpers.mjs';
 import jsQR from 'jsqr';
 
 const readContact = (page, peer) => page.evaluate(peer => new Promise((resolve, reject) => {
-  const req = indexedDB.open('breeze-messenger', 5);
+  const req = indexedDB.open('breeze-messenger');
   req.onerror = () => reject(req.error);
   req.onsuccess = () => {
     const db = req.result, tx = db.transaction(['identity', 'contacts'], 'readonly');
@@ -61,6 +61,7 @@ for (const blockedStun of [false, true]) test(`fresh contacts pair, confirm and 
     const [a, b] = pages;
     const ap = await createIdentity(a, 'Offline Alice', { navigate: false }), bp = await createIdentity(b, 'Offline Bob', { navigate: false });
     for (const page of pages) {
+      await enableDirectConnections(page);
       await page.locator('#contact-filter').fill('/offlinepair'); await page.locator('#contact-filter').press('Enter');
       await expect(page.locator('[data-op="output"]')).toHaveValue(/^breeze-inv1z:/);
       await expect(page.locator('[data-op="confirm"]')).toBeDisabled();
@@ -79,7 +80,7 @@ for (const blockedStun of [false, true]) test(`fresh contacts pair, confirm and 
       const state = await readContact(page, peer);
       expect(state.session).toBe(false); expect(state.contact.offlinePairing.state).toBe('pending'); expect(state.contact.offlineVerified).toBe(true);
       await page.locator('[data-op="close"]').click();
-      await page.locator('#msg-contacts .contact').click();
+      await page.locator('#msg-contacts .contact:not(.self-card)').click();
       await page.locator('#msg-input').fill('/rendezvous'); await page.locator('#msg-input').press('Enter');
       await expect(page.locator('.rendezvous-dialog')).toBeVisible();
     }

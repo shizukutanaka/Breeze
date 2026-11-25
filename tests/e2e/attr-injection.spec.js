@@ -3,15 +3,15 @@
 // and smuggles attributes the sanitizer allows (style, class, id, data-*) onto the
 // link — a one-message full-screen overlay / remote-fetch (style background:url) vector.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 
-// The add-contact surface is the in-chat panel (_showAddContactPanel), not a dialog.
+// Add through the real add-contact dialog.
 async function addAndOpen(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const input = page.locator('#msg-messages .modal-input');
+  await openAddContact(page);
+  const input = page.locator('dialog[open] .add-form-contact .modal-input');
   await input.fill(pubB64);
   await input.press('Enter');
-  const contact = page.locator('#msg-contacts .contact');
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)');
   await expect(contact).toBeVisible();
   await contact.click();
 }

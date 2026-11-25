@@ -47,11 +47,11 @@ test('a Japanese browser gets the full Japanese UI from locales/ja.json', async 
 });
 
 test('an unsupported locale falls back to English without errors', async ({ browser }) => {
-  // Swahili has no locales/ file and no special-case anywhere. The app must boot in English
+  // The undetermined locale has no locales/ file. The app must boot in English
   // with zero errors — the fallback IS the feature (a worldwide app must never white-screen
   // because a translation is missing).
   const ctx = await browser.newContext({
-    locale: 'sw-KE',
+    locale: 'und',
     extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.46' },
   });
   const page = await ctx.newPage();

@@ -69,6 +69,7 @@
  "forward": "Chuyển tiếp",
  "pin": "Ghim",
  "replyCountLabel": {
+  "one": "{0} trả lời",
   "other": "{0} trả lời"
  },
  "upgGroup": "Nhóm hỗ trợ tối đa {0} thành viên.",
@@ -302,6 +303,7 @@
  "confirmDeleteMsg": "Xóa tin nhắn này?",
  "confirmClearChat": "Xóa tất cả tin nhắn với {0}?",
  "pollVotes": {
+  "one": "{0} phiếu bầu",
   "other": "{0} phiếu bầu"
  },
  "wipeTitle": "Xóa toàn bộ dữ liệu",
@@ -506,6 +508,7 @@
  "scheduleEmpty": "Không có tin nhắn đã lên lịch.",
  "scheduleCancelHint": "/schedule cancel — hủy tất cả",
  "scheduleCancelled": {
+  "one": "Đã hủy {0} tin nhắn đã lên lịch",
   "other": "Đã hủy {0} tin nhắn đã lên lịch"
  },
  "updateAvailable": "Có bản cập nhật: v{0}",
@@ -561,6 +564,7 @@
  "toastDbConflict": "Xung đột phiên bản cơ sở dữ liệu. Vui lòng tải lại.",
  "toastModulesFailed": "Một số tính năng tải thất bại. Vui lòng tải lại.",
  "toastFwdTo": {
+  "one": "Đã chuyển tiếp tới {0} liên hệ",
   "other": "Đã chuyển tiếp tới {0} liên hệ"
  },
  "toastFwdFail": "Chuyển tiếp thất bại",
@@ -665,6 +669,7 @@
  "helpTableHint": "| col | col | — bảng markdown",
  "helpKeysHint": "Ctrl+F tìm kiếm · Ctrl+K liên hệ · ? phím tắt",
  "uiPinnedCount": {
+  "one": "{0} tin nhắn đã ghim",
   "other": "{0} tin nhắn đã ghim"
  },
  "uiMoreCount": "+{0} nữa",
@@ -795,9 +800,11 @@
  "uiNoMatches": "Không khớp cho {0}",
  "uiNoResults": "Không có kết quả cho {0}",
  "searchResults": {
+  "one": "{0} kết quả cho \"{1}\"",
   "other": "{0} kết quả cho \"{1}\""
  },
  "searchAllResults": {
+  "one": "{0} kết quả trên {1} cuộc trò chuyện",
   "other": "{0} kết quả trên {1} cuộc trò chuyện"
  },
  "uiAllCaughtUp": "Đã xem hết",
