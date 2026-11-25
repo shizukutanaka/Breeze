@@ -1,21 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-// Bottom tab bar (UI/UX phase 1A + the 2026-11-25 expansion, owner
+// Bottom tab bar (UI/UX phase 1A + the 2026-11-25 expansions, owner
 // requests): on narrow (mobile) screens the list view gains a LINE-style
-// bottom tab bar — Chats / Contacts / My card / Settings. The bar rides
-// the EXISTING views, not a parallel router: Chats and Contacts are two
-// modes of the one sidebar list (_listTab — recency + folder filters vs
-// friends by name), My card opens the existing profile panel, and
-// Settings opens the settings view through the same synthetic-Enter path
-// as the ?settings shortcut (_openSettingsFromUrl). Bar visibility is
-// CSS-derived from .sidebar.hidden. Which optional tabs exist is a
-// Settings choice (_settings.tabContacts / tabSelf / tabSettings, all
-// default on); the Chats tab is always shown, and hiding the tab of the
-// screen you are on returns you to Chats. A Calls tab was NOT added:
-// the app keeps no call history anywhere (no IDB store, no message
-// type, no audit entries — calls are ephemeral WebRTC sessions), so
-// there is no existing calls screen for a tab to open.
+// bottom tab bar — Chats / Calls / Contacts / My card / Settings. The bar
+// rides the EXISTING views, not a parallel router: Chats, Contacts and
+// Calls are three modes of the one sidebar list (_listTab — recency +
+// folder filters vs friends by name vs the on-device call history from
+// src/app/call-history.js), My card opens the existing profile panel,
+// and Settings opens the settings view through the same synthetic-Enter
+// path as the ?settings shortcut (_openSettingsFromUrl). Bar visibility
+// is CSS-derived from .sidebar.hidden. Which optional tabs exist is a
+// Settings choice (_settings.tabCalls / tabContacts / tabSelf /
+// tabSettings, all default on); the Chats tab is always shown, and
+// hiding the tab of the screen you are on returns you to Chats. The
+// Calls tab arrived together with the call history itself (the 'calls'
+// IDB store, DB v6): before that the app kept no call record anywhere,
+// so there was no calls screen for a tab to open.
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
 
@@ -24,15 +25,17 @@ const bar = html.slice(barStart, html.indexOf('</nav>', barStart));
 const slice = (from, to) => html.slice(html.indexOf(from), html.indexOf(to, html.indexOf(from)));
 
 describe('bottom tab bar markup', () => {
-  it('exists inside the main UI with exactly four tabs and no calls tab', () => {
+  it('exists inside the main UI with exactly five tabs, calls second', () => {
     expect(barStart).toBeGreaterThan(html.indexOf('<div id="msg-main"'));
     expect(barStart).toBeLessThan(html.indexOf('</main>'));
-    expect(bar.match(/data-action="tab-/g)).toHaveLength(4);
+    expect(bar.match(/data-action="tab-/g)).toHaveLength(5);
     expect(bar).toContain('data-action="tab-chats"');
+    expect(bar).toContain('data-action="tab-calls"');
     expect(bar).toContain('data-action="tab-contacts"');
     expect(bar).toContain('data-action="tab-self"');
     expect(bar).toContain('data-action="tab-settings"');
-    expect(bar).not.toContain('tab-calls');
+    expect(bar.indexOf('data-action="tab-chats"')).toBeLessThan(bar.indexOf('data-action="tab-calls"'));
+    expect(bar.indexOf('data-action="tab-calls"')).toBeLessThan(bar.indexOf('data-action="tab-contacts"'));
   });
   it('chats starts as the current page (navigation semantics, not tabs)', () => {
     expect(bar).toContain('class="tab-btn active" id="tab-chats"');
@@ -50,14 +53,17 @@ describe('bottom tab bar markup', () => {
   });
   it('labels use i18n keys defined in English and translated in Japanese', () => {
     expect(bar).toContain('data-i18n="tabChats"');
+    expect(bar).toContain('data-i18n="tabCalls"');
     expect(bar).toContain('data-i18n="tabSelf"');
     expect(bar).toContain('data-i18n="ariaContacts"');
     expect(bar).toContain('data-i18n="helpSettings"');
     expect(html).toContain("tabChats: 'Chats'");
+    expect(html).toContain("tabCalls: 'Calls'");
     expect(html).toContain("tabSelf: 'My card'");
     expect(html).toContain("ariaContacts: 'Contacts'");
     expect(html).toContain("helpSettings: 'Settings'");
     expect(ja.tabChats).toBe('トーク');
+    expect(ja.tabCalls).toBe('通話');
     expect(ja.tabSelf).toBe('自分のカード');
     expect(ja.ariaContacts).toBe('連絡先');
     expect(ja.helpSettings).toBe('設定');
@@ -66,6 +72,9 @@ describe('bottom tab bar markup', () => {
     expect(bar).toContain('<span class="badge" id="tab-badge-chats"></span>');
     expect(html).toContain('.folder-tab .badge, .tab-btn .badge {');
     expect(html).toContain('.folder-tab .badge:empty, .tab-btn .badge:empty { display: none }');
+  });
+  it('the calls tab carries the missed-call badge in the same badge slot', () => {
+    expect(bar).toContain('<span class="badge" id="tab-badge-calls"></span>');
   });
 });
 
@@ -94,31 +103,39 @@ describe('bottom tab bar visibility (CSS-derived from the existing view state)',
   it('contacts mode hides the chat folder tabs and the label filter bar', () => {
     expect(html).toContain('#msg-sidebar.list-contacts .folder-tabs, #msg-sidebar.list-contacts .label-filter { display: none }');
   });
+  it('calls mode hides the folder tabs, the label filter and the contact search box', () => {
+    expect(html).toContain('#msg-sidebar.list-calls .folder-tabs, #msg-sidebar.list-calls .label-filter, #msg-sidebar.list-calls .contact-filter-wrap { display: none }');
+  });
 });
 
 describe('bottom tab bar wiring', () => {
   it('clicks route through the document-level data-action delegation', () => {
     expect(html).toContain('if (e.target.closest(\'[data-action="tab-chats"]\')) { _showChatsTab(); return; }');
+    expect(html).toContain('if (e.target.closest(\'[data-action="tab-calls"]\')) { _showCallsTab(); return; }');
     expect(html).toContain('if (e.target.closest(\'[data-action="tab-contacts"]\')) { _showContactsTab(); return; }');
     expect(html).toContain('if (e.target.closest(\'[data-action="tab-self"]\')) { _showSelfTab(); return; }');
     expect(html).toContain('if (e.target.closest(\'[data-action="tab-settings"]\')) { _showSettingsTab(); return; }');
   });
   it('_setActiveTab moves aria-current across every tab in _TAB_IDS', () => {
-    expect(html).toContain("const _TAB_IDS = { chats: 'tab-chats', contacts: 'tab-contacts', self: 'tab-self', settings: 'tab-settings' };");
+    expect(html).toContain("const _TAB_IDS = { chats: 'tab-chats', calls: 'tab-calls', contacts: 'tab-contacts', self: 'tab-self', settings: 'tab-settings' };");
     const fn = slice('function _setActiveTab(which)', 'function _applyTabVisibility()');
     expect(fn).toContain("el.setAttribute('aria-current', 'page')");
     expect(fn).toContain("el.removeAttribute('aria-current')");
     expect(fn).not.toContain('aria-selected');
   });
-  it('the two list tabs switch the one sidebar list between its two modes', () => {
+  it('the three list tabs switch the one sidebar list between its three modes', () => {
     const fn = slice('function _showListTab(mode)', 'function _showChatsTab()');
     expect(fn).toContain('_listTab = mode; _setActiveTab(mode);');
     expect(fn).toContain("sb?.classList.remove('hidden');");
     expect(fn).toContain("sb?.classList.toggle('list-contacts', mode === 'contacts');");
+    expect(fn).toContain("sb?.classList.toggle('list-calls', mode === 'calls');");
     expect(fn).toContain("_DOM.get('b-msg-back')?.classList.add('hidden'); renderContacts();");
     expect(html).toContain("function _showChatsTab() { _showListTab('chats'); }");
-    expect(html).toContain("function _showContactsTab() { _showListTab('contacts'); }");
+    expect(html).toContain("function _showContactsTab() { _showListTab('contacts'); } function _showCallsTab() { _showListTab('calls'); }");
     expect(html).toContain("let _listTab = 'chats';");
+  });
+  it('calls mode hands the list surface to the call-history module', () => {
+    expect(html).toContain("if (_listTab === 'calls') { await globalThis.__breezeCallHistoryUI?.render(); return; }");
   });
   it('contacts mode reuses the list: friends only, name order, no time sections', () => {
     const fn = slice('async function renderContacts()', 'function updateFaviconBadge');
@@ -167,24 +184,33 @@ describe('bottom tab bar wiring', () => {
 
 describe('tab visibility settings (Settings → Bottom tabs)', () => {
   it('the optional tabs default to shown and chats has no off switch', () => {
-    expect(html).toContain('tabContacts: true, tabSelf: true, tabSettings: true,');
+    expect(html).toContain('tabCalls: true, tabContacts: true, tabSelf: true, tabSettings: true, callHistoryLog: true,');
     expect(html).not.toContain('_settings.tabChats');
     expect(html).not.toContain("data-setting=\"tab-vis-chats\"");
   });
   it('the settings panel offers one checkbox per optional tab plus the always-shown note', () => {
     expect(html).toContain("${t('tabBarSection')}");
     expect(html).toContain("${t('tabChatsAlways')}");
+    expect(html).toContain('data-setting="tab-vis-calls" ${_settings.tabCalls !== false ? \'checked\' : \'\'}');
     expect(html).toContain('data-setting="tab-vis-contacts" ${_settings.tabContacts !== false ? \'checked\' : \'\'}');
     expect(html).toContain('data-setting="tab-vis-self" ${_settings.tabSelf !== false ? \'checked\' : \'\'}');
     expect(html).toContain('data-setting="tab-vis-settings" ${_settings.tabSettings !== false ? \'checked\' : \'\'}');
+    expect(html).toContain("${t('tabShowCalls')}");
     expect(html).toContain("${t('tabShowContacts')}");
     expect(html).toContain("${t('tabShowSelf')}");
     expect(html).toContain("${t('tabShowSettings')}");
     expect(ja.tabBarSection).toBe('下部タブ');
     expect(ja.tabChatsAlways).toBe('トークは常に表示されます');
+    expect(ja.tabShowCalls).toBe('通話タブを表示');
     expect(ja.tabShowContacts).toBe('連絡先タブを表示');
     expect(ja.tabShowSelf).toBe('自分のカードタブを表示');
     expect(ja.tabShowSettings).toBe('設定タブを表示');
+  });
+  it('the privacy section offers the call-history recording switch', () => {
+    expect(html).toContain('data-setting="call-history-log" ${_settings.callHistoryLog !== false ? \'checked\' : \'\'}');
+    expect(html).toContain("${t('callHistoryLogLabel')}");
+    expect(html).toContain("if (s === 'call-history-log') { _settings.callHistoryLog = cb.checked; saveSettings(); return; }");
+    expect(ja.callHistoryLogLabel).toBe('この端末に通話履歴を残す');
   });
   it('toggling a checkbox persists and re-applies the bar immediately', () => {
     const handler = slice("if (s === 'show-peer-name')", "if (s === 'rr-delay')");
@@ -194,11 +220,12 @@ describe('tab visibility settings (Settings → Bottom tabs)', () => {
   it('hiding the tab of the screen you are on returns you to chats', () => {
     const handler = slice("if (s === 'show-peer-name')", "if (s === 'rr-delay')");
     expect(handler).toContain("if (!cb.checked && k === 'contacts' && _listTab === 'contacts') _showChatsTab();");
+    expect(handler).toContain("if (!cb.checked && k === 'calls' && _listTab === 'calls') _showChatsTab();");
     expect(handler).toContain("if (!cb.checked && k === 'settings') closeSettingsView();");
   });
   it('_applyTabVisibility hides exactly the tabs whose setting is off, and runs at wiring time', () => {
     const fn = slice('function _applyTabVisibility()', 'function _showListTab(mode)');
-    expect(fn).toContain("const vis = { contacts: _settings.tabContacts, self: _settings.tabSelf, settings: _settings.tabSettings };");
+    expect(fn).toContain("const vis = { calls: _settings.tabCalls, contacts: _settings.tabContacts, self: _settings.tabSelf, settings: _settings.tabSettings };");
     expect(fn).toContain("classList.toggle('hidden', vis[k] === false);");
     expect(html.match(/_applyTabVisibility\(\);/g)).toHaveLength(2); // wiring time + the settings change handler line
   });

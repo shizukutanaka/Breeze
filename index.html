@@ -1036,7 +1036,7 @@ del.md-del { opacity: .6 }
 .tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: var(--touch); padding: 6px 0; background: none; border: none; color: var(--t3); font: inherit; font-size: 12px; cursor: pointer }
 .tab-btn .tab-ico { font-size: 20px; line-height: 1.1 }
 .tab-btn.active { color: var(--g) }
-#msg-sidebar.list-contacts .folder-tabs, #msg-sidebar.list-contacts .label-filter { display: none }
+#msg-sidebar.list-contacts .folder-tabs, #msg-sidebar.list-contacts .label-filter { display: none } #msg-sidebar.list-calls .folder-tabs, #msg-sidebar.list-calls .label-filter, #msg-sidebar.list-calls .contact-filter-wrap { display: none } .call-history-bar { display: flex; justify-content: flex-end; padding: 8px 12px } .call-history-empty { padding: 24px 12px; text-align: center; color: var(--t3) } .call-back-btn { align-self: center; margin-left: 8px }
 @media (max-width: 640px) {
   #msg-tabbar { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; background: var(--s1); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); border-top: 1px solid var(--b1); padding-bottom: env(safe-area-inset-bottom) }
   #msg-main:has(.sidebar.hidden) #msg-tabbar { display: none }
@@ -1306,6 +1306,7 @@ del.md-del { opacity: .6 }
     <!-- Bottom tab bar (mobile list view only; CSS-gated, see #msg-tabbar) -->
     <nav id="msg-tabbar" role="navigation" data-i18n-aria="ariaMainNav">
       <button class="tab-btn active" id="tab-chats" aria-current="page" data-action="tab-chats" data-i18n-aria="tabChats"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span><span><span data-i18n="tabChats">Chats</span> <span class="badge" id="tab-badge-chats"></span></span></button>
+      <button class="tab-btn" id="tab-calls" data-action="tab-calls" data-i18n-aria="tabCalls"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><span><span data-i18n="tabCalls">Calls</span> <span class="badge" id="tab-badge-calls"></span></span></button>
       <button class="tab-btn" id="tab-contacts" data-action="tab-contacts" data-i18n-aria="ariaContacts"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span data-i18n="ariaContacts">Contacts</span></button>
       <button class="tab-btn" id="tab-self" data-action="tab-self" data-i18n-aria="tabSelf"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span data-i18n="tabSelf">My card</span></button>
       <button class="tab-btn" id="tab-settings" data-action="tab-settings" data-i18n-aria="helpSettings"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span data-i18n="helpSettings">Settings</span></button>
@@ -1405,6 +1406,7 @@ import { showContextMenu as _showContextMenuMod } from './src/app/context-menu.j
 import { createLightbox } from './src/app/lightbox.js'; window.__breezeLightbox = { createLightbox };
 import { createSmartReplies } from './src/app/smart-replies.js'; window.__breezeSmartReplies = { createSmartReplies };
 import { createChatSearch } from './src/app/chat-search.js'; window.__breezeChatSearch = { createChatSearch };
+import { createCallHistory } from './src/app/call-history.js'; window.__breezeCallHistory = { createCallHistory };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
@@ -1797,7 +1799,7 @@ const _I = {
     ariaFolderGroups: 'Group chats',
     ariaFolderLabels: 'Labeled contacts',
     ariaContacts: 'Contacts',
-    tabChats: 'Chats', tabSelf: 'My card', ariaMainNav: 'Main navigation', tabBarSection: 'Bottom tabs', tabChatsAlways: 'Chats is always shown', tabShowContacts: 'Show the Contacts tab', tabShowSelf: 'Show the My card tab', tabShowSettings: 'Show the Settings tab',
+    tabChats: 'Chats', tabCalls: 'Calls', tabSelf: 'My card', ariaMainNav: 'Main navigation', tabBarSection: 'Bottom tabs', tabChatsAlways: 'Chats is always shown', tabShowCalls: 'Show the Calls tab', tabShowContacts: 'Show the Contacts tab', tabShowSelf: 'Show the My card tab', tabShowSettings: 'Show the Settings tab', callOutgoing: 'Outgoing', callIncoming: 'Incoming', callMissed: 'Missed', callVideoLabel: 'Video', callHistoryEmpty: 'No call history yet', callHistoryClear: 'Clear call history', callHistoryClearConfirm: 'Delete all call history?', callHistoryCleared: 'Call history cleared', callHistoryLogLabel: 'Keep a call history on this device',
     ariaBack: 'Back',
     ariaCall: 'Start voice call',
     ariaVideoCall: 'Start video call',
@@ -4118,7 +4120,7 @@ async function initMessenger(dbName) {
   _perf.mark('initMessenger');
   const _ac = new AbortController(); // Abort all listeners on account switch
   dbName = dbName || 'breeze-messenger';
-  const DB_VER = 5; // v3.4: compound index [contactId, ts]
+  const DB_VER = 6; // v3.4: compound index [contactId, ts]; v6: 'calls' store (on-device call history)
 
   // v3.1: Detect X25519 WebCrypto support (Chrome 137+, Firefox 131+, Safari 18+)
   let _hasX25519 = false;
@@ -4772,6 +4774,7 @@ async function initMessenger(dbName) {
           }
         } catch(err) { _dbg(err, 'idb-migrate-v5'); }
       }
+      if (e.oldVersion < 6) { if (!d.objectStoreNames.contains('calls')) { const cs = d.createObjectStore('calls', { keyPath: 'id', autoIncrement: true }); cs.createIndex('ts', 'ts', { unique: false }); cs.createIndex('contact', 'contactId', { unique: false }); } } // v6: call history (src/app/call-history.js) — on-device only, never synced or backed up; same shape as the audit store
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => resolve(null);
@@ -5155,7 +5158,7 @@ async function initMessenger(dbName) {
     backupNudgeShown: false, // one-time card after the first contact is added, pointing at Settings → Backup. Once shown (or dismissed) it never comes back.
     autoBackup: true,        // automatic cloud backup after data changes (src/app/backup.js). On by default; runs only when a backup passphrase is armed for the session and the relay stores backups.
     showPeerName: true,      // display: alongside a local nickname, also show the name the contact set for themselves (contact list + chat header). Local-only display choice; nothing is sent anywhere.
-    tabContacts: true, tabSelf: true, tabSettings: true, // bottom tab bar: which optional tabs are shown (Settings → Bottom tabs). The Chats tab has no setting — it is always shown, so the bar can never be emptied.
+    tabCalls: true, tabContacts: true, tabSelf: true, tabSettings: true, callHistoryLog: true, // bottom tab bar: which optional tabs are shown (Settings → Bottom tabs). The Chats tab has no setting — it is always shown, so the bar can never be emptied. callHistoryLog: keep the on-device call history (Settings → Privacy); off = calls leave no record.
   };
   let _settings = { ..._defaultSettings };
 
@@ -8382,7 +8385,7 @@ async function initMessenger(dbName) {
   }
 
   async function renderContacts() {
-    renderSelfCard().catch(e => _dbg(e, 'self-card-render'));
+    renderSelfCard().catch(e => _dbg(e, 'self-card-render')); if (_listTab === 'calls') { await globalThis.__breezeCallHistoryUI?.render(); return; } // Calls mode: the history module owns the list surface
     const contacts = await dbGetAll('contacts');
     const el = _DOM.get('msg-contacts');
     // v3.3: PERFORMANCE — Use DocumentFragment for batch DOM insertion
@@ -10680,11 +10683,11 @@ async function initMessenger(dbName) {
   const _callMgr = globalThis.__breezeCall?.createCallManager({
     encryptFor, decryptFrom, fetchCaps: _fetchMemberCapsBatch, _signal, _signalAwait, relaySend, _intervals, _ac, _settings,
     noteCallSample: (pc, seconds) => _p2pStats?.sampleCall(pc, seconds),
-    myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
+    myId: () => myId, myPubB64: () => myPubB64, myName: () => myName, onCallEvent: (e) => globalThis.__breezeCallHistoryUI?.onCallEvent(e),
   }) || { startCall() {}, handleCallOffer() {}, endCall() {}, pollCallSignals() {},
     getRTCCertificate: async () => null, hasRTCCertificate: () => false,
     getCallICEConfig: () => ({ iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }, { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }, { urls: 'stun:stun.services.mozilla.com' }] }), state: () => 'idle' };
-  const { startCall, handleCallOffer, endCall, pollCallSignals, getCallICEConfig, getRTCCertificate, hasRTCCertificate } = _callMgr;
+  const { startCall, handleCallOffer, endCall, pollCallSignals, getCallICEConfig, getRTCCertificate, hasRTCCertificate } = _callMgr; const _callHist = globalThis.__breezeCallHistory?.createCallHistory({ dbPut, dbGetAll, dbDel, openConversation, startCall, contactDisplayName, listTime, loggingEnabled: () => _settings.callHistoryLog !== false, isCallsView: () => _listTab === 'calls' }) || null; globalThis.__breezeCallHistoryUI = _callHist; _callHist?.init().catch(e => _dbg(e, 'call-hist-init'));
 
   // Group voice calls (stage 5 step 2) — src/app/group-call.js.
   const _gcall = globalThis.__breezeGCall?.createGroupCallManager({
@@ -13711,7 +13714,7 @@ async function initMessenger(dbName) {
     if (e.target.closest('[data-action="dismiss-card"]')) { e.target.closest('.nudge-card')?.remove(); return; }
     if (e.target.closest('[data-action="keywrap-open"]')) { e.target.closest('.nudge-card')?.remove(); _runCommand('/keywrap'); return; }
     // Bottom tab bar (mobile list view)
-    if (e.target.closest('[data-action="tab-chats"]')) { _showChatsTab(); return; }
+    if (e.target.closest('[data-action="tab-chats"]')) { _showChatsTab(); return; } if (e.target.closest('[data-action="tab-calls"]')) { _showCallsTab(); return; }
     if (e.target.closest('[data-action="tab-contacts"]')) { _showContactsTab(); return; }
     if (e.target.closest('[data-action="tab-self"]')) { _showSelfTab(); return; }
     if (e.target.closest('[data-action="tab-settings"]')) { _showSettingsTab(); return; }
@@ -13760,26 +13763,26 @@ async function initMessenger(dbName) {
     d.append(title, msg, actions);
   }
   // Bottom tab bar: page navigation over the EXISTING views — no new
-  // router. Chats and Contacts are the two faces of the one sidebar list
-  // (_listTab: recency + folder filters, vs friends by name); My card opens
+  // router. Chats, Contacts and Calls are the three faces of the one sidebar list
+  // (_listTab: recency + folder filters, vs friends by name, vs the on-device call history from src/app/call-history.js); My card opens
   // the profile panel; Settings opens the settings view. Bar visibility is
   // CSS-derived from .sidebar.hidden; which optional tabs exist is a
   // setting (_applyTabVisibility) — the Chats tab is always there.
-  const _TAB_IDS = { chats: 'tab-chats', contacts: 'tab-contacts', self: 'tab-self', settings: 'tab-settings' }; let _activeTab = 'chats';
+  const _TAB_IDS = { chats: 'tab-chats', calls: 'tab-calls', contacts: 'tab-contacts', self: 'tab-self', settings: 'tab-settings' }; let _activeTab = 'chats';
   function _setActiveTab(which) {
     _activeTab = which;
     for (const k in _TAB_IDS) { const el = _DOM.get(_TAB_IDS[k]); if (!el) continue; const on = k === which; el.classList.toggle('active', on); if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }
   }
   function _applyTabVisibility() {
-    const vis = { contacts: _settings.tabContacts, self: _settings.tabSelf, settings: _settings.tabSettings };
+    const vis = { calls: _settings.tabCalls, contacts: _settings.tabContacts, self: _settings.tabSelf, settings: _settings.tabSettings };
     for (const k in vis) _DOM.get(_TAB_IDS[k])?.classList.toggle('hidden', vis[k] === false); }
   function _showListTab(mode) {
     _listTab = mode; _setActiveTab(mode);
-    const sb = _DOM.get('msg-sidebar'); sb?.classList.remove('hidden'); sb?.classList.toggle('list-contacts', mode === 'contacts');
+    const sb = _DOM.get('msg-sidebar'); sb?.classList.remove('hidden'); sb?.classList.toggle('list-contacts', mode === 'contacts'); sb?.classList.toggle('list-calls', mode === 'calls');
     _DOM.get('b-msg-back')?.classList.add('hidden'); renderContacts();
   }
   function _showChatsTab() { _showListTab('chats'); }
-  function _showContactsTab() { _showListTab('contacts'); }
+  function _showContactsTab() { _showListTab('contacts'); } function _showCallsTab() { _showListTab('calls'); }
   function _showSelfTab() {
     _setActiveTab('self');
     const done = () => { if (_activeTab === 'self') _setActiveTab(_listTab); };
@@ -14030,7 +14033,7 @@ async function initMessenger(dbName) {
         <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br><label class="i-cur"><input type="checkbox" data-setting="kt-block" ${_settings.ktBlockOnTamper ? 'checked' : ''}> ${t('ktBlockLabel')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="show-peer-name" ${_settings.showPeerName !== false ? 'checked' : ''}> ${t('showPeerNameLabel')}</label><br>
+        <label class="i-cur"><input type="checkbox" data-setting="show-peer-name" ${_settings.showPeerName !== false ? 'checked' : ''}> ${t('showPeerNameLabel')}</label><br><label class="i-cur"><input type="checkbox" data-setting="call-history-log" ${_settings.callHistoryLog !== false ? 'checked' : ''}> ${t('callHistoryLogLabel')}</label><br>
         <br><b class="i-g">${t('settingsSound')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
         <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
@@ -14054,7 +14057,7 @@ async function initMessenger(dbName) {
         ${_relayRows}
         <button class="btn btn-o btn-sm" data-action="add-relay">${t('relayAddBtn')}</button><br>
         <label class="i-cur">${t('relayFanoutLabel')} <select data-setting="fanout">${_fanoutOpts}</select></label><br>
-        <label class="i-cur">${t('powerModeLabel')} <select data-setting="power-mode">${_powerOpts}</select></label><br><br><b class="i-g">${t('tabBarSection')}</b><br><span class="i-t3-10">${t('tabChatsAlways')}</span><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-contacts" ${_settings.tabContacts !== false ? 'checked' : ''}> ${t('tabShowContacts')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-self" ${_settings.tabSelf !== false ? 'checked' : ''}> ${t('tabShowSelf')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-settings" ${_settings.tabSettings !== false ? 'checked' : ''}> ${t('tabShowSettings')}</label><br>
+        <label class="i-cur">${t('powerModeLabel')} <select data-setting="power-mode">${_powerOpts}</select></label><br><br><b class="i-g">${t('tabBarSection')}</b><br><span class="i-t3-10">${t('tabChatsAlways')}</span><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-calls" ${_settings.tabCalls !== false ? 'checked' : ''}> ${t('tabShowCalls')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-contacts" ${_settings.tabContacts !== false ? 'checked' : ''}> ${t('tabShowContacts')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-self" ${_settings.tabSelf !== false ? 'checked' : ''}> ${t('tabShowSelf')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-settings" ${_settings.tabSettings !== false ? 'checked' : ''}> ${t('tabShowSettings')}</label><br>
         <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
       // (The add-account door is the account tab bar — renderAccountTabs
       // renders it for a single account too, so Settings needs no button.)
@@ -14102,8 +14105,8 @@ async function initMessenger(dbName) {
         // One sensible default each — a menu of durations was a requirement nobody asked for.
         // `/focus N` still exists for anyone who wants an exact number of minutes.
         if (s === 'auto-backup') { _settings.autoBackup = cb.checked; saveSettings(); return; }
-        if (s === 'show-peer-name') { _settings.showPeerName = cb.checked; saveSettings(); renderContacts(); if (activeContact) _setConvName(activeContact); return; }
-        if (s.startsWith('tab-vis-')) { const k = s.slice(8); _settings[{ contacts: 'tabContacts', self: 'tabSelf', settings: 'tabSettings' }[k]] = cb.checked; saveSettings(); _applyTabVisibility(); if (!cb.checked && k === 'contacts' && _listTab === 'contacts') _showChatsTab(); if (!cb.checked && k === 'settings') closeSettingsView(); return; }
+        if (s === 'show-peer-name') { _settings.showPeerName = cb.checked; saveSettings(); renderContacts(); if (activeContact) _setConvName(activeContact); return; } if (s === 'call-history-log') { _settings.callHistoryLog = cb.checked; saveSettings(); return; }
+        if (s.startsWith('tab-vis-')) { const k = s.slice(8); _settings[{ calls: 'tabCalls', contacts: 'tabContacts', self: 'tabSelf', settings: 'tabSettings' }[k]] = cb.checked; saveSettings(); _applyTabVisibility(); if (!cb.checked && k === 'contacts' && _listTab === 'contacts') _showChatsTab(); if (!cb.checked && k === 'calls' && _listTab === 'calls') _showChatsTab(); if (!cb.checked && k === 'settings') closeSettingsView(); return; }
         if (s === 'rr-delay') { _settings.readReceiptDelay = cb.checked ? 120 : 0; saveSettings(); return; }
         if (s === 'fanout') { const n = parseInt(cb.value, 10); _settings.fanout = [1, 2, 3].includes(n) ? n : 2; saveSettings(); return; }
         if (s === 'power-mode') { _settings.powerMode = ['auto', 'normal', 'saver', 'emergency'].includes(cb.value) ? cb.value : 'auto'; saveSettings(); return; }

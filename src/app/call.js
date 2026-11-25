@@ -104,6 +104,14 @@ export function createCallManager(D) {
   const { _signal, _signalAwait, relaySend, _intervals, _ac, _settings } = D;
   const _sig = createCallSignal({ encryptFor: D.encryptFor, decryptFrom: D.decryptFrom, enabled: () => CONFIG.CALL_E2E_SIGNAL });
   const _wrapCallSignal = _sig.wrap, _unwrapCallSignal = _sig.unwrap;
+  // Call history (src/app/call-history.js): lifecycle events only, fed
+  // to the on-device recorder wired in index.html. Nothing here touches
+  // the signaling or crypto paths, and a missing/failing recorder can
+  // never break a call.
+  function _hist(kind, extra) {
+    try { const p = D.onCallEvent?.({ kind, ...extra }); if (p && typeof p.catch === 'function') p.catch(e => _dbg(e, 'call-hist')); }
+    catch(e) { _dbg(e, 'call-hist'); }
+  }
   // Learn the peer's advertised caps before the first wrap of a call:
   // the fetch starts while the mic prompt is up and is awaited before
   // the offer is built, so a supporting peer is encrypted to from the
@@ -240,6 +248,7 @@ export function createCallManager(D) {
         if (_callPC.connectionState === 'connected' && _callState === 'calling') {
           _callState = 'connected';
           _callStartTime = Date.now();
+          _hist('connected', { ts: _callStartTime });
           updateCallUI('connected');
           showCallSAS();
           _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
@@ -257,6 +266,10 @@ export function createCallManager(D) {
       const offerSignal = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
       if (offerSignal == null) { _dbg(null, 'call-offer encrypt failed'); endCall(); return; }
       await _signal(room, 'call-offer', offerSignal);
+      // The offer is on the wire — the call has actually started ringing
+      // the peer. (A mic denial above never reaches this line, so a call
+      // that never rang leaves no history record.)
+      _hist('start', { dir: 'out', contactId: contact.id, name: contact.name, video: !!withVideo, ts: Date.now() });
 
       // Also notify via msg relay (so recipient's poll detects the call)
       const callNotif = await _wrapCallSignal(contact.pubB64, { sdp: offer, video: withVideo });
@@ -284,6 +297,7 @@ export function createCallManager(D) {
       _callContact = contact;
       _callState = 'ringing';
       showCallUI('ringing', contact.name, parsed.video);
+      _hist('start', { dir: 'in', contactId: contact.id, name: contact.name, video: !!parsed.video, ts: Date.now() });
   
       // Store offer for when user accepts
       window._pendingCallOffer = { contact, sdp: parsed.sdp, video: parsed.video };
@@ -326,6 +340,7 @@ export function createCallManager(D) {
         if (_callPC.connectionState === 'connected') {
           _callState = 'connected';
           _callStartTime = Date.now();
+          _hist('connected', { ts: _callStartTime });
           updateCallUI('connected');
           showCallSAS();
           _callTimerInterval = setInterval(updateCallTimer, MS.SEC);
@@ -352,6 +367,11 @@ export function createCallManager(D) {
 
   function endCall() {
     if (_callState === 'idle') return; // guard double-call
+    // History first, while the session state is intact: every exit path
+    // (local hangup, remote call-end, failure, ring timeout) funnels
+    // through here, and the recorder derives out/in/missed + duration
+    // from the events it saw.
+    _hist('end', { ts: Date.now() });
     if (_callStream) { _callStream.getTracks().forEach(t => t.stop()); _callStream = null; }
     // Stage 6 step 3: sample the finished call's route/bytes BEFORE
     // the pc closes (getStats on a closed pc rejects).
