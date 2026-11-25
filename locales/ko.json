@@ -321,8 +321,6 @@
  "keyWrapMin": "암호문은 8자 이상이어야 합니다",
  "keyWrapMismatch": "암호문이 일치하지 않습니다",
  "keyWrapDisableConfirm": "저장 시 키 암호화를 끌까요?",
- "avatarEmojiPrompt": "아바타 이모지:",
- "bioPrompt": "소개:",
  "deleteAllConfirm": "전체 삭제",
  "groupNamePrompt": "그룹 이름:",
  "groupNamePh": "내 그룹",
@@ -886,4 +884,15 @@
  "powerEmergency": "비상(재난)",
  "profileIdLabel": "내 ID",
  "settingsBackup": "백업 및 복원"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

@@ -318,8 +318,6 @@
  "keyWrapMin": "Ahịrị nzuzo ga-abụrịrị opekata mpe mkpụrụedemede 8",
  "keyWrapMismatch": "Ahịrị nzuzo adabaghị",
  "keyWrapDisableConfirm": "Gbanyụọ key wrapping n'ebe izu ike?",
- "avatarEmojiPrompt": "Emoji avatar:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Hichapụ Niile",
  "groupNamePrompt": "Aha otu:",
  "groupNamePh": "Otu M",
@@ -886,4 +884,15 @@
  "powerEmergency": "Mberede (ọdachi)",
  "profileIdLabel": "ID gị",
  "settingsBackup": "Ndabere & weghachite"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

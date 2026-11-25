@@ -320,8 +320,6 @@
  "keyWrapMin": "Құпия фраза кемінде 8 таңбадан тұруы керек",
  "keyWrapMismatch": "Құпия фразалар сәйкес келмейді",
  "keyWrapDisableConfirm": "Тыныштықтағы кілтті орауды өшіру керек пе?",
- "avatarEmojiPrompt": "Аватар эмодзиі:",
- "bioPrompt": "Өмірбаян:",
  "deleteAllConfirm": "Барлығын жою",
  "groupNamePrompt": "Топ аты:",
  "groupNamePh": "Менің тобым",
@@ -893,4 +891,15 @@
  "powerEmergency": "Төтенше (апат)",
  "profileIdLabel": "Сіздің ID",
  "settingsBackup": "Сақтық көшірме және қалпына келтіру"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

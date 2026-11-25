@@ -320,8 +320,6 @@
  "keyWrapMin": "পাসফ্রেজ কমপক্ষে 8 অক্ষরের হতে হবে",
  "keyWrapMismatch": "পাসফ্রেজ মিলছে না",
  "keyWrapDisableConfirm": "বিশ্রামে কি র‍্যাপিং বন্ধ করবেন?",
- "avatarEmojiPrompt": "অবতার ইমোজি:",
- "bioPrompt": "পরিচিতি:",
  "deleteAllConfirm": "সব মুছুন",
  "groupNamePrompt": "গ্রুপের নাম:",
  "groupNamePh": "আমার গ্রুপ",
@@ -893,4 +891,15 @@
  "powerEmergency": "জরুরি (দুর্যোগ)",
  "profileIdLabel": "আপনার ID",
  "settingsBackup": "ব্যাকআপ ও পুনরুদ্ধার"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

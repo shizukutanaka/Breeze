@@ -324,8 +324,6 @@
  "keyWrapMin": "Přístupová fráze musí mít alespoň 8 znaků",
  "keyWrapMismatch": "Přístupové fráze se neshodují",
  "keyWrapDisableConfirm": "Vypnout zabalení klíče v klidu?",
- "avatarEmojiPrompt": "Emoji avatara:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Smazat vše",
  "groupNamePrompt": "Název skupiny:",
  "groupNamePh": "Moje skupina",
@@ -907,4 +905,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "Vaše ID",
  "settingsBackup": "Zálohování a obnovení"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

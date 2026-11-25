@@ -320,8 +320,6 @@
  "keyWrapMin": "Kalmar sirri dole ta kasance aƙalla haruffa 8",
  "keyWrapMismatch": "Kalmomin sirri ba su dace ba",
  "keyWrapDisableConfirm": "Kashe ruɗe maɓalli a wurin hutawa?",
- "avatarEmojiPrompt": "Emoji na avatar:",
- "bioPrompt": "Tarihin rayuwa:",
  "deleteAllConfirm": "Goge Duka",
  "groupNamePrompt": "Sunan rukuni:",
  "groupNamePh": "Rukunina",
@@ -893,4 +891,15 @@
  "powerEmergency": "Gaggawa (bala'i)",
  "settingsBackup": "Ajiya & maidowa",
  "profileIdLabel": "ID ɗinka"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

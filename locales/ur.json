@@ -320,8 +320,6 @@
  "keyWrapMin": "پاس فریز کم از کم 8 حروف کا ہونا چاہیے",
  "keyWrapMismatch": "پاس فریز ایک جیسے نہیں",
  "keyWrapDisableConfirm": "آرام کی حالت میں کنجی لپیٹنا بند کریں؟",
- "avatarEmojiPrompt": "اوتار ایموجی:",
- "bioPrompt": "تعارف:",
  "deleteAllConfirm": "تمام حذف کریں",
  "groupNamePrompt": "گروپ کا نام:",
  "groupNamePh": "میرا گروپ",
@@ -893,4 +891,15 @@
  "powerEmergency": "ہنگامی (آفت)",
  "profileIdLabel": "آپ کی ID",
  "settingsBackup": "بیک اپ اور بحالی"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

@@ -84,11 +84,17 @@ describe('unread rows are emphasised, not only badged', () => {
 });
 
 describe('self profile card at the top of the contact list', () => {
-  it('the card element sits directly above the contact list in the sidebar', () => {
+  it('the card element sits at the top of the contact list', () => {
+    // Batch-2 fix (g): the card moved INSIDE the scrollable list as its
+    // first child (it scrolls away instead of pinning screen height), so
+    // "top of the list" now means: after the list opens, before the
+    // first skeleton row.
     const card = html.indexOf('id="msg-self-card"');
     const list = html.indexOf('id="msg-contacts"');
+    const skeleton = html.indexOf('class="skeleton skeleton-contact"');
     expect(card).toBeGreaterThan(-1);
-    expect(card).toBeLessThan(list);
+    expect(card).toBeGreaterThan(list);
+    expect(card).toBeLessThan(skeleton);
   });
 
   it('renderContacts refreshes the card on every render', () => {

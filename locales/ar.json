@@ -328,8 +328,6 @@
  "keyWrapMin": "يجب أن تكون عبارة المرور 8 أحرف على الأقل",
  "keyWrapMismatch": "عبارتا المرور غير متطابقتين",
  "keyWrapDisableConfirm": "تعطيل تغليف المفتاح في حالة السكون؟",
- "avatarEmojiPrompt": "إيموجي الصورة الرمزية:",
- "bioPrompt": "النبذة:",
  "deleteAllConfirm": "حذف الكل",
  "groupNamePrompt": "اسم المجموعة:",
  "groupNamePh": "مجموعتي",
@@ -921,4 +919,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "المعرّف الخاص بك",
  "settingsBackup": "النسخ الاحتياطي والاستعادة"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

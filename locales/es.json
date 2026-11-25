@@ -323,8 +323,6 @@
  "keyWrapMin": "La frase debe tener al menos 8 caracteres",
  "keyWrapMismatch": "Las frases no coinciden",
  "keyWrapDisableConfirm": "¿Desactivar el cifrado de claves en reposo?",
- "avatarEmojiPrompt": "Emoji de avatar:",
- "bioPrompt": "Biografía:",
  "deleteAllConfirm": "Eliminar todo",
  "groupNamePrompt": "Nombre del grupo:",
  "groupNamePh": "Mi grupo",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergencia (desastre)",
  "profileIdLabel": "Tu ID",
  "settingsBackup": "Copia de seguridad y restauración"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

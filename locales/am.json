@@ -320,8 +320,6 @@
  "keyWrapMin": "የይለፍ ሐረግ ቢያንስ 8 ቁምፊዎች መሆን አለበት",
  "keyWrapMismatch": "የይለፍ ሐረጎች አይዛመዱም",
  "keyWrapDisableConfirm": "በእረፍት ላይ የቁልፍ መጠቅለያን ያሰናክሉ?",
- "avatarEmojiPrompt": "የአቫታር ኢሞጂ፤",
- "bioPrompt": "ስለ እኔ፤",
  "deleteAllConfirm": "ሁሉንም ሰርዝ",
  "groupNamePrompt": "የቡድን ስም፤",
  "groupNamePh": "የእኔ ቡድን",
@@ -893,4 +891,15 @@
  "powerEmergency": "አስቸኳይ (አደጋ)",
  "profileIdLabel": "የእርስዎ መታወቂያ",
  "settingsBackup": "ምትኬ እና እነበረበት መልስ"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

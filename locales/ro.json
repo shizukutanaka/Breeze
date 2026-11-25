@@ -322,8 +322,6 @@
  "keyWrapMin": "Fraza secretă trebuie să aibă cel puțin 8 caractere",
  "keyWrapMismatch": "Frazele secrete nu se potrivesc",
  "keyWrapDisableConfirm": "Dezactivezi protejarea cheilor la repaus?",
- "avatarEmojiPrompt": "Emoji avatar:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Șterge tot",
  "groupNamePrompt": "Numele grupului:",
  "groupNamePh": "Grupul meu",
@@ -900,4 +898,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "ID-ul tău",
  "settingsBackup": "Backup și restaurare"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

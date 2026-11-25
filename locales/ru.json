@@ -324,8 +324,6 @@
  "keyWrapMin": "Кодовая фраза должна быть не короче 8 символов",
  "keyWrapMismatch": "Кодовые фразы не совпадают",
  "keyWrapDisableConfirm": "Отключить защиту ключей в покое?",
- "avatarEmojiPrompt": "Эмодзи аватара:",
- "bioPrompt": "О себе:",
  "deleteAllConfirm": "Удалить всё",
  "groupNamePrompt": "Название группы:",
  "groupNamePh": "Моя группа",
@@ -907,4 +905,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "Ваш ID",
  "settingsBackup": "Резервная копия и восстановление"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

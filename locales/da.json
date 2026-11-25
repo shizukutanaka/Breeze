@@ -320,8 +320,6 @@
  "keyWrapMin": "Adgangsfrasen skal være på mindst 8 tegn",
  "keyWrapMismatch": "Adgangsfraserne stemmer ikke overens",
  "keyWrapDisableConfirm": "Deaktiver nøgleindpakning i hvile?",
- "avatarEmojiPrompt": "Avatar-emoji:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Slet alt",
  "groupNamePrompt": "Gruppenavn:",
  "groupNamePh": "Min gruppe",
@@ -893,4 +891,15 @@
  "powerEmergency": "Emergency (disaster)",
  "profileIdLabel": "Dit ID",
  "settingsBackup": "Sikkerhedskopi & gendannelse"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

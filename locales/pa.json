@@ -320,8 +320,6 @@
  "keyWrapMin": "ਪਾਸਫ਼ਰੇਜ਼ ਘੱਟੋ-ਘੱਟ 8 ਅੱਖਰਾਂ ਦਾ ਹੋਣਾ ਚਾਹੀਦਾ ਹੈ",
  "keyWrapMismatch": "ਪਾਸਫ਼ਰੇਜ਼ ਮਿਲਦੇ ਨਹੀਂ",
  "keyWrapDisableConfirm": "ਅਰਾਮ ਅਵਸਥਾ ਵਿੱਚ ਕੁੰਜੀ ਲਪੇਟਣਾ ਬੰਦ ਕਰੋ?",
- "avatarEmojiPrompt": "ਅਵਤਾਰ ਇਮੋਜੀ:",
- "bioPrompt": "ਜਾਣ-ਪਛਾਣ:",
  "deleteAllConfirm": "ਸਭ ਮਿਟਾਓ",
  "groupNamePrompt": "ਗਰੁੱਪ ਦਾ ਨਾਮ:",
  "groupNamePh": "ਮੇਰਾ ਗਰੁੱਪ",
@@ -893,4 +891,15 @@
  "powerEmergency": "ਐਮਰਜੈਂਸੀ (ਆਫ਼ਤ)",
  "profileIdLabel": "ਤੁਹਾਡੀ ID",
  "settingsBackup": "ਬੈਕਅੱਪ ਅਤੇ ਰੀਸਟੋਰ"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

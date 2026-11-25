@@ -318,8 +318,6 @@
  "keyWrapMin": "パスフレーズは8文字以上必要です",
  "keyWrapMismatch": "パスフレーズが一致しません",
  "keyWrapDisableConfirm": "キーの暗号化保護を無効にしますか？",
- "avatarEmojiPrompt": "アバター絵文字:",
- "bioPrompt": "自己紹介:",
  "deleteAllConfirm": "全て削除",
  "groupNamePrompt": "グループ名:",
  "groupNamePh": "マイグループ",
@@ -886,4 +884,15 @@
  "powerEmergency": "非常時（災害用）",
  "profileIdLabel": "あなたのID",
  "settingsBackup": "バックアップと復元"
+,
+ "setupRestoreToggle": "既存のアカウントを復元する",
+ "addOptionContact": "連絡先を追加",
+ "addOptionGroup": "グループを作る",
+ "keywrapProtectBtn": "パスフレーズで保護する",
+ "backupNudgeTitle": "アカウントをバックアップしましょう",
+ "backupNudgeBody": "この端末を失ったとき、アカウントに戻る唯一の手段がバックアップです。少しの時間で作れます。",
+ "ariaConvMenu": "会話メニュー",
+ "menuSecurity": "安全番号を確認",
+ "menuMute": "通知を切る",
+ "menuPoll": "投票を作る"
 }

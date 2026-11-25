@@ -318,8 +318,6 @@
  "keyWrapMin": "Frasa laluan mesti sekurang-kurangnya 8 aksara",
  "keyWrapMismatch": "Frasa laluan tidak sepadan",
  "keyWrapDisableConfirm": "Nyahaktifkan pembalutan kunci semasa rehat?",
- "avatarEmojiPrompt": "Emoji avatar:",
- "bioPrompt": "Bio:",
  "deleteAllConfirm": "Padam Semua",
  "groupNamePrompt": "Nama kumpulan:",
  "groupNamePh": "Kumpulan Saya",
@@ -886,4 +884,15 @@
  "powerEmergency": "Kecemasan (bencana)",
  "profileIdLabel": "ID anda",
  "settingsBackup": "Sandaran & pemulihan"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

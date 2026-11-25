@@ -318,8 +318,6 @@
  "keyWrapMin": "Gbólóhùn ìkọ̀kọ̀ gbọ́dọ̀ jẹ́ ó kéré jùlọ àmì 8",
  "keyWrapMismatch": "Àwọn gbólóhùn ìkọ̀kọ̀ kò báramu",
  "keyWrapDisableConfirm": "Pa ìdì kọ́kọ́rọ́ ní ìsinmi?",
- "avatarEmojiPrompt": "Emoji àwàtà:",
- "bioPrompt": "Ìtàn ìgbésí ayé:",
  "deleteAllConfirm": "Pa Gbogbo Rẹ́",
  "groupNamePrompt": "Orúkọ ẹgbẹ́:",
  "groupNamePh": "Ẹgbẹ́ Mi",
@@ -886,4 +884,15 @@
  "powerEmergency": "Pàjáwìrì (àjálù)",
  "settingsBackup": "Afẹyinti & imupadabọ",
  "profileIdLabel": "ID rẹ"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }

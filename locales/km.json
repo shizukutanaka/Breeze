@@ -318,8 +318,6 @@
  "keyWrapMin": "ឃ្លាសម្ងាត់ត្រូវមានយ៉ាងតិច 8 តួអក្សរ",
  "keyWrapMismatch": "ឃ្លាសម្ងាត់មិនត្រូវគ្នាទេ",
  "keyWrapDisableConfirm": "បិទការរុំកូនសោពេលសម្រាក?",
- "avatarEmojiPrompt": "អេម៉ូជីរូបតំណាង៖",
- "bioPrompt": "ជីវប្រវត្តិ៖",
  "deleteAllConfirm": "លុបទាំងអស់",
  "groupNamePrompt": "ឈ្មោះក្រុម៖",
  "groupNamePh": "ក្រុមរបស់ខ្ញុំ",
@@ -886,4 +884,15 @@
  "powerEmergency": "អាសន្ន (គ្រោះមហន្តរាយ)",
  "settingsBackup": "បម្រុងទុក និង ស្ដារឡើងវិញ",
  "profileIdLabel": "លេខសម្គាល់របស់អ្នក"
+,
+ "setupRestoreToggle": "Restore an existing account",
+ "addOptionContact": "Add a contact",
+ "addOptionGroup": "Create a group",
+ "keywrapProtectBtn": "Protect with a passphrase",
+ "backupNudgeTitle": "Back up your account",
+ "backupNudgeBody": "A backup is the only way back into this account if you lose this device. It only takes a moment.",
+ "ariaConvMenu": "Conversation menu",
+ "menuSecurity": "Check safety number",
+ "menuMute": "Mute notifications",
+ "menuPoll": "Create a poll"
 }
