@@ -164,6 +164,10 @@ export function createMessageRequests(D) {
     if (dialog?.open) {
       const list = dialog.querySelector('.request-list');
       D.html(list, (pending.length ? pending.map(e => '<div class="request-card"><b>' + D.esc(e.name || D.t('unknown')) + '</b><div class="i-tiny-meta">' + D.esc(e.pub.slice(0, 12)) + ' · ' + D.esc(D.t('mrCount', e.messages.length)) + '</div><p>' + D.esc(new Date(e.at).toLocaleString()) + (e.full ? ' · ' + D.esc(D.t('mrFull')) : '') + '</p>' + ['accept', 'block', 'delete'].map(a => '<button class="btn btn-o btn-sm" data-pub="' + D.esc(e.pub) + '" data-request-action="' + a + '">' + D.esc(D.t({ accept: 'mrAccept', block: 'mrBlock', delete: 'mrDelete' }[a])) + '</button>').join(' ') + '</div>').join('') : '<p>' + D.esc(D.t('mrEmpty')) + '</p>') + state.blocked.map(b => '<div class="request-card">' + D.esc(b.pub.slice(0, 12)) + ' <button class="btn btn-o btn-sm" data-pub="' + D.esc(b.pub) + '" data-request-action="unblock">' + D.esc(D.t('mrUnblock')) + '</button></div>').join(''));
+      list.querySelectorAll('.request-card b').forEach((name, i) => {
+        const entry = pending[i], warning = D.warning?.({ id: entry.pub.slice(0, 12), pubB64: entry.pub, name: entry.name });
+        if (warning) { const span = document.createElement('span'); D.html(span, warning); name.after(span); }
+      });
       list.querySelectorAll('[data-request-action]').forEach(button => { button.onclick = async () => {
         button.disabled = true;
         try { await act(button.dataset.pub, button.dataset.requestAction); } catch(e) { error(e); button.disabled = false; }

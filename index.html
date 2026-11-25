@@ -7333,7 +7333,7 @@ async function initMessenger(dbName) {
     db: () => db, get: dbGet, all: dbGetAll, MS, signal: _ac.signal, dom: id => _DOM.get(id), t, esc, html: safeSetHTML, toast: showToast, dbg: _dbg,
     root: () => _myAcctRoot, devices: _myOtherDevices, attribution: _deviceAttributionOk, receive: msg => handleIncoming(msg), render: () => renderContacts(),
     lock: fn => navigator.locks ? navigator.locks.request('breeze-requests:' + dbName, fn) : Promise.reject(new Error('request lock unavailable')),
-    makeDialog: _makeDialog, showDialog: _showDialog, dismiss: _wireDialogDismiss,
+    makeDialog: _makeDialog, showDialog: _showDialog, dismiss: _wireDialogDismiss, warning: c => _nameTools?.warningHtml(c) || '',
     notify: () => { showToast(t('mrNew'), 'info'); if (typeof Notification !== 'undefined' && Notification.permission === 'granted') new Notification(t('mrNew'), { tag: 'breeze-requests' }); },
   });
   globalThis.__breezeRequests?.installNotificationActions({ serviceWorker: navigator.serviceWorker, signal: _ac.signal, blocked: () => _vault.isBlocked(), get: dbGet, put: dbPut, dom: id => _DOM.get(id), open: c => openConversation(c), send: () => sendMessage(), render: () => renderContacts(), dbg: _dbg, flush: () => { if (_retryQueue.length) scheduleRetry(); } });
@@ -8397,10 +8397,10 @@ async function initMessenger(dbName) {
     card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.onclick(); } };
   }
 
-  const _nameTools = globalThis.__breezeNames?.createNameTools({ settings: () => _settings, esc, t, dom: id => _DOM.get(id), html: safeSetHTML, put: dbPut, render: () => renderContacts(), active: () => activeContact, list: () => dbGetAll('contacts'), confirm: showConfirm, toast: showToast, dbg: _dbg });
+  const _nameTools = globalThis.__breezeNames?.createNameTools({ settings: () => _settings, esc, t, dom: id => _DOM.get(id), html: safeSetHTML, put: dbPut, render: () => renderContacts(), active: () => activeContact, list: () => dbGetAll('contacts'), confirm: showConfirm, toast: showToast, dbg: _dbg, verification: c => _contactVerify?.paintHeader(c).catch(e => _dbg(e, 'verification-header')) });
   const contactDisplayName = _nameTools?.contactDisplayName || (c => (c?.name || '').replace(/[\p{Default_Ignorable_Code_Point}\p{Cc}]/gu, ''));
   const contactPeerNameHtml = _nameTools?.contactPeerNameHtml || (() => '');
-  function _setConvName(c) { if (_nameTools) _nameTools._setConvName(c); else if (c) _DOM.get('msg-conv-name').textContent = contactDisplayName(c); if (c && typeof _contactVerify !== 'undefined') _contactVerify?.paintHeader(c).catch(e => _dbg(e, 'verification-header')); }
+  function _setConvName(c) { if (_nameTools) _nameTools._setConvName(c); else if (c) { _DOM.get('msg-conv-name').textContent = contactDisplayName(c); _contactVerify?.paintHeader(c).catch(e => _dbg(e, 'verification-header')); } }
   const setContactNickname = _nameTools?.setContactNickname || (async () => {});
 
   async function renderContacts() {

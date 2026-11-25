@@ -93,6 +93,18 @@ describe('control stripping and local warning rendering', () => {
     tools.setContacts([{ ...alice, name: 'Zoe', alias: '' }]);
     expect(tools.warningText(other('Alice'))).toBe('');
   });
+  it('repaints verification after replacing the active header, but not an empty header', () => {
+    const { tools, D } = fixture();
+    D.verification = vi.fn(() => expect(D.html).toHaveBeenCalled());
+    D.active = () => alice;
+    tools.setContacts([alice]);
+    expect(D.verification).toHaveBeenCalledWith(alice);
+    tools._setConvName(null);
+    expect(D.verification).toHaveBeenCalledTimes(1);
+    D.dom = () => null;
+    tools._setConvName(alice);
+    expect(D.verification).toHaveBeenCalledTimes(1);
+  });
   it('asks before adding, respects cancellation and does not prompt for ordinary/self adds', async () => {
     const { tools, D } = fixture();
     D.confirm.mockResolvedValue(false);
