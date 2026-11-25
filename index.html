@@ -44,7 +44,7 @@
 :root {
   --bg: #050505; --s1: rgba(28,28,30,.85); --s2: rgba(44,44,46,.7); --s3: rgba(58,58,60,.6);
   --b1: rgba(255,255,255,.08);
-  --t1: #f2f2f7; --t2: #98989d; --t3: #78788a;
+  --t1: #f2f2f7; --t2: #98989d; --t3: #93939f;
   --g: #34d399; --gd: #10b981; --gl: rgba(52,211,153,.08);
   --r: #ff6b6b; --y: #fbbf24; --blue: #60a5fa;
   --font: -apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, 'Helvetica Neue', sans-serif;
@@ -63,9 +63,9 @@ html.theme-transitioning, html.theme-transitioning *, html.theme-transitioning *
 .light {
   --bg: #f2f2f7; --s1: rgba(255,255,255,.85); --s2: rgba(242,242,247,.9); --s3: rgba(229,229,234,.8);
   --b1: rgba(0,0,0,.06);
-  --t1: #1c1c1e; --t2: #48484a; --t3: #6d6d70;
-  --g: #059669; --gd: #047857; --gl: rgba(5,150,105,.08);
-  --r: #ff3b30; --y: #ff9500; --blue: #007aff;
+  --t1: #1c1c1e; --t2: #48484a; --t3: #636366;
+  --g: #046c4e; --gd: #065f46; --gl: rgba(5,150,105,.08);
+  --r: #c81e1e; --y: #ff9500; --blue: #007aff;
   --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
   --shadow-md: 0 4px 16px rgba(0,0,0,.06);
   --shadow-float: 0 8px 32px rgba(0,0,0,.1);
@@ -73,6 +73,8 @@ html.theme-transitioning, html.theme-transitioning *, html.theme-transitioning *
 }
 }
 .light .msg.me { background: var(--gd); color: #fff }
+.light .btn-g, .light .btn-r, .light .folder-tab .badge, .light .ftcount, .light .cbadge, .light .label-chip.active, .light .i-highlight, .light .highlight-mark, .light .input-bar .send, .light .server-banner, .light .acc-tab .acc-badge, .light .drop-overlay-text, .light .skip-to-content { color: #fff }
+.light ::selection { color: #fff }
 .light input, .light textarea, .light select { background: var(--s2); color: var(--t1) }
 
 /* ─── Reset ─── */
@@ -112,7 +114,7 @@ header nav { margin-left: auto; font-size: 12px }
 header nav a { color: var(--t3); margin-left: 16px }
 header nav a:hover { color: var(--t1) }
 main { flex: 1; padding: 32px 0 48px }
-footer { padding: 16px 0; border-top: 1px solid var(--b1); font-size: 11px; color: var(--t3); text-align: center }
+footer { padding: 16px 0; border-top: 1px solid var(--b1); font-size: 12px; color: var(--t3); text-align: center }
 .hidden { display: none !important }
 
 /* ─── Typography ─── */
@@ -145,8 +147,8 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .btn-o { background: rgba(255,255,255,.06); color: var(--t2); border: 1px solid var(--b1); backdrop-filter: blur(8px) }
 .btn-o:hover { background: var(--s2); color: var(--t1); transform: translateY(-1px) }
 .btn-sm { padding: 6px 14px; font-size: 12px; min-height: 32px; border-radius: var(--rad) }
-.btn-r { background: var(--r); color: #fff; box-shadow: 0 2px 12px rgba(255,107,107,.25) }
-.label { font-size: 11px; font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px }
+.btn-r { background: var(--r); color: #000; box-shadow: 0 2px 12px rgba(255,107,107,.25) }
+.label { font-size: 12px; font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px }
 .color-g { color: var(--g) }
 .text-xs { font-size: 11px }
 .mb-3 { margin-bottom: 12px }
@@ -163,7 +165,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .sidebar { width: 280px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--s1); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); border-right: 1px solid var(--b1) }
 .sidebar-head { padding: 14px 16px; display: flex; align-items: center; gap: 8px }
 .sidebar-head .name { font-weight: 700; font-size: 15px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.sidebar-id { font-size: 10px; color: var(--t3); font-family: var(--mono); padding: 0 16px 10px; cursor: pointer; transition: color .15s ease }
+.sidebar-id { font-size: 12px; color: var(--t3); font-family: var(--mono); padding: 0 16px 10px; cursor: pointer; transition: color .15s ease }
 .sidebar-id:hover { color: var(--g) }
 .folder-tabs { display: flex; gap: 2px; padding: 4px 8px; background: var(--s2); border-radius: var(--rad); margin: 8px 12px }
 .folder-tab {
@@ -215,7 +217,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .contact .info .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .contact .info .preview { font-size: 12px; color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px }
 .contact .meta { text-align: right; flex-shrink: 0 }
-.contact .meta .time { font-size: 10px; color: var(--t3) }
+.contact .meta .time { font-size: 12px; color: var(--t3) }
 .cbadge { display: inline-block; background: var(--g); color: #000; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: var(--rad-full); margin-top: 4px }
 
 /* ─── Chat area ─── */
@@ -244,7 +246,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 @keyframes msgBounce { 0% { opacity: 0; transform: translateY(10px) scale(.95) } 60% { transform: translateY(-2px) scale(1.01) } 100% { opacity: 1; transform: none } }
 
 /* Message sub-elements */
-.date-sep { text-align: center; font-size: 11px; color: var(--t3); padding: 12px 0 4px; font-weight: 500 }
+.date-sep { text-align: center; font-size: 12px; color: var(--t3); padding: 12px 0 4px; font-weight: 500 }
 /* v3.6: Unread separator */
 .unread-sep { display: flex; align-items: center; gap: 12px; padding: 8px 16px; margin: 8px 0 }
 .unread-sep::before, .unread-sep::after { content: ''; flex: 1; height: 1px; background: var(--g) }
@@ -266,9 +268,9 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .msg-sig { font-size: 9px }
 .msg-sig.ok { color: var(--g) }
 .msg-sig.bad { color: var(--r) }
-.msg-fwd { font-size: 10px; color: var(--t3); font-style: italic; margin-bottom: 2px }
+.msg-fwd { font-size: 12px; color: var(--t3); font-style: italic; margin-bottom: 2px }
 .msg-voice audio { max-width: 220px; height: 32px }
-.voice-dur { font-size: 10px; color: var(--t3); margin-left: 6px; min-width: 28px }
+.voice-dur { font-size: 12px; color: var(--t3); margin-left: 6px; min-width: 28px }
 .msg-img { max-width: 240px; max-height: 200px; border-radius: var(--rad); display: block; margin-bottom: 4px; cursor: pointer }
 .msg-file { color: inherit; text-decoration: underline }
 .msg-file-name { font-size: 11px; color: inherit; opacity: .7 }
@@ -286,7 +288,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .msg-status.read { color: var(--blue); opacity: 1; font-weight: 600 }
 .msg-status.failed { color: var(--r); opacity: 1; cursor: pointer }
 .msg-copy {
-  position: absolute; top: 4px; right: 4px; font-size: 10px; opacity: 0;
+  position: absolute; top: 4px; right: 4px; font-size: 12px; opacity: 0;
   cursor: pointer; background: var(--s3); border: none; color: var(--t3);
   border-radius: 4px; padding: 2px 6px; transition: .15s;
   min-width: 24px; min-height: 24px; display: flex; align-items: center; justify-content: center
@@ -456,7 +458,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-center { max-width: 400px; text-align: center }
 .i-img-preview { max-width: 100%; max-height: 300px; border-radius: var(--rad); margin-bottom: 12px }
 .i-t3 { color: var(--t3) }
-.i-t3-10 { color: var(--t3); font-size: 10px }
+.i-t3-10 { color: var(--t3); font-size: 12px }
 .i-id-small { font-size: 9px; word-break: break-all; color: var(--g) }
 .i-m4 { margin: 4px 0 }
 .i-rel { position: relative }
@@ -492,7 +494,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-sub14 { font-size: 14px; font-weight: 600; color: var(--t1); margin-bottom: 8px }
 .i-title-g { font-weight: 700; color: var(--g); font-size: 15px; margin-bottom: 8px }
 .i-fullscreen { position: fixed; inset: 0; background: #000; z-index: 999999 }
-.i-small-muted { font-size: 11px; color: var(--t3); margin-bottom: 12px }
+.i-small-muted { font-size: 12px; color: var(--t3); margin-bottom: 12px }
 .i-desc12 { font-size: 12px; color: var(--t2); margin-bottom: 12px }
 .i-max-popup { max-width: 320px; max-height: 80vh; overflow-y: auto }
 .i-title16 { color: var(--t1); font-weight: 700; font-size: 16px }
@@ -505,9 +507,9 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 /* R103: Final template style extraction */
 .i-ctx-row { padding: 6px 10px; cursor: pointer; font-size: 12px; color: var(--t1) }
 .i-highlight { background: var(--g); color: #000; border-radius: 2px; padding: 0 2px }
-.i-tiny-meta { font-size: 10px; color: var(--t3); margin-top: 6px }
+.i-tiny-meta { font-size: 12px; color: var(--t3); margin-top: 6px }
 .i-body13 { font-size: 13px; color: var(--t2); margin: 4px 0 }
-.i-small-pad { font-size: 11px; color: var(--t3); padding: 4px }
+.i-small-pad { font-size: 12px; color: var(--t3); padding: 4px }
 .i-break-sm { font-size: 10px; word-break: break-all }
 .i-green-break { color: var(--g); word-break: break-all }
 .i-muted12 { color: var(--t2); font-size: 12px }
@@ -516,7 +518,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .i-muted { color: var(--t2) }
 .focus-bar { background: var(--gl); color: var(--g); cursor: pointer }
 #b-msg-nrn.nrn-on { background: var(--gl); color: var(--g); border-color: var(--g) }
-.msg-nrn { font-size: 10px; color: var(--t3); margin-left: 6px; opacity: .8 }
+.msg-nrn { font-size: 12px; color: var(--t3); margin-left: 6px; opacity: .8 }
 .i-fs10 { font-size: 10px }
 /* ─── Account tabs ─── */
 .acc-tabs { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--b1); overflow-x: auto; flex-shrink: 0 }
@@ -525,7 +527,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .acc-tab.active { border-color: var(--g); background: var(--s2); box-shadow: 0 0 0 3px rgba(52,211,153,.2) }
 .acc-tab:hover:not(.active) { background: var(--s2); transform: scale(1.12) }
 .acc-tab:active { transform: scale(.9) }
-.acc-tab .acc-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--r); color: #fff; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; pointer-events: none; animation: badgePop .3s var(--bounce) }
+.acc-tab .acc-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; border-radius: 8px; background: var(--r); color: #000; font-size: 9px; font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 4px; pointer-events: none; animation: badgePop .3s var(--bounce) }
 @keyframes badgePop { from { transform: scale(0) } to { transform: scale(1) } }
 .acc-tab .acc-shortcut { position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%; background: var(--s3); color: var(--t3); font-size: 7px; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .2s }
 .acc-tabs:hover .acc-shortcut { opacity: 1 }
@@ -617,7 +619,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .search-bar { display: none; padding: 8px 12px; gap: 8px; align-items: center; border-bottom: 1px solid var(--b1); background: var(--s1) }
 .search-bar.active { display: flex }
 .search-bar input { flex: 1; padding: 6px 10px; border: none; border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: 13px; outline: none }
-.match-count { font-size: 10px; color: var(--t3); font-family: var(--mono) }
+.match-count { font-size: 12px; color: var(--t3); font-family: var(--mono) }
 .offline-bar { display: none; padding: 8px 14px; background: rgba(255,107,107,.12); backdrop-filter: blur(8px); color: var(--r); font-size: 12px; text-align: center; font-weight: 600; border-bottom: 1px solid rgba(255,107,107,.2) }
 .offline-bar.active { display: block; animation: offlineSlide .25s ease }
 /* v3.6: Outbox badge — pending message count */
@@ -644,7 +646,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .pin-banner:hover { background: var(--s3) }
 .pin-banner .pin-icon { flex-shrink: 0 }
 .pin-banner .pin-text { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.pin-banner .pin-count { font-size: 10px; color: var(--t3); flex-shrink: 0 }
+.pin-banner .pin-count { font-size: 12px; color: var(--t3); flex-shrink: 0 }
 /* v3.6: Message multi-select mode */
 .msg.selectable { cursor: pointer }
 .msg.selected { outline: 2px solid var(--g); outline-offset: -2px; background: rgba(52,211,153,.08) }
@@ -660,7 +662,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 
 /* ─── Accessibility ─── */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0 }
-:focus-visible { outline: 2px solid var(--g); outline-offset: 2px }
+:focus-visible { outline: 2px solid var(--g) !important; outline-offset: 2px }
 
 /* ─── Dynamic UI classes (JS-generated elements) ─── */
 .toast-container { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: column; gap: 8px; align-items: center; width: max-content; max-width: 90vw; pointer-events: none }
@@ -678,7 +680,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .rendezvous-dialog { max-width: 800px }
 .rv-code { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px }
 @media (max-width: 600px) { .rv-code { grid-template-columns: minmax(0, 1fr) } }
-.qr-url { font-size: 10px; color: var(--t3); word-break: break-all; margin-top: 8px; font-family: var(--mono) }
+.qr-url { font-size: 12px; color: var(--t3); word-break: break-all; margin-top: 8px; font-family: var(--mono) }
 .search-hl { background: rgba(16,185,129,.3); border-radius: 2px; padding: 0 1px }
 .drag-active { border: 2px dashed var(--g); opacity: .8 }
 .compact .msg { padding: 6px 12px; font-size: 13px; border-radius: 14px; max-width: 80% }
@@ -704,17 +706,17 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .setup-feat:hover { transform: translateY(-3px) scale(1.02); box-shadow: var(--shadow-md) }
 .setup-feat span { display: block; font-size: 28px; margin-bottom: 6px }
 .setup-feat b { display: block; font-size: 11px; color: var(--t1); margin-bottom: 2px }
-.setup-feat small { font-size: 10px; color: var(--t3) }
+.setup-feat small { font-size: 12px; color: var(--t3) }
 .setup-desc { color: var(--t2); font-size: 14px; margin: 0 0 24px; line-height: 1.6 }
 .setup-input { max-width: 280px; margin: 0 auto; border-radius: var(--rad) }
 .setup-input-alt { max-width: 280px; margin: 8px auto 0; font-size: 12px; border-radius: var(--rad) }
 .setup-cta { max-width: 280px; margin: 16px auto 0; padding: 14px }
 .setup-restore { max-width: 280px; margin: 10px auto 0; padding: 12px }
-.setup-footer { color: var(--t3); margin-top: 16px; font-size: 10px }
-.server-banner { background: var(--r); color: #fff; padding: 8px 16px; font-size: 13px; text-align: center; border-radius: var(--rad); margin-bottom: 4px }
+.setup-footer { color: var(--t3); margin-top: 16px; font-size: 12px }
+.server-banner { background: var(--r); color: #000; padding: 8px 16px; font-size: 13px; text-align: center; border-radius: var(--rad); margin-bottom: 4px }
 .sidebar-meta { font-size: 10px; color: var(--g); font-family: var(--mono) }
-.conv-status { font-size: 10px; font-family: var(--mono); color: var(--t3) }
-.char-count { font-size: 10px; color: var(--t3); font-family: var(--mono); min-width: 24px; text-align: right }
+.conv-status { font-size: 12px; font-family: var(--mono); color: var(--t3) }
+.char-count { font-size: 12px; color: var(--t3); font-family: var(--mono); min-width: 24px; text-align: right }
 .msg-area { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 4px; min-height: 0; contain: layout style paint; overscroll-behavior-y: contain; overflow-anchor: none }
 /* v3.6: Scroll anchor sentinel — keeps view pinned to bottom during prepend (research: Chrome/Firefox) */
 .msg-area .scroll-anchor { overflow-anchor: auto; height: 1px; flex-shrink: 0 }
@@ -735,8 +737,8 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .folder-sep { height: 1px; background: var(--b1); margin: 4px 0 }
 
 /* ─── Slash command output panels ─── */
-.cmd-panel { text-align: left; color: var(--t3); font-size: 11px; padding: 12px; line-height: 2 }
-.cmd-panel-mono { text-align: left; color: var(--t3); font-size: 11px; padding: 12px; font-family: var(--mono); line-height: 2; white-space: pre-wrap }
+.cmd-panel { text-align: left; color: var(--t3); font-size: 12px; padding: 12px; line-height: 2 }
+.cmd-panel-mono { text-align: left; color: var(--t3); font-size: 12px; padding: 12px; font-family: var(--mono); line-height: 2; white-space: pre-wrap }
 .cmd-center { text-align: center; color: var(--t3); font-size: 12px; padding: 12px }
 .cmd-title { font-weight: 700; font-size: 16px; margin-bottom: 16px; color: var(--t1) }
 .cmd-section { text-align: left; color: var(--t2); font-size: 12px; padding: 16px; line-height: 1.8 }
@@ -749,7 +751,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .label-chip.active { background: var(--g); color: #000; border-color: var(--g) }
 .label-chip .remove { opacity: .5; cursor: pointer; margin-left: 2px; font-size: 9px }
 .label-chip .remove:hover { opacity: 1 }
-.section-header { padding: 8px 16px; font-size: 10px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; background: var(--bg); border-bottom: 1px solid var(--b1); user-select: none }
+.section-header { padding: 8px 16px; font-size: 12px; font-weight: 700; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; background: var(--bg); border-bottom: 1px solid var(--b1); user-select: none }
 .contact-label { display: inline-block; padding: 1px 6px; border-radius: var(--rad-full); font-size: 9px; font-weight: 600; margin-left: 4px; vertical-align: middle }
 .contact-label[data-color="blue"] { background: rgba(59,130,246,.15); color: #60a5fa }
 .contact-label[data-color="green"] { background: var(--gl); color: var(--g) }
@@ -771,12 +773,12 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 /* v3.6: File transfer progress bar (P2P) */
 .transfer-progress { height: 3px; background: var(--s3); border-radius: 2px; overflow: hidden; margin-top: 4px }
 .transfer-progress .bar { height: 100%; background: var(--g); transition: width .2s ease; border-radius: 2px }
-.transfer-info { font-size: 10px; color: var(--t3); margin-top: 2px }
+.transfer-info { font-size: 12px; color: var(--t3); margin-top: 2px }
 
 /* ─── Drag & Drop overlay ─── */
 .drop-overlay { position: absolute; inset: 0; background: rgba(16,185,129,.08); border: 2px dashed var(--g); border-radius: var(--rad); z-index: 50; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .15s }
 .drop-overlay.active { opacity: 1 }
-.drop-overlay-text { background: var(--g); color: #fff; padding: 12px 24px; border-radius: var(--rad-full); font-size: 14px; font-weight: 600 }
+.drop-overlay-text { background: var(--g); color: #000; padding: 12px 24px; border-radius: var(--rad-full); font-size: 14px; font-weight: 600 }
 .drop-page { display:flex; align-items:center; justify-content:center; min-height:100vh; flex-direction:column; gap:16px; padding:24px; text-align:center; font-family:system-ui,sans-serif; background:#050505; color:#f2f2f7 }
 .drop-page-icon { font-size:48px }
 .drop-page-status { font-size:15px }
@@ -840,7 +842,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important }
 }
-.skip-to-content { position: absolute; top: -100%; left: 0; background: var(--g); color: #fff; padding: 8px 16px; z-index: 999; font-size: 14px; border-radius: 0 0 var(--rad) 0 }
+.skip-to-content { position: absolute; top: -100%; left: 0; background: var(--g); color: #000; padding: 8px 16px; z-index: 999; font-size: 14px; border-radius: 0 0 var(--rad) 0 }
 .skip-to-content:focus { top: 0 }
 
 /* ─── Consent banner ─── */
@@ -886,24 +888,27 @@ del.md-del { opacity: .6 }
   .conv-header .name::after { content: ' — Breeze Messenger'; font-weight: 400; font-size: 12px; color: #888 }
 }
 @media (prefers-reduced-motion: reduce) { * { animation-duration: .01ms !important; transition-duration: .01ms !important } }
-@media (prefers-contrast: more) { :root { --b1: rgba(255,255,255,.2); --t3: #888 } }
+@media (prefers-contrast: more) { :root { --b1: rgba(255,255,255,.2); --t3: #a8a8b6 } .light { --b1: rgba(0,0,0,.28); --t3: #4a4a4e } }
+@media (prefers-contrast: more) and (prefers-color-scheme: light) { :root.auto-theme { --b1: rgba(0,0,0,.28); --t3: #4a4a4e } }
 
 /* ─── Auto light theme (prefers-color-scheme) ─── */
 @media (prefers-color-scheme: light) {
   :root.auto-theme {
     --bg: #f2f2f7; --s1: rgba(255,255,255,.85); --s2: rgba(242,242,247,.9); --s3: rgba(229,229,234,.8);
     --b1: rgba(0,0,0,.06);
-    --t1: #1c1c1e; --t2: #48484a; --t3: #6d6d70;
-    --g: #059669; --gd: #047857; --gl: rgba(5,150,105,.08);
-    --r: #ff3b30; --y: #ff9500; --blue: #007aff;
+    --t1: #1c1c1e; --t2: #48484a; --t3: #636366;
+    --g: #046c4e; --gd: #065f46; --gl: rgba(5,150,105,.08);
+    --r: #c81e1e; --y: #ff9500; --blue: #007aff;
     --shadow-sm: 0 1px 3px rgba(0,0,0,.08);
     --shadow-md: 0 4px 16px rgba(0,0,0,.06);
     --shadow-float: 0 8px 32px rgba(0,0,0,.1)
   }
-  :root.auto-theme .msg.me { background: linear-gradient(135deg, var(--g), var(--gd)); color: #000 }
+  :root.auto-theme .msg.me { background: linear-gradient(135deg, var(--g), var(--gd)); color: #fff }
   :root.auto-theme .msg.them { background: rgba(255,255,255,.8); backdrop-filter: blur(8px) }
   :root.auto-theme .ctx-menu, :root.auto-theme .mention-picker { background: rgba(255,255,255,.85); backdrop-filter: var(--glass); box-shadow: var(--shadow-float) }
   :root.auto-theme .install-banner { background: rgba(255,255,255,.9); backdrop-filter: blur(12px) }
+  :root.auto-theme .btn-g, :root.auto-theme .btn-r, :root.auto-theme .folder-tab .badge, :root.auto-theme .ftcount, :root.auto-theme .cbadge, :root.auto-theme .label-chip.active, :root.auto-theme .i-highlight, :root.auto-theme .highlight-mark, :root.auto-theme .input-bar .send, :root.auto-theme .server-banner, :root.auto-theme .acc-tab .acc-badge, :root.auto-theme .drop-overlay-text, :root.auto-theme .skip-to-content { color: #fff }
+  :root.auto-theme ::selection { color: #fff }
 }
 
 /* ─── Crash recovery overlay ─── */
@@ -986,7 +991,7 @@ del.md-del { opacity: .6 }
    the bar shows only while the sidebar (contact list) is shown — opening a
    conversation or the settings panel hides the sidebar, which hides the bar. */
 #msg-tabbar { display: none }
-.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: var(--touch); padding: 6px 0; background: none; border: none; color: var(--t3); font: inherit; font-size: 11px; cursor: pointer }
+.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: var(--touch); padding: 6px 0; background: none; border: none; color: var(--t3); font: inherit; font-size: 12px; cursor: pointer }
 .tab-btn .tab-ico { font-size: 20px; line-height: 1.1 }
 .tab-btn.active { color: var(--g) }
 @media (max-width: 640px) {
@@ -3925,6 +3930,7 @@ function renderAccountTabs() {
     if (idx < 9) {
       const shortcut = document.createElement('span');
       shortcut.className = 'acc-shortcut';
+      shortcut.setAttribute('aria-hidden', 'true');
       shortcut.textContent = idx + 1;
       tab.appendChild(shortcut);
     }
