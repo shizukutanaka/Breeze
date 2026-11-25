@@ -5,7 +5,7 @@
 // actually suppress. None of those throw — they just quietly restore the pressure the
 // features exist to remove. So they are asserted in a real browser, end to end.
 import { test, expect } from '@playwright/test';
-import { createIdentity, readMessages } from './helpers.mjs';
+import { createIdentity, readMessages, openAddContact } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
@@ -13,21 +13,21 @@ const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } 
 // Add a contact WITHOUT opening it: unread only accrues while you are not looking at the
 // conversation, so the badge assertions need a contact that was never opened.
 async function addOnly(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB64);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  await expect(page.locator('#msg-contacts .contact').first()).toBeVisible();
+  await expect(page.locator('#msg-contacts .contact:not(.self-card)').first()).toBeVisible();
 }
 
 async function addAndOpen(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB64);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  const contact = page.locator('#msg-contacts .contact').first();
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)').first();
   await expect(contact).toBeVisible();
   await contact.click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();
@@ -93,11 +93,13 @@ test('the settings panel holds the read receipt instead of firing it the instant
   // power user would guess.
   await runCommand(A, '/settings');
   await expect(A.locator('input[data-setting="rr-delay"]')).toBeChecked();
+  await A.locator('#b-settings-back').click();
+  await expect(A.locator('#settings-view')).toBeHidden();
 
   // Watch the wire: opening the conversation must not produce a 'read' signal right away.
   const reads = [];
   A.on('request', (r) => { if (r.url().includes('/api/signal') && (r.postData() || '').includes('"read"')) reads.push(Date.now()); });
-  await A.locator('#msg-contacts .contact').first().click();
+  await A.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
   await expect.poll(() => reads.length, { timeout: 4000 }).toBe(0);
 

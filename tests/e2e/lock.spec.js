@@ -6,7 +6,7 @@
 //      deleted the lock password.
 // tests/lock-screen.test.js covers the same code in vitest (CI does not run Playwright).
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 
 const PASSWORD = 'correct horse';
 
@@ -29,11 +29,11 @@ async function openChat(browser) {
   const A = await ctxA.newPage(), B = await ctxB.newPage();
   await createIdentity(A, 'Locker');
   const pubB = await createIdentity(B, 'Other');
-  await A.locator('#b-msg-add').click();
-  const panel = A.locator('#msg-messages .cmd-panel').last();
+  await openAddContact(A);
+  const panel = A.locator('dialog[open] .add-form-contact');
   await panel.locator('.modal-input').fill(pubB);
   await panel.locator('button.btn-g').click();
-  await A.locator('#msg-contacts .contact').click();
+  await A.locator('#msg-contacts .contact:not(.self-card)').click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
   return { A, close: async () => { await ctxA.close(); await ctxB.close(); } };
 }

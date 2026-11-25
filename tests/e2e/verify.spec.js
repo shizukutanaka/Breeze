@@ -6,7 +6,7 @@
 // manual check. Two isolated browser contexts share the same in-memory Worker KV, so Bob's
 // prekey upload actually populates the ktlog:<id> entry Alice's audit then fetches.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 
 // Distinct synthetic CF-Connecting-IP per context — without it both contexts share the local
 // harness's single 'unknown'-IP rate-limit bucket (see messaging.spec.js).
@@ -16,12 +16,12 @@ function ctxOpts(ip) {
 
 
 async function addAndOpen(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB64);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  const contact = page.locator('#msg-contacts .contact');
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)');
   await expect(contact).toBeVisible();
   await contact.click();
 }

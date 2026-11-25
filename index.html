@@ -12890,10 +12890,10 @@ async function initMessenger(dbName) {
     dlg.querySelector('[data-choice="group"]').onclick = () => { contactForm.classList.add('hidden'); groupForm.classList.remove('hidden'); groupInput.focus(); };
     dlg.querySelector('[data-choice="invite"]').onclick = () => { close(); shareInvite(); };
     dlg.querySelector('.add-submit').onclick = () => done(addInput.value);
-    addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(addInput.value); });
+    addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(addInput.value); } });
     const createGrp = () => { const name = groupInput.value.trim(); if (name) done('group:' + name); };
     dlg.querySelector('.group-submit').onclick = createGrp;
-    groupInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') createGrp(); });
+    groupInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); createGrp(); } });
   }
 
   async function resolveAndAdd(input, homeHintOverride) {

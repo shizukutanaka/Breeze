@@ -7,18 +7,18 @@
 //
 // Three real browser contexts: A = primary device, B = linked secondary, C = a contact.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 
 const ip = (n) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': `203.0.113.${n}` } });
 
 
 async function addAndOpen(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB64);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  const contact = page.locator('#msg-contacts .contact').first();
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)').first();
   await expect(contact).toBeVisible();
   await contact.click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();
@@ -85,7 +85,7 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   await A.locator('#b-msg-send').click();
   await expect(C.locator('#msg-messages')).toContainText(fromA, { timeout: 20_000 });
   // The laptop now shows a NEW conversation carrying that message...
-  const cRowOnB = B.locator('#msg-contacts .contact', { hasText: fromA.slice(0, 20) });
+  const cRowOnB = B.locator('#msg-contacts .contact:not(.self-card)', { hasText: fromA.slice(0, 20) });
   await expect(cRowOnB).toBeVisible({ timeout: 20_000 });
   await cRowOnB.click();
   await expect(B.locator('#msg-messages')).toContainText(fromA, { timeout: 10_000 });
@@ -111,7 +111,7 @@ test('link a second device: contact messages reach BOTH devices; sent messages s
   await B.locator('#msg-input').fill(fromB);
   await B.locator('#b-msg-send').click();
   await expect(C.locator('#msg-messages')).toContainText(fromB, { timeout: 20_000 });
-  await expect(C.locator('#msg-contacts .contact')).toHaveCount(1); // no stranger appeared
+  await expect(C.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1); // no stranger appeared
   await expect(A.locator('#msg-messages')).toContainText(fromB, { timeout: 20_000 });
   const isMineOnA = await A.evaluate((needle) => {
     const els = [...document.querySelectorAll('#msg-messages .msg')];
@@ -160,8 +160,8 @@ test('a linked secondary device can send to a group (D25) — no primary-only re
 
   // Create a real group the way the app does (group.spec.js's proven path: the "group:" add
   // syntax, then an empty member list to take the invite-link branch).
-  await page.locator('#b-msg-add').click();
-  const gDlg = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const gDlg = page.locator('dialog[open] .add-form-contact');
   await gDlg.locator('.modal-input').fill('group:Guard Test Group');
   await gDlg.locator('button.btn-g').click();
   const membersDlg = page.locator('dialog[aria-labelledby]');
@@ -171,7 +171,7 @@ test('a linked secondary device can send to a group (D25) — no primary-only re
 
   // Make this install a linked SECONDARY: exactly the record /linkto writes.
   await page.evaluate(() => new Promise((resolve) => {
-    const q = indexedDB.open('breeze-messenger', 5);
+    const q = indexedDB.open('breeze-messenger');
     q.onsuccess = () => {
       const tx = q.result.transaction('identity', 'readwrite');
       tx.objectStore('identity').put({ root: 'SOME-OTHER-ROOT-PUBKEY=', rootEd: null, isPrimary: false }, 'account');
@@ -181,7 +181,7 @@ test('a linked secondary device can send to a group (D25) — no primary-only re
   await page.reload();
   await expect(page.locator('#msg-main')).toBeVisible();
 
-  await page.locator('#msg-contacts .contact', { hasText: 'Guard Test Group' }).click();
+  await page.locator('#msg-contacts .contact:not(.self-card)', { hasText: 'Guard Test Group' }).click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();
   const attempt = 'this must not vanish ' + Date.now();
   await page.locator('#msg-input').fill(attempt);
@@ -192,7 +192,7 @@ test('a linked secondary device can send to a group (D25) — no primary-only re
   // ... with no primary-only refusal, and it is still there after a reload (really stored).
   await expect(page.locator('.toast', { hasText: /primary device|メイン端末/i })).toHaveCount(0);
   await page.reload();
-  await page.locator('#msg-contacts .contact', { hasText: 'Guard Test Group' }).click();
+  await page.locator('#msg-contacts .contact:not(.self-card)', { hasText: 'Guard Test Group' }).click();
   await expect(page.locator('#msg-messages')).toContainText(attempt);
   await ctx.close();
 });

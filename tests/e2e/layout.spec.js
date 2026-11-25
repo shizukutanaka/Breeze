@@ -11,7 +11,7 @@
 // user would actually report, and would also catch a CSS regression that broke the
 // same thing without any markup mistake.
 import { test, expect } from '@playwright/test';
-import { submitSetup } from './helpers.mjs';
+import { submitSetup, openAddContact } from './helpers.mjs';
 
 const boot = async (page, name) => {
   await page.goto('/');
@@ -25,14 +25,14 @@ const boot = async (page, name) => {
 // tests below need the composer reachable, so they need a contact open first, same as a
 // real phone user would have.
 const openAnyContact = async (page) => {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
   await dialog.locator('.modal-input').fill(fakePub);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  await page.locator('#msg-contacts .contact').first().click();
+  await page.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(page.locator('#msg-input-bar')).toBeVisible();
 };
 
@@ -44,8 +44,8 @@ const openAnyContact = async (page) => {
 test('tapping + at phone width shows a reachable add-contact panel', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await boot(page, 'Phone Add');
-  await page.locator('#b-msg-add').click();
-  const input = page.locator('#msg-messages .cmd-panel .modal-input');
+  await openAddContact(page);
+  const input = page.locator('dialog[open] .add-form-contact .modal-input');
   await expect(input).toBeVisible();
   const onTop = await input.evaluate((el) => {
     const r = el.getBoundingClientRect();
@@ -57,9 +57,9 @@ test('tapping + at phone width shows a reachable add-contact panel', async ({ pa
   const fakePub = await page.evaluate(() => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))))
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''));
   await input.fill(fakePub);
-  await page.locator('#msg-messages .cmd-panel button.btn-g').click();
+  await page.locator('dialog[open] .add-submit').click();
   await expect(page.locator('#msg-sidebar')).toBeVisible();
-  await page.locator('#msg-contacts .contact').first().click({ trial: true });
+  await page.locator('#msg-contacts .contact:not(.self-card)').first().click({ trial: true });
 });
 
 test('the desktop chat pane sits beside the sidebar, not below it', async ({ page }) => {
@@ -189,30 +189,30 @@ test('a swiped message bubble does not snap back out after the swipe-back animat
     await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((r) => {
-      const q = indexedDB.open('breeze-messenger', 5);
+      const q = indexedDB.open('breeze-messenger');
       q.onsuccess = () => { q.result.transaction('identity', 'readonly').objectStore('identity').get('keys').onsuccess = (e) => r(e.target.result?.pubB64); };
     }));
   };
   const pubA = await identity(A, 'Swipe Receiver');
   const pubB = await identity(B, 'Swipe Sender');
 
-  await A.locator('#b-msg-add').click();
-  const dlgA = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(A);
+  const dlgA = A.locator('dialog[open] .add-form-contact');
   await dlgA.locator('.modal-input').fill(pubB);
   await dlgA.locator('button.btn-g').click();
   await expect(dlgA).toBeHidden();
-  await A.locator('#msg-contacts .contact').first().click();
+  await A.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
 
   // A real received message so it renders through the app's own message-building
   // function and gets the actual touchstart/touchmove/touchend listeners wired — a
   // fabricated element would have none of them and prove nothing.
-  await B.locator('#b-msg-add').click();
-  const dlgB = B.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(B);
+  const dlgB = B.locator('dialog[open] .add-form-contact');
   await dlgB.locator('.modal-input').fill(pubA);
   await dlgB.locator('button.btn-g').click();
   await expect(dlgB).toBeHidden();
-  await B.locator('#msg-contacts .contact').first().click();
+  await B.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(B.locator('#msg-input-bar')).toBeVisible();
   await B.locator('#msg-input').fill('swipe me to test the transform reset');
   await B.locator('#b-msg-send').click();
@@ -267,7 +267,7 @@ test('a contact row released mid-swipe (below the archive threshold) settles bac
   await expect(page.locator('#msg-sidebar')).not.toHaveClass(/hidden/);
 
   const finalState = await page.evaluate(async () => {
-    const row = document.querySelector('#msg-contacts .contact');
+    const row = document.querySelector('#msg-contacts .contact:not(.self-card)');
     const rect = row.getBoundingClientRect();
     const origX = rect.x;
     const y = rect.y + rect.height / 2;
@@ -315,19 +315,19 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
     await submitSetup(page);
     await expect(page.locator('#msg-main')).toBeVisible();
     return page.evaluate(() => new Promise((r) => {
-      const q = indexedDB.open('breeze-messenger', 5);
+      const q = indexedDB.open('breeze-messenger');
       q.onsuccess = () => { q.result.transaction('identity', 'readonly').objectStore('identity').get('keys').onsuccess = (e) => r(e.target.result?.pubB64); };
     }));
   };
   const pubA = await identity(A, 'FAB Receiver');
   const pubB = await identity(B, 'FAB Sender');
 
-  await A.locator('#b-msg-add').click();
-  const dlgA = A.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(A);
+  const dlgA = A.locator('dialog[open] .add-form-contact');
   await dlgA.locator('.modal-input').fill(pubB);
   await dlgA.locator('button.btn-g').click();
   await expect(dlgA).toBeHidden();
-  await A.locator('#msg-contacts .contact').first().click();
+  await A.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(A.locator('#msg-input-bar')).toBeVisible();
 
   // Enough messages that the list actually overflows and scrolling up means something.
@@ -345,12 +345,12 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
   await expect(A.locator('#scroll-fab')).toBeVisible();
   await expect(A.locator('#scroll-fab')).toHaveText('↓');
 
-  await B.locator('#b-msg-add').click();
-  const dlgB = B.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(B);
+  const dlgB = B.locator('dialog[open] .add-form-contact');
   await dlgB.locator('.modal-input').fill(pubA);
   await dlgB.locator('button.btn-g').click();
   await expect(dlgB).toBeHidden();
-  await B.locator('#msg-contacts .contact').first().click();
+  await B.locator('#msg-contacts .contact:not(.self-card)').first().click();
   await expect(B.locator('#msg-input-bar')).toBeVisible();
   await B.locator('#msg-input').fill('arrives while you are scrolled up');
   await B.locator('#b-msg-send').click();
@@ -379,13 +379,13 @@ test('the "load older messages" hint is keyboard-reachable and activatable', asy
   await openAnyContact(page);
 
   const contactId = await page.evaluate(() => new Promise((r) => {
-    const q = indexedDB.open('breeze-messenger', 5);
+    const q = indexedDB.open('breeze-messenger');
     q.onsuccess = () => { q.result.transaction('contacts', 'readonly').objectStore('contacts').getAll().onsuccess = (e) => r(e.target.result[0].id); };
   }));
   // PAGE_SIZE is 50 — seed enough that the "N older" hint renders. Direct IndexedDB
   // write, not real sends: the point here is the hint's keyboard wiring, not delivery.
   await page.evaluate((cid) => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
+    const req = indexedDB.open('breeze-messenger');
     req.onsuccess = () => {
       const tx = req.result.transaction('messages', 'readwrite');
       const store = tx.objectStore('messages');
@@ -396,7 +396,7 @@ test('the "load older messages" hint is keyboard-reachable and activatable', asy
   }), contactId);
 
   await page.reload();
-  await page.locator('#msg-contacts .contact').first().click();
+  await page.locator('#msg-contacts .contact:not(.self-card)').first().click();
   const hint = page.locator('#load-more-hint');
   await expect(hint).toBeVisible();
   await expect(hint).toHaveAttribute('tabindex', '0');

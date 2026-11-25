@@ -4,10 +4,59 @@
 // resolveAndAdd the boot landing uses, so validation cannot drift
 // between the old prompt and the new panel. These pins hold that
 // construction in the deployed file.
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+describe('add-contact dialog keyboard submission', () => {
+  function form() {
+    const nodes = new Map();
+    const node = selector => {
+      if (!nodes.has(selector)) nodes.set(selector, {
+        classList: { remove: vi.fn(), add: vi.fn() }, focus: vi.fn(), appendChild: vi.fn(),
+        handlers: {}, value: '', addEventListener(type, fn) { this.handlers[type] = fn; },
+      });
+      return nodes.get(selector);
+    };
+    const dlg = { querySelector: node, close: vi.fn(), remove: vi.fn() };
+    const dispatch = vi.fn();
+    const start = html.indexOf('function _showAddContactPanel(');
+    const source = html.slice(start, html.indexOf('async function resolveAndAdd(', start));
+    new Function('_makeDialog', 'safeSetHTML', 'esc', 't', '_showDialog', '_wireDialogDismiss', '_deviceScanButton', '_dispatchAddInput', 'shareInvite', source + '\n_showAddContactPanel();')(
+      () => [dlg, 'title'], vi.fn(), s => s, s => s, vi.fn(), vi.fn(), vi.fn(), dispatch, vi.fn(),
+    );
+    return { node, dlg, dispatch };
+  }
+
+  it.each([
+    ['.add-input', 'peer-key', 'peer-key'],
+    ['.add-input', '', ''],
+    ['.group-input', ' My group ', 'group:My group'],
+  ])('prevents Enter activation of the restored opener: %s %j', (selector, value, expected) => {
+    const { node, dlg, dispatch } = form();
+    node(selector).value = value;
+    const event = { key: 'Enter', preventDefault: vi.fn() };
+    node(selector).handlers.keydown(event);
+    expect(event.preventDefault).toHaveBeenCalledOnce();
+    expect(dlg.close).toHaveBeenCalledOnce();
+    expect(dispatch).toHaveBeenCalledOnce();
+    expect(dispatch).toHaveBeenCalledWith(expected);
+    expect(event.preventDefault.mock.invocationCallOrder[0]).toBeLessThan(dlg.close.mock.invocationCallOrder[0]);
+  });
+
+  it('keeps an empty group open and ignores non-submit keys', () => {
+    const { node, dlg, dispatch } = form();
+    const enter = { key: 'Enter', preventDefault: vi.fn() };
+    node('.group-input').handlers.keydown(enter);
+    expect(enter.preventDefault).toHaveBeenCalledOnce();
+    const letter = { key: 'a', preventDefault: vi.fn() };
+    node('.add-input').handlers.keydown(letter);
+    expect(letter.preventDefault).not.toHaveBeenCalled();
+    expect(dlg.close).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+});
 
 describe('add-contact surface wiring (deployed inline)', () => {
   it('defines the dispatch and the panel exactly once', () => {

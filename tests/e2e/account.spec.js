@@ -4,9 +4,9 @@
 // the "+" that creates a second account lives inside the account tab bar, and the tab bar was
 // only built once you already had two accounts. A bootstrap deadlock — the whole subsystem
 // (per-account databases, switching, cross-account unread, Ctrl+1..9) was complete and
-// unreachable. Settings now carries the entry point, and these tests keep the door open.
+// unreachable. The bar now renders for one account too; these tests keep the door open.
 import { test, expect } from '@playwright/test';
-import { createIdentity, submitSetup } from './helpers.mjs';
+import { createIdentity, submitSetup, openAddContact } from './helpers.mjs';
 
 const ctxOpts = (ip) => ({ extraHTTPHeaders: { 'CF-Connecting-IP': ip } });
 
@@ -20,17 +20,15 @@ test('a second account is reachable, isolated, and switching back restores the f
   const pubOther = await createIdentity(other, 'Someone');
 
   // Account 1 gets a contact — the thing that must NOT leak into account 2.
-  await page.locator('#b-msg-add').click();
-  const addDlg = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const addDlg = page.locator('dialog[open] .add-form-contact');
   await addDlg.locator('.modal-input').fill(pubOther);
   await addDlg.locator('button.btn-g').click();
   await expect(addDlg).toBeHidden();
-  await expect(page.locator('#msg-contacts .contact')).toHaveCount(1);
+  await expect(page.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1);
 
-  // Create the second account through Settings (the entry point that did not exist before).
-  await page.locator('#msg-input').fill('/settings');
-  await page.locator('#msg-input').press('Enter');
-  await page.locator('[data-action="add-account"]').click();
+  // Create the second account through the always-visible account tab bar.
+  await page.locator('.acc-add').click();
   const namePrompt = page.locator('dialog[aria-labelledby]');
   await expect(namePrompt).toBeVisible();
   await namePrompt.locator('.modal-input').fill('Personal');
@@ -39,9 +37,12 @@ test('a second account is reachable, isolated, and switching back restores the f
   await expect(avatarPrompt).toBeVisible();
   await avatarPrompt.locator('[value="ok"]').click(); // accept the preset avatar
 
+  await expect(page.locator('#msg-setup')).toBeVisible();
+  await page.locator('#msg-name').fill('Personal');
+  await submitSetup(page);
+  await expect(page.locator('#msg-main')).toBeVisible();
   // The second account starts clean: its own database, so account 1's contact is absent.
-  // (It lands on setup because the new database has no identity yet — that is correct.)
-  await expect(page.locator('#msg-contacts .contact')).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(0, { timeout: 20_000 });
   // ...and the tab bar now exists, because two accounts is when switching becomes meaningful.
   await expect(page.locator('#acc-tabs')).toBeVisible();
   await expect(page.locator('.acc-add')).toBeVisible();
@@ -49,7 +50,7 @@ test('a second account is reachable, isolated, and switching back restores the f
   // Switching back to account 1 restores its contact — a second initMessenger() must not
   // have damaged the first account's state (the boot sequence runs again on every switch).
   await page.locator('#acc-tabs .acc-tab, #acc-tabs > div').first().click();
-  await expect(page.locator('#msg-contacts .contact')).toHaveCount(1, { timeout: 20_000 });
+  await expect(page.locator('#msg-contacts .contact:not(.self-card)')).toHaveCount(1, { timeout: 20_000 });
 
   await ctxA.close(); await ctxB.close();
 });
@@ -67,9 +68,7 @@ test('the "add account" button is keyboard-reachable and activatable', async ({ 
   const page = await ctx.newPage();
   await createIdentity(page, 'Keyboard A11y');
 
-  await page.locator('#msg-input').fill('/settings');
-  await page.locator('#msg-input').press('Enter');
-  await page.locator('[data-action="add-account"]').click();
+  await page.locator('.acc-add').click();
   const namePrompt = page.locator('dialog[aria-labelledby]');
   await expect(namePrompt).toBeVisible();
   await namePrompt.locator('.modal-input').fill('Second');
@@ -127,9 +126,7 @@ test('switching away from a freshly-created account does not leak its event list
 
   // Create a SECOND account and finish its own setup — the exact case that never
   // reached the cleanup registration: a brand-new identity's first live session.
-  await page.locator('#msg-input').fill('/settings');
-  await page.locator('#msg-input').press('Enter');
-  await page.locator('[data-action="add-account"]').click();
+  await page.locator('.acc-add').click();
   const namePrompt = page.locator('dialog[aria-labelledby]');
   await namePrompt.locator('.modal-input').fill('Acc2');
   await namePrompt.locator('[value="ok"]').click();
@@ -187,7 +184,7 @@ test('a freshly-created identity gets its short-ID display and a "Session starte
   expect(hasOnclick, 'short-ID element should have its copy-to-clipboard handler wired').toBe(true);
 
   const auditDetails = await page.evaluate(() => new Promise((resolve) => {
-    const req = indexedDB.open('breeze-messenger', 5);
+    const req = indexedDB.open('breeze-messenger');
     req.onsuccess = () => {
       req.result.transaction('audit', 'readonly').objectStore('audit').getAll()
         .onsuccess = (e) => resolve((e.target.result || []).map((r) => r.detail));
@@ -234,9 +231,7 @@ test('turning off /focus, switching accounts, does not leave the old account\'s 
   await expect.poll(() => page.evaluate(() => window.__focusTimers.size)).toBe(1);
 
   // Create and finish setup for a second, fresh account (focus mode off by default there).
-  await page.locator('#msg-input').fill('/settings');
-  await page.locator('#msg-input').press('Enter');
-  await page.locator('[data-action="add-account"]').click();
+  await page.locator('.acc-add').click();
   const namePrompt = page.locator('dialog[aria-labelledby]');
   await namePrompt.locator('.modal-input').fill('Focus B');
   await namePrompt.locator('[value="ok"]').click();
