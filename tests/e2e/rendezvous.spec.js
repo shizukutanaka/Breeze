@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact, enableDirectConnections } from './helpers.mjs';
 import { inflateRawSync } from 'node:zlib';
 import jsQR from 'jsqr';
 
@@ -12,12 +12,12 @@ async function renderedQR(page) {
 }
 
 async function addAndOpen(page, pub) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pub);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  await page.locator('#msg-contacts .contact').click();
+  await page.locator('#msg-contacts .contact:not(.self-card)').click();
 }
 const directAcks = page => page.evaluate(() => JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}').directAck || 0);
 async function sendDirect(from, to, text) {
@@ -31,7 +31,7 @@ async function sendDirect(from, to, text) {
 }
 async function trustedSession(page, peer) {
   return page.evaluate(peer => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
+    const req = indexedDB.open('breeze-messenger');
     req.onerror = () => reject(req.error);
     req.onsuccess = () => {
       const db = req.result, tx = db.transaction(['identity', 'contacts'], 'readonly');
@@ -70,6 +70,7 @@ for (const failure of ['abort', 'timeout']) {
       const [alice, bob] = pages;
       const a = await createIdentity(alice, 'Manual Alice', { navigate: false });
       const b = await createIdentity(bob, 'Manual Bob', { navigate: false });
+      for (const page of pages) await enableDirectConnections(page);
       await addAndOpen(alice, b); await addAndOpen(bob, a);
       for (const page of pages) await expect(page.locator('#msg-conv-status')).toContainText('Direct', { timeout: 30_000 });
       await sendDirect(alice, bob, 'normal session setup A');

@@ -2,17 +2,17 @@ import { test, expect } from '@playwright/test';
 import { createRequire } from 'node:module';
 import { createHash } from 'node:crypto';
 import { buildRelayEnv, createRelayServer } from '../../server/node-host.js';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact, enableDirectConnections } from './helpers.mjs';
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite');
 
 async function addAndOpen(page, pub) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pub);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  await page.locator('#msg-contacts .contact').click();
+  await page.locator('#msg-contacts .contact:not(.self-card)').click();
 }
 const count = page => page.evaluate(() => JSON.parse(localStorage.getItem('brz-p2p-signal') || '{}').postEstablished || 0);
 
@@ -77,6 +77,11 @@ test(`Node relay ${wakeEnabled ? 'pauses established polls' : 'retains 15s fallb
     const [alice, bob] = pages;
     const a = await createIdentity(alice, 'Wake Alice', { navigate: false });
     const b = await createIdentity(bob, 'Wake Bob', { navigate: false });
+    for (const page of pages) await enableDirectConnections(page);
+    await bob.locator('#b-msg-settings').click();
+    await bob.locator('input[data-setting="rr-delay"]').uncheck();
+    await bob.locator('#b-settings-back').click();
+    await expect(bob.locator('#settings-view')).toBeHidden();
     await addAndOpen(alice, b);
     await addAndOpen(bob, a);
     for (const page of pages) await expect(page.locator('#msg-conv-status')).toContainText('Direct', { timeout: 30_000 });
@@ -104,7 +109,7 @@ test(`Node relay ${wakeEnabled ? 'pauses established polls' : 'retains 15s fallb
     await expect.poll(() => alice.evaluate(() => JSON.parse(localStorage.getItem('brz-p2p-direct') || '{}').directAck || 0)).toBe(directAcks + 1);
     const sentStatus = alice.locator('.msg.me').filter({ hasText: text }).locator('.msg-status');
     await expect(sentStatus).not.toHaveClass(/read/);
-    await bob.locator('#msg-contacts .contact').click();
+    await bob.locator('#msg-contacts .contact:not(.self-card)').click();
     await expect(sentStatus).toHaveClass(/read/);
     expect(ephemeralDeposits.slice(depositsBefore)).toEqual([]);
     if (wakeEnabled) {

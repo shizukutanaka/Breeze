@@ -27,16 +27,16 @@
 // clips ALL descendants (fixed-positioned ones included) to the bubble's own small box,
 // so only the first item or two of a 7-9 item menu ever rendered or were clickable.
 import { test, expect } from '@playwright/test';
-import { createIdentity } from './helpers.mjs';
+import { createIdentity, openAddContact } from './helpers.mjs';
 
 
 async function addAndOpen(page, pubB64) {
-  await page.locator('#b-msg-add').click();
-  const dialog = page.locator('#msg-messages .cmd-panel').last(); // the inline add-contact panel (_showAddContactPanel)
+  await openAddContact(page);
+  const dialog = page.locator('dialog[open] .add-form-contact');
   await dialog.locator('.modal-input').fill(pubB64);
   await dialog.locator('button.btn-g').click();
   await expect(dialog).toBeHidden();
-  const contact = page.locator('#msg-contacts .contact');
+  const contact = page.locator('#msg-contacts .contact:not(.self-card)');
   await expect(contact).toBeVisible();
   await contact.click();
 }
@@ -49,7 +49,7 @@ test('Ctrl+N jumps to the next unread contact without throwing', async ({ page }
   // A contact with an unread count, written directly (no live peer needed — this test
   // is about the shortcut's own scope, not message delivery).
   await page.evaluate(() => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger', 5);
+    const req = indexedDB.open('breeze-messenger');
     req.onsuccess = () => {
       const tx = req.result.transaction('contacts', 'readwrite');
       tx.objectStore('contacts').put({ id: 'unread-probe', name: 'Unread Probe', pubB64: 'A'.repeat(43) + '=', unread: 2, archived: false, lastMsgAt: Date.now() });
@@ -58,7 +58,7 @@ test('Ctrl+N jumps to the next unread contact without throwing', async ({ page }
   }));
   await page.reload();
   await expect(page.locator('#msg-main')).toBeVisible();
-  await expect(page.locator('#msg-contacts .contact').first()).toBeVisible();
+  await expect(page.locator('#msg-contacts .contact:not(.self-card)').first()).toBeVisible();
 
   errors.length = 0;
   await page.keyboard.press('Control+n');
