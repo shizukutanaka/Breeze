@@ -12982,8 +12982,8 @@ async function initMessenger(dbName) {
       }
       if (ids.length === 0) { renderContacts(); return; }
       try {
-        const r = await postAPIRaw('/presence', { ids, check: true });
-        if (r.ok) {
+        const r = _powerPresenceOff() ? null : await postAPIRaw('/presence', { ids, check: true });
+        if (r?.ok) {
           const d = await r.json();
           for (const id of ids) {
             const wasOffline = !_presenceCache[id];
