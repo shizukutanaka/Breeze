@@ -35,7 +35,7 @@ async function device(pq = true) {
     get, put, remove: async (s, id) => store.delete(s + ':' + id), contacts: async () => [...store].filter(([k]) => k.startsWith('contacts:')).map(([, v]) => structuredClone(v)),
     session: R.getSession, saveSession: R.saveSession, initiate: R.initSessionV5Initiator, exclusive: R._withPeerLock, blockPeer: vi.fn(), closePeer: vi.fn(),
     encrypt: (text, peer) => R.encryptFor(text, peer, undefined, true), decrypt: (wire, peer, material) => R.decryptFrom(wire, peer, undefined, material), matchPreKey: R.pairingPreKeyMatches,
-    changed: c => changes.push(structuredClone(c)), log: e => errors.push(e),
+    verified: vi.fn(async () => {}), changed: c => changes.push(structuredClone(c)), log: e => errors.push(e),
     material: async opts => { const m = await makePairMaterial(opts); allocated.push(m); return m; },
   };
   const manager = createOfflinePairing(D);
@@ -48,7 +48,10 @@ async function pair(a, b) {
   const ap = await a.manager.inspect(bi.code), bp = await b.manager.inspect(ai.code);
   expect(ap.fingerprint).toBe(bp.fingerprint);
   expect(ap.fingerprint).toMatch(/^(\d{5} ){5}\d{5}$/);
-  return [await a.manager.confirm(ap), await b.manager.confirm(bp)];
+  const contacts = [await a.manager.confirm(ap), await b.manager.confirm(bp)];
+  expect(a.D.verified).toHaveBeenCalledWith(contacts[0]);
+  expect(b.D.verified).toHaveBeenCalledWith(contacts[1]);
+  return contacts;
 }
 afterEach(async () => {
   for (const d of devices.splice(0)) for (const c of await d.D.contacts()) await d.manager.cancel(c);

@@ -1,5 +1,126 @@
 # Security Policy
 
+## Account activity and new-device alerts
+
+The deployed `src/app/device-alerts.js` verifies the existing root-signed device registry,
+persists its own-account high-water revision and device list, and records previously unseen
+linked keys and alerts in one local IndexedDB transaction. Stale own-account registries cannot
+replace that baseline. First discovery of an existing link is labeled **previously unseen**,
+not proof that the device was just created. The signed registry revision supplies the time;
+device names are not authenticated by this protocol and are deliberately not displayed.
+The persistent banner has explicit, local-only acknowledgement and a review/unlink action.
+`/security` retains the device list and acknowledged activity. These public-key/activity
+records live in the account's plaintext `settings` store, contain no private keys or push
+endpoints, and are not tamper-resistant against a compromised browser or local database.
+
+`POST /account/activity` is rate-limited to 30 requests/IP/minute. Upgraded clients sign
+`BreezeAccountActivity/v1:` plus JSON `[userId,pub,ed,kind,id,ts]` using their own Ed25519 key.
+`kind` is `session` or `push`; the installation ID is random, origin-wide and stable across
+reloads; the push ID is SHA-256 of endpoint and p256dh, never the endpoint/auth secret itself.
+The Worker checks the registered owner and a five-minute timestamp window. Each claim has
+an independent KV slot (no shared append race), preserves its first signed timestamp, and
+expires after 90 days without refresh. Session claims refresh on checks; push claims refresh
+when that browser successfully registers its subscription on the serving relay. A read needs
+the owner's signature over `breeze-activity-read:readerId:ts`, or a signed, currently linked
+reader with its own owner proof. Clients independently verify every returned claim against
+their local own/root signing pin, never a key returned with the claim. Own installation and
+locally announced push rotations do not alert that installation. A fresh browser restoring
+the same identity announces a new installation and alerts existing upgraded installations.
+
+Checks run at boot and once/minute while the messenger is running, including follower tabs.
+Background/browser suspension, offline devices and closed apps delay detection until resume
+or next boot; this is not an OS push alert. Unavailable/unsupported/incomplete activity reads
+show an explicit warning rather than a clean bill of health. Reads are bounded at 64 slots;
+truncation is reported as incomplete, not silently accepted as complete. High device churn
+requires review; a complete account-wide historical log and pagination are deferred.
+
+The no-OTP `/prekey/status` now includes the public identity/signing keys (or null). Clients
+compare them against live local keys/pinned root keys, including missing signing keys. Normal
+SPK/OTP/PQ refresh and reload do not change that comparison. **A relay key discrepancy is an
+unverified relay report, visibly labeled separately**, not authenticated evidence that a new
+device obtained private keys. A malicious relay can fabricate this warning, just as it can
+return a bogus prekey bundle; no signature by the old account key exists for an unauthorized
+overwrite. The client never adopts the returned keys or clears a persisted warning on a
+subsequent matching response.
+
+### Remaining suppression and revocation limits
+
+The relay cannot forge a linked-device or installation/push claim without the locally pinned
+signing key. A thief holding that key can sign claims. KV is eventually consistent; responses
+can lag. The relay can withhold new signed registries/events, return only an older valid list,
+lie about completeness, or return matching keys in status while serving other keys to peers.
+The local registry high-water mark detects rollback only after a newer revision was observed;
+it is not global consensus or protection against indefinite omission of a not-yet-seen event.
+An explicit unavailable warning catches errors, not a relay plausibly serving a stale subset.
+There is no independent witness/gossip channel, guaranteed push wakeup, or cross-relay activity
+aggregation. The activity service covers the serving relay; other home relays can be hidden.
+
+Only upgraded, **cooperating** clients announce sessions/restores and push registrations.
+Linked secondaries additionally need a locally pinned root signing key (`account.rootEd`
+or the root contact's `sigPub`). The existing link protocol does not always establish that
+pin: old `/linkto` reads `rootEd` although old registries do not include it. We do not invent
+a signing pin from relay data. Such secondaries show checking-unavailable and cannot verify
+root-account events until they have a trusted local pin. Repairing that bootstrap with an
+out-of-band authenticated signing-key binding is deferred, not papered over with relay TOFU.
+There is no trustworthy browser/session identifier in the old prekey or push protocols.
+An old or malicious client using copied keys can omit the new announcement entirely; its
+normal prekey upload/refresh is intentionally not treated as a new device (that would flag
+ordinary rotation). Likewise, an old relay cannot supply the new activity/status fields.
+This feature is detection with explicit limits, not remote session invalidation or an
+anti-takeover guarantee. The existing root-signed `/unlink` only stops linked-device fan-out;
+it cannot invalidate copied identity keys or a push subscription belonging to another browser.
+The review dialog explains the boundary and recommends moving to a fresh identity and notifying
+contacts after identity theft. Per-session tokens, authenticated key-transition proofs,
+root-signed per-device signing keys and remote push-subscription revocation are deferred.
+
+## Persisted contact verification
+
+`/verify` can record an explicit comparison of the new **both-key** safety number.
+The existing encryption-only number is unchanged; the additional comparison uses
+SHA-256 over a versioned, domain-separated canonical array of both participants'
+full encryption and Ed25519 public pins, sorted lexicographically. Both clients
+must support this display. A missing signing pin cannot be confirmed.
+
+Account-local `identity:verify:<contact id>` records bind the full encryption and
+signing pins with SHA-256 (`BreezeContactVerification`, version 1), timestamp and
+method. They and the one-time `verify:policy` migration marker are vault-protected,
+included in its authenticated inventory/migration/backups. With the vault disabled
+they have the same trusted-local-storage boundary as other unwrapped identity rows.
+Contact names, roster metadata and audit entries remain outside the vault; their
+presence is not evidence of verification. No verification assertion is sent on wire.
+
+Key replacement **or disappearance**, rejected bundle/message/SDP key mismatches,
+and KT rolled/tampered verdicts invalidate verification before normal send gates.
+Invalidation is sticky even if the old keys return, is audited, and renders a
+persistent contact/header warning. Re-confirmation binds the current pins, never
+an incoming candidate key. A comparison opened before an invalidation cannot
+confirm stale state. Group member badges use the same records and require both
+member pins; missing roster pins are not silently recovered from a direct contact.
+An incomplete legacy roster shows unverified without treating absent roster metadata
+as removal of a direct contact's pin. Actual contact writes detect replacement/removal
+even before first verification; establishing the first signing pin remains normal TOFU.
+The verification module is mandatory at boot, and verification-record read/write
+failures reject rather than silently bypassing strict policy.
+
+Strict mode defaults on, but blocks only after a key-change warning, not merely
+because a new contact has never been verified. It gates message encryption, normal
+send actions, file chunks, relay/retry/outbox sends, and groups containing an affected
+strict contact. `/verify` can disable strict mode without clearing the warning.
+Already transmitted data cannot be recalled; there is no claim to revoke previously
+shared group keys. Previously blocked outbox/retry work may resume after confirmation.
+
+Explicit in-person pairing confirmation automatically records verification. **Once
+per upgraded account**, existing local `offlineVerified` confirmations whose stored
+remote pins match the contact are imported. This deliberately trusts the pre-upgrade
+local confirmation baseline, not a new cryptographic proof that a human compared
+numbers. The protected migration marker is written first, so later plaintext imports
+cannot repeat this trust upgrade. A crash midway can leave some old pairings unverified
+and requiring manual confirmation; it cannot silently verify later imported flags.
+
+Verification is device/account local. A wholly new identity/contact ID does not
+inherit it. Cross-device verification sync, duplicate/lookalike-name detection and
+new-device alerts are deferred; this is not an identity-continuity or wire change.
+
 ## Origin-wide key vault
 
 `/vault enable` (also `/keywrap`) replaces the old per-slot passphrase wrapping.
@@ -10,7 +131,7 @@ Disable must finish before `/wipe`, account deletion or reset can erase protecte
 The `/lock` action uses the vault lock when the vault is enabled.
 
 Protected IndexedDB identity slots: `keys`, `signing`, `pq-priv`, `spk-priv`,
-`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`. Entire records are encrypted,
+`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`, `verify:*`. Entire records are encrypted,
 including their public metadata. **History, contacts, drafts and other settings
 remain outside this vault**. Existing message-body encryption is independent: its
 `msgkey` remains unprotected by the vault, so history is readable to someone with

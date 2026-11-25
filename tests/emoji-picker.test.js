@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { createEmojiPicker, EMOJI_CATEGORIES } from '../src/app/emoji-picker.js';
 
@@ -48,7 +48,10 @@ describe('src/app/emoji-picker.js — createEmojiPicker', () => {
     Object.defineProperty(globalThis, k, { value, configurable: true, writable: true });
   };
 
+  beforeEach(() => { vi.useFakeTimers(); });
   afterEach(() => {
+    vi.runOnlyPendingTimers();
+    vi.useRealTimers();
     for (const [k, desc] of Object.entries(savedDescriptors)) {
       if (desc === undefined) delete globalThis[k];
       else Object.defineProperty(globalThis, k, desc);

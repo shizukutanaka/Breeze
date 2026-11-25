@@ -155,6 +155,10 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .mb-3 { margin-bottom: 12px }
 
 /* ─── Messenger layout ─── */
+.device-alert { flex: none; max-height: 30dvh; overflow: auto; background: var(--s1); border: 2px solid var(--r); border-radius: var(--rad); color: var(--t1); padding: 12px; font-size: 14px; line-height: 1.5 }
+.device-alert > b { color: var(--r) }
+#msg-main:has(> .device-alert):not(.hidden) { display: flex; flex-direction: column; height: calc(100dvh - 100px) }
+#msg-main:has(> .device-alert) .msg-layout { flex: 1; min-height: 0; height: auto }
 .msg-layout {
   display: flex; gap: 0;
   height: calc(100vh - 100px); height: calc(100dvh - 100px);
@@ -1348,6 +1352,7 @@ window.__breezeSeed = createSeedHelper();
 </script>
 <script type="module">
 import { getVault, vaultGate } from './src/app/vault.js'; window.__breezeVault = { getVault, vaultGate };
+import { createContactVerify } from './src/app/contact-verify.js'; window.__breezeContactVerify = { createContactVerify };
 </script>
 <script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
@@ -1368,6 +1373,7 @@ window.__breezeProfileUI = { createProfileUI };
 import { createGroupCreate } from './src/app/group-create.js';
 window.__breezeGroupCreate = { createGroupCreate };
 import { createMessageRequests, installNotificationActions } from './src/app/message-requests.js'; window.__breezeRequests = { createMessageRequests, installNotificationActions };
+import { createDeviceAlerts, activityHash } from './src/app/device-alerts.js'; window.__breezeDeviceAlerts = { createDeviceAlerts, activityHash };
 import { createDeviceLink } from './src/app/device-link.js';
 window.__breezeDeviceLink = { createDeviceLink };
 import { CAPS_STICKER as _CAPS_STICKER_STR, BUILTIN_PACK, sanitizeSticker, sanitizePack, parsePackFile, packToFile, buildStickerPayload, parseStickerPayload, groupTextForSticker, parseGroupStickerText, stickerLabel, createStickersUI } from './src/app/stickers.js';
@@ -1583,6 +1589,7 @@ const _scrollBehavior = () => _prefersReducedMotion() ? 'auto' : 'smooth';
 const _I = {
   en: {
 mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay here until you accept. Names and IDs are unverified; compare fingerprints before trusting someone.", mrPolicy: "Stored on this device across reloads for up to 7 days: 20 senders, 20 envelopes each, 100 total, 2 MiB total (128 KiB per envelope). Excess messages and unsolicited calls are dropped. Nothing is decrypted or previewed before acceptance.", mrNew: "New message request", mrCount: "{0} queued envelopes", mrFull: "Storage limit reached; newer messages dropped", mrAccept: "Accept", mrBlock: "Block", mrDelete: "Delete", mrUnblock: "Unblock", mrEmpty: "No message requests", mrFailed: "Could not update message requests. Please retry.",
+    daTitle: "Account security alert",     daLinked: "Previously unseen linked device (root signature verified)",     daSession: "Another installation used this identity (signature verified)",     daPush: "Another installation announced a push subscription (signature verified)",     daRelayKeys: "Relay reports different or missing account keys — unverified discrepancy",     daAck: "Acknowledge",     daReview: "Review devices",     daRevoke: "Unlink",     daUnavailable: "Account activity checking is unavailable or incomplete. The relay may be withholding activity. This is not proof of a new device.",     daLimit: "Only signed, observed activity can be verified. The relay can withhold records. Session and push reports require upgraded, cooperating clients.",     daRecovery: "Unlinking revokes linked-device fan-out only. A copied identity or push subscription cannot be remotely revoked here: recover onto a fresh identity, notify contacts and stop using the compromised identity.",
     opTitle: "Offline contact pairing", opScope: "Exchange these identity invites BOTH ways in person. They expire in 30 minutes. Compare the fingerprint on both devices and confirm only if it matches. Keep this app open until /rendezvous finishes; reloading cancels pending pairing. No alias lookup or relay verification.", opImport: "Import peer invite", opMatches: "I compared both devices: the fingerprint matches", opConfirm: "Verify and add contact", opCompare: "Compare this fingerprint on both devices. It binds both encryption keys, signing keys and invite nonces.", opConfirmed: "Contact verified. Open their chat and exchange /rendezvous codes. Messaging unlocks after encrypted key confirmation.", opInvalid: "Offline pairing failed: invalid, expired, used or mismatched code/key, or unsupported cryptography. Cancel pending pairing and exchange fresh invites.", opPending: "Finish offline pairing with /rendezvous before sending. Use /offlinepair cancel to cancel.", opCancelled: "Pending offline pairing cancelled. Exchange fresh invites on both devices to retry.", opOutput: "Your offline identity invite", opInput: "Peer offline identity invite",
     rvTitle: 'Manual connection', rvScope: 'Requires an existing encrypted session or confirmed /offlinepair invitation. Exchange connection codes privately by QR or copy/paste; they expire in 10 minutes.',
     rvQRTooLarge: 'This code is too large for one QR. Use copy/paste instead.', rvScanUnavailable: 'Camera QR scanning is unavailable in this browser. Use copy/paste instead.',
@@ -1944,6 +1951,19 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     typing: 'typing...',
     newMessages: 'New Messages',
     groupAuthorLegacy: 'Legacy — author not verified',
+    cvTitle: "Contact verification",
+    cvVerified: "✓ Verified",
+    cvChanged: "⚠ Keys changed",
+    cvUnverified: "Not verified",
+    cvReverify: "Compare safety numbers and verify again",
+    cvCompare: "Compare this number on both devices. It includes both encryption and signing keys:",
+    cvMissingPin: "A pinned signing key is required. Exchange an authenticated message first.",
+    cvMark: "I compared both-key safety numbers",
+    cvStrict: "Block sending after a key change until re-verified",
+    cvFailed: "Verification failed or keys changed during comparison. Reopen and compare again.",
+    cvBlocked: "Sending blocked: a contact’s keys changed. Compare safety numbers and re-verify, or turn off strict mode in /verify.",
+    cvAuditChanged: "Contact verification invalidated:",
+    cvAuditVerified: "Contact verified:",
     vaultTitle: 'Key vault locked',
     vaultUnlock: 'Enter the separate vault passphrase',
     vaultNew: 'New vault passphrase (at least 12 characters; not your /lock password)',
@@ -4142,7 +4162,8 @@ async function initMessenger(dbName) {
   // Still locked from before this page load (reload, reopened tab): lock before anything renders.
   try { if (localStorage.getItem('brz-locked')) showLockScreen(); } catch(e) { _dbg(e, 'lock-restore'); }
   try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // last bridge of the block unset ⇒ the block aborted: /security, calls, backup… would otherwise do nothing, silently
-  if (!globalThis.__breezeVault) throw new Error(t('vaultFailed'));
+  if (!globalThis.__breezeVault) throw new Error(t('vaultFailed')); if (!globalThis.__breezeContactVerify) throw new Error(t('toastModulesFailed'));
+  let _contactVerify = null;
   const _vault = globalThis.__breezeVault.getVault({ t, dbg: _dbg, accounts: getAccounts, restoreAccounts: saveAccounts, reload: () => location.reload(),
     prompt: text => showPrompt(text, '', { type: 'password', autocomplete: 'current-password' }), confirm: text => showConfirm(text), toast: text => showToast(text, 'error'),
     gate: unlock => globalThis.__breezeVault.vaultGate({ t }, unlock),
@@ -4910,12 +4931,15 @@ async function initMessenger(dbName) {
   await acquireLeaderLock();
 
   async function dbGet(store, key) {
-    const rec = await new Promise((r, reject) => { const fail = e => { if (store === 'identity' && typeof _vault !== 'undefined' && _vault.enabled()) reject(e); else r(null); }; try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => fail(req.error); } catch(e) { _dbg(e, 'db-get'); fail(e); } });
+    const rec = await new Promise((r, reject) => { const fail = e => { if (store === 'identity' && (String(key).startsWith('verify:') || typeof _vault !== 'undefined' && _vault.enabled())) reject(e); else r(null); }; try { const tx = db.transaction(store); const req = tx.objectStore(store).get(key); req.onsuccess = () => r(req.result); req.onerror = () => fail(req.error); } catch(e) { _dbg(e, 'db-get'); fail(e); } });
     return store === 'messages' && rec ? _msgOpenRecord(rec) : rec;
   }
   async function dbPut(store, val, key) {
+    if (store === 'settings' && key === 'device-alerts:v1') return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => resolve(true); tx.onabort = tx.onerror = () => reject(tx.error || new Error('activity persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
+    if (store === 'contacts' && typeof _contactVerify !== 'undefined') await _contactVerify?.observe(val);
     if (store === 'messages') val = await _msgSealRecord(val);
     if (typeof _vault !== 'undefined' && _vault.enabled()) { const saved = await _vault.put(db, store, val, key); if (saved) _notifyBackupDirty(store); return saved; }
+    if (store === 'identity' && String(key).startsWith('verify:')) return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => { _notifyBackupDirty(store); resolve(true); }; tx.onabort = tx.onerror = () => reject(tx.error || new Error('verification persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
     if (store === 'identity' && _keywrapSlots.includes(key)) {
       try {
         const seed = key === 'pq-priv' ? val.seed : null;
@@ -5906,7 +5930,8 @@ async function initMessenger(dbName) {
     // relay that cannot be reached spends nothing.
     const peerId = peerPubB64.slice(0, 12);
     const fetchContact = await dbGet('contacts', peerId).catch(() => null);
-    const rejectIdentityBinding = (reason) => {
+    const rejectIdentityBinding = async (reason) => {
+      if (typeof _contactVerify !== 'undefined') await _contactVerify?.invalidate(peerId, 'identity-binding');
       _dbg(null, 'X3DH: identity binding rejected for ' + peerId + ': ' + reason);
       showToast(t('identityBindingFailed'), 'error', 8 * MS.SEC);
       return false;
@@ -5959,6 +5984,7 @@ async function initMessenger(dbName) {
       if (!supplied) {
         const ktPeerId = peerPubB64.slice(0, 12);
         const ktPin = await dbGet('identity', 'ktPin:' + ktPeerId); const audit = await _auditKeyHistory(await dbGet('identity', 'ktIk:' + ktPeerId), bundle.keyHistory); const pinBroken = !!(ktPin && ktPin.c && !(bundle.keyHistory || []).some(e => e && e.c === ktPin.c)); // D05: pinned chain head gone = the relay replaced or rolled back the log, even if the new one is internally consistent
+        if (typeof _contactVerify !== 'undefined' && (pinBroken || ['rolled', 'tampered'].includes(audit.verdict))) await _contactVerify?.invalidate(ktPeerId, pinBroken ? 'kt-tampered' : 'kt-' + audit.verdict);
         if (audit.verdict === 'tampered' || pinBroken) { showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-transparency chain tampered — possible hostile relay.').catch(e => _dbg(e, 'kt-warn')); if (_settings.ktBlockOnTamper) return false; }
         else if (audit.verdict === 'rolled') showKeyChangeWarning(ktPeerId, peerPubB64, 'X3DH key-history rollover.').catch(e => _dbg(e, 'kt-warn'));
         if (audit.verdict !== 'tampered' && !pinBroken) await dbPut('identity', bundle.identityKey, 'ktIk:' + ktPeerId); // don't pin a key vouched for by a broken chain (no silent TOFU baseline from a tampered log)
@@ -6047,6 +6073,7 @@ async function initMessenger(dbName) {
 
   // Shared MITM/key-change warning UI (decrypt-failure reset, X3DH ktlog, signing TOFU). peerId is the contacts key (pub.slice(0,12)).
   async function showKeyChangeWarning(peerId, peerPubB64, reason) {
+    if (typeof _contactVerify !== 'undefined') await _contactVerify?.invalidate(peerId, 'key-warning');
     const name = (await dbGet('contacts', peerId))?.name || peerId;
     const box = _DOM.get('msg-messages');
     if (box && activeContact?.pubB64 === peerPubB64) {
@@ -6125,12 +6152,13 @@ async function initMessenger(dbName) {
     return next;
   }
   function encryptFor(text, peerPubB64, frank, pairing = false) {
-    return _withPeerLock((peerPubB64 || '').slice(0, 12), () => _encryptForRaw(text, peerPubB64, frank, pairing));
+    return _withPeerLock((peerPubB64 || '').slice(0, 12), async () => { const wire = await _encryptForRaw(text, peerPubB64, frank, pairing); if (!pairing && typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', (peerPubB64 || '').slice(0, 12)); if (c && !await _contactVerify.permit(c)) return null; } return wire; });
   }
   async function _encryptForRaw(text, peerPubB64, frank, pairing = false) {
     try {  
       const peerId = peerPubB64.slice(0, 12);
       const contact = await dbGet('contacts', peerId);
+      if (!pairing && typeof _contactVerify !== 'undefined' && _contactVerify && contact && !await _contactVerify.permit(contact)) return null;
       if (contact?.offlinePairing && contact.offlinePairing.state !== 'paired' && !pairing) return null;
       let sess = await getSession(peerId);
       if (!sess && (await dbGet('contacts', peerId))?.offlineVerified) return null;
@@ -6458,40 +6486,8 @@ async function initMessenger(dbName) {
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
   // Returns { list, ts }: verified device pubs + the registry's signed revision ts (D14).
-  async function _fetchDeviceRegistry(accountId, rootPubB64) {
-    if (!API) return null;
-    try {
-      const resp = await postAPIRaw('/device/list', { accountId });
-      if (!resp.ok) return null;
-      const rec = await resp.json();
-      if (!rec || !rec.root || !Array.isArray(rec.devices)) return null;
-      if (rootPubB64 && rec.root !== rootPubB64) return null; // registry for a different root
-      // Recompute the signed digest and verify against the ROOT's registered signing key.
-      const digestBuf = await crypto.subtle.digest('SHA-256',
-        new TextEncoder().encode(JSON.stringify(rec.devices.map(d => d.pub))));
-      const digest = Array.from(new Uint8Array(digestBuf)).slice(0, 16)
-        .map(b => b.toString(16).padStart(2, '0')).join('');
-      if (!rec.devices.some(d => d.pub === rec.root)) return null;
-      // Verify under the account's PINNED signing key (TOFU pin from message signatures), or my
-      // own signing key when the registry is mine. No pinned key -> DO NOT trust extra devices:
-      // an unverifiable registry falls back to single-device rather than letting the relay
-      // inject a listening device. (Withholding degrades to today's behaviour either way.)
-      let sigPub = null;
-      if (accountId === myId) sigPub = _signingPubB64;
-      if (!sigPub) sigPub = (await dbGet('contacts', accountId).catch(() => null))?.sigPub || null;
-      if (!sigPub) {
-        // Secondary device verifying its OWN account: use the root signing key pinned at link
-        // time (TOFU anchored to the physically-pasted root pub, like adding a contact by key).
-        const acct = await dbGet('identity', 'account').catch(() => null);
-        if (acct?.root && acct.root.slice(0, 12) === accountId && acct.rootEd) sigPub = acct.rootEd;
-      }
-      if (!sigPub) { _dbg(null, 'device list: no pinned signing key for ' + accountId + ' — staying single-device'); return null; }
-      const okSig = await verifySignature(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub);
-      if (okSig !== true) { _dbg(null, 'device list signature not verified — ignoring registry'); return null; }
-      if (accountId === myId && rec.ts) _ownRegistryTs = rec.ts; // my next presence beat advertises this revision (D14)
-      return { list: rec.devices.map(d => d.pub), ts: rec.ts || 0 };
-    } catch(e) { _dbg(e, 'device-list'); return null; }
-  }
+  const _deviceAlerts = globalThis.__breezeDeviceAlerts?.createDeviceAlerts({ api: () => !!API, post: postAPIRaw, get: dbGet, put: dbPut, verify: verifySignature, sign: signMessage, myId: () => myId, me: () => myPubB64, ed: () => _signingPubB64, minute: MS.MIN, ownTs: ts => { _ownRegistryTs = ts; }, dbg: _dbg, t, esc, safeSetHTML, root: () => _ac.signal.aborted ? null : _DOM.get('msg-main'), unlink: i => _deviceLink.handleCommand('/unlink ' + i) });
+  async function _fetchDeviceRegistry(accountId, rootPubB64) { return await _deviceAlerts?.registry(accountId, rootPubB64) || null; }
   // A camera-scan button for the link panels, mirroring the rendezvous
   // dialog's availability rule: no BarcodeDetector (or no QR helper)
   // means the button stays disabled with the reason shown, and the
@@ -7087,6 +7083,7 @@ async function initMessenger(dbName) {
 
   async function relaySend(to, payload, sealPub, contactHint) {
     if (!API) return;
+    if (typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', to); if (c && !await _contactVerify.permit(c)) return; }
     // Stage 6 step 2: a multi-relay account asserts its home list in
     // the envelope (sealed for v2 peers); default-only stays identical.
     if (payload && !payload.groupId && !payload.isGroupSK && Array.isArray(_settings.relays) && _settings.relays.length) payload = { ...payload, fromRelays: _myHomeWire() };
@@ -7247,6 +7244,7 @@ async function initMessenger(dbName) {
       _retryTimer = null;
       if (_isOffline || _retryQueue.length === 0) return;
       const item = _retryQueue.shift();
+      if (typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', item.to); if (c && !await _contactVerify.permit(c)) { _retryQueue.push(item); scheduleRetry(); return; } }
       if (item.attempts >= 3) {
         // v3.6: Dead letter queue — don't silently drop; store in IDB + notify user
         _dbg(null, 'Retry exhausted for msg to ' + item.to + ' — moving to dead letter');
@@ -7378,6 +7376,7 @@ async function initMessenger(dbName) {
 
   async function encryptGroupMsg(groupId, text) {
     try {
+      if (typeof _contactVerify !== 'undefined' && _contactVerify && !await _contactVerify.permit(await dbGet('contacts', groupId))) return null;
       if (!_groupAuthor) return null;
       return await _groupAuthor.withSend(groupId, async () => {
       const sk = await getGroupSenderKey(groupId);
@@ -7652,6 +7651,8 @@ async function initMessenger(dbName) {
   // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
   // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
+    _deviceAlerts?.check(); _intervals.push(setInterval(() => _deviceAlerts?.check(), MS.MIN));
+    await _contactVerify.migrate();
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
     if (shortIdEl) {
@@ -8019,6 +8020,7 @@ async function initMessenger(dbName) {
     if (!queue || queue.length === 0) return;
     const peer = peers[peerId];
     if (!peer?.connected || peer.dc?.readyState !== 'open') return;
+    if (typeof _contactVerify !== 'undefined' && _contactVerify && !await _contactVerify.permit(await dbGet('contacts', peerId.slice(0, 12)))) return;
     const toSend = [...queue];
     _outbox.set(peerId, []);
     _persistOutbox();
@@ -8419,6 +8421,7 @@ async function initMessenger(dbName) {
     if (!nameEl || !contact) return;
     const memberBadge = contact.isGroup && contact.members ? ` <span class="enc-badge">${contact.members.length} ${esc(t('cmdMembersLabel'))}</span>` : '';
     safeSetHTML(nameEl, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + esc(contactDisplayName(contact)) + contactPeerNameHtml(contact) + (contact.isGroup ? memberBadge : ' <span class="enc-badge">E2E</span>'));
+    if (typeof _contactVerify !== 'undefined') _contactVerify?.paintHeader(contact).catch(e => _dbg(e, 'verification-header'));
   }
   // Local nickname write path — writes the SAME fields the
   // context-menu rename has always written (c.name + nameLocked);
@@ -8536,7 +8539,7 @@ async function initMessenger(dbName) {
       else if (draftText) previewText = `<span class="color-r">${t('draftLabel')}:</span> ${esc(draftText.slice(0, 30))}`;
       else if (c.isGroup && c.lastMsgSender && c.lastMsg) previewText = `<span class="color-t2">${esc(c.lastMsgSender)}:</span> ${esc(c.lastMsg)}`;
       else previewText = esc(c.lastMsg || '');
-      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
+      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${typeof _contactVerify !== 'undefined' && _contactVerify ? await _contactVerify.label(c, true) : ''}${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
       div.onclick = () => openConversation(c);
       // v3.6: Swipe-left-to-archive on contact (iOS Mail/WhatsApp pattern)
       if (IS_TOUCH) {
@@ -9834,8 +9837,9 @@ async function initMessenger(dbName) {
 
   // v3.6: Translate message inline (DeepL → LibreTranslate → MyMemory)
   // Signal helper for edit/delete/reaction sync (1:1 + group)
-  function sendSignal(data) {
+  async function sendSignal(data) {
     if (!activeContact) return;
+    if (!await _contactVerify.permit(activeContact)) return;
     // v3.6: Group signal fan-out — send encrypted signal to each member
     if (activeContact.isGroup && activeContact.members?.length > 0) {
       const signalPayload = JSON.stringify(data);
@@ -9988,6 +9992,7 @@ async function initMessenger(dbName) {
   let _isSending = false; // v3.3: Double-submit prevention
   async function sendMessage() {
     if (!activeContact) return;
+    if (typeof _contactVerify !== 'undefined' && _contactVerify && !await _contactVerify.permit(activeContact)) { showToast(t('cvBlocked'), 'error'); return; }
     if (activeContact.offlinePairing && activeContact.offlinePairing.state !== 'paired') { showToast(t('opPending'), 'info'); return; }
     if (activeContact.blocked) return;
     // v3.3: Announce-only groups — only admins can send
@@ -10829,8 +10834,12 @@ async function initMessenger(dbName) {
   // line-budget move); these wrappers keep the call sites unchanged.
   // The /security and /who panels live in src/app/info-panels.js
   // (stage 5 step 5 line-budget move); the dispatcher delegates to them.
+  _contactVerify = globalThis.__breezeContactVerify.createContactVerify({ account: dbName, get: dbGet, put: dbPut, contacts: () => dbGetAll('contacts'), audit: auditLog, t, esc, safeSetHTML, dbg: _dbg,
+    safetyNumber, auditKeys: _auditKeyTransparency, local: () => ({ pubB64: myPubB64, sigPub: _signingPubB64 }), active: () => activeContact, header: () => _DOM.get('msg-conv-name'),
+    refresh: async () => { if (activeContact) { activeContact = await dbGet('contacts', activeContact.id) || activeContact; _setConvName(activeContact); } await renderContacts(); },
+  });
   const _infoPanels = globalThis.__breezeInfoPanels?.createInfoPanels({
-    dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML,
+    dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML, deviceAlerts: _deviceAlerts, contactVerify: _contactVerify,
     cmdPanel: (id) => _cmdPanelEl(id),
     cryptoStack: () => _cryptoStack, activeContact: () => activeContact,
     atRestIsWrapped: r => _vault.enabled() || _atRestIsWrapped(r), p2pStats: () => _p2pStats, turnCredential: () => _turnCredential,
@@ -12509,6 +12518,7 @@ async function initMessenger(dbName) {
                   const wrapper = JSON.parse(s.data);
                   if (wrapper && typeof wrapper.sdp === 'string' && wrapper.sig && wrapper.sigPub) {
                     if (contact.sigPub && contact.sigPub !== wrapper.sigPub) {
+                      try { if (typeof _contactVerify !== 'undefined') await _contactVerify?.invalidate(contact.id, 'sdp-signing'); } catch(e) { _dbg(e, 'verification-sdp'); }
                       _dbg(null, 'P2P: SDP signing key mismatch — rejecting (possible MITM)');
                       continue;
                     }
@@ -13163,8 +13173,9 @@ async function initMessenger(dbName) {
           if (!await ensureRelayVerified(relay)) continue;
           if (_relayHealthByUrl.get(relay.url)?.vapidPublicKey !== boundKey) continue;
         }
-        await postAPIRelay(relay, '/push/subscribe', { userId: myId, subscription: subJson,
+        const subscribed = await postAPIRelay(relay, '/push/subscribe', { userId: myId, subscription: subJson,
           ...(await authFields(ts => `breeze-push-subscribe:${myId}:${ts}:${subJson.endpoint || ''}:${subJson.keys?.p256dh || ''}:${subJson.keys?.auth || ''}`)) }).catch(e => _dbg(e));
+        if (subscribed?.ok && isOriginRelay(relay)) await _deviceAlerts?.announce('push', await globalThis.__breezeDeviceAlerts.activityHash(JSON.stringify([subJson.endpoint, subJson.keys?.p256dh])));
       }
     } catch(e) { _dbg(e, 'push'); }
   }
@@ -13441,7 +13452,8 @@ async function initMessenger(dbName) {
 
   // Send file as binary chunks (v3)
   async function sendBinaryFile(peer, file) {
-    try {  
+    try {
+      if (!await _contactVerify.permit(peer)) { showToast(t('cvBlocked'), 'error'); return false; }
       const dc = peers[peer.pubB64]?.dc;
       if (!dc || dc.readyState !== 'open') return false;
       const CHUNK = CONFIG.CHUNK_SIZE;
@@ -13480,6 +13492,7 @@ async function initMessenger(dbName) {
             setTimeout(resolve, 5 * MS.SEC);
           });
         }
+        if (!await _contactVerify.permit(peer)) return false;
         dc.send(packet);
         // Update progress
         const pct = Math.round(((seq + 1) / total) * 100);
@@ -13506,35 +13519,13 @@ async function initMessenger(dbName) {
       const { log } = await resp.json();
       const stored = (await dbGet('identity', 'ktIk:' + contact.id)) ?? contact.pubB64;
       const audit = await _auditKeyHistory(stored, log); const ktPin = await dbGet('identity', 'ktPin:' + contact.id); if (ktPin && ktPin.c && !(log || []).some(e => e && e.c === ktPin.c)) audit.verdict = 'tampered'; // D05: pinned chain head vanished — log replaced or rolled back
+      if (audit.verdict === 'rolled' || audit.verdict === 'tampered') await _contactVerify.invalidate(contact.id, 'kt-' + audit.verdict);
       if (audit.verdict === 'ok' || audit.verdict === 'new') { await dbPut('identity', contact.pubB64, 'ktIk:' + contact.id); const hc = _ktHeadC(log); if (hc) await dbPut('identity', { c: hc }, 'ktPin:' + contact.id); }
       return audit;
     } catch(e) { _dbg(e, 'kt-audit'); return null; }
   }
 
-  async function showSafetyNumber(contact) {
-    try {
-      const num = await safetyNumber(contact.pubB64);
-      const overlay = document.createElement('div');
-      overlay.className = 'overlay overlay-dark';
-      safeSetHTML(overlay, `<div class="modal">
-        <div class="i-emoji-lg">🔐</div>
-        <div class="fw-700 text-sm mb-2">${t('safetyNumber')}</div>
-        <div class="i-safety-num">${num}</div>
-        <div class="text-xs color-t3 mb-3">${t('safetyDesc')}</div>
-        <div class="text-xs mb-3" id="kt-audit-status">${esc(t('ktChecking'))}</div>
-        <button class="btn btn-o btn-sm" data-close="overlay">${t('close')}</button>
-      </div>`);
-      overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
-      document.body.appendChild(overlay);
-      _auditKeyTransparency(contact).then(audit => {
-        const el = overlay.querySelector('#kt-audit-status');
-        if (!el) return; // modal already closed
-        const key = !audit ? 'ktUnavailable' : audit.verdict === 'tampered' ? 'ktTampered' : audit.verdict === 'rolled' ? 'ktRolled' : 'ktOk';
-        el.textContent = t(key);
-        el.className = 'text-xs mb-3 ' + (key === 'ktOk' ? 'color-g' : key === 'ktUnavailable' ? 'color-t3' : 'color-r');
-      });
-    } catch(_e) { _dbg(_e, 'showSafetyNumber'); }
-  }
+  async function showSafetyNumber(contact) { try { await _contactVerify.show(contact); } catch(e) { _dbg(e, 'showSafetyNumber'); } }
 
   // Contact info panel: who this contact is, and the local nickname
   // editor. The nickname writes the same c.name + nameLocked store
@@ -13970,6 +13961,7 @@ async function initMessenger(dbName) {
     matchPreKey: pairingPreKeyMatches, blockPeer: id => globalThis.__breezeOfflinePairing.blockedPeerIds.add(myId + ':' + id),
     closePeer: c => { const p = peers[c.pubB64]; if (p) { p.transition('CLOSED'); p.pc.close(); delete peers[c.pubB64]; } },
     exclusive: _withPeerLock, signal: _ac.signal, qr: globalThis.__breezeQR, root: () => _DOM.get('msg-main'), log: e => _dbg(e, 'offline-pair'),
+    verified: c => _contactVerify.verify(c, 'in-person-pairing'),
     toast: text => showToast(text, 'info'), changed: c => { if (activeContact?.id === c.id) activeContact = c; renderContacts(); updateConvStatus(); },
   });
 
@@ -15479,11 +15471,11 @@ async function initMessenger(dbName) {
         box.appendChild(d); box.scrollTop = box.scrollHeight; return;
       }
       const [box, d] = _cmdPanelEl('cmd-panel-mono');
-      const members = activeContact.members || [];
+      const members = activeContact.members || [], verificationLabels = await _contactVerify.labels(activeContact.members || []);
       safeSetHTML(d, '<b class="i-g">' + esc(activeContact.name) + ' — ' + members.length + ' ' + t('cmdMembersLabel') + '</b><br>' +
         members.map(m => {
           const isOn = peers[m.pubB64]?.connected || _presenceCache[m.id];
-          return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' ' + t('cmdMemberYou') : '');
+          return (isOn ? '🟢' : '⚫') + ' ' + esc(m.name || m.id) + (m.id === myId ? ' ' + t('cmdMemberYou') : '') + (verificationLabels.get(m.id) || '');
         }).join('<br>') + (CONFIG.GROUP_RATCHET_V5 && !_computeGroupV5(activeContact) ? '<br><span class="i-t3-10">' + t('groupLegacyNoFs') + '</span>' : '')); // D30: a legacy member holds the whole group on v3 (no FS) — say so, and what fixes it
       box.appendChild(d); box.scrollTop = box.scrollHeight;
     }

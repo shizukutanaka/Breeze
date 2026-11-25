@@ -17,6 +17,7 @@ const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 // subsystem into src/app/backup.js — the client side of the parity is
 // index.html plus that module.
 const BACKUP_MOD = fs.readFileSync(path.join(ROOT, 'src', 'app', 'backup.js'), 'utf8');
+const DEVICE_MOD = fs.readFileSync(path.join(ROOT, 'src', 'app', 'device-alerts.js'), 'utf8');
 const WORKER = fs.readFileSync(path.join(ROOT, '_worker.js'), 'utf8');
 
 // `breeze-…` template literals with slots normalized to {}. A trailing ':' is
@@ -32,11 +33,12 @@ function skeletons(src) {
   return out;
 }
 
-const clientSkels = skeletons(INDEX + '\n' + BACKUP_MOD);
+const clientSkels = skeletons(INDEX + '\n' + BACKUP_MOD + '\n' + DEVICE_MOD);
 const workerSkels = skeletons(WORKER);
 
 // Ops whose verification lives on main — exact skeleton parity required.
 const MAIN_VERIFIED = [
+  'breeze-activity-read:{}:{}',
   'breeze-alias-set:{}:{}',
   'breeze-alias-delete:{}:{}',
   'breeze-push-unsubscribe:{}:{}:{}',
