@@ -219,6 +219,10 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .contact .meta { text-align: right; flex-shrink: 0 }
 .contact .meta .time { font-size: 12px; color: var(--t3) }
 .cbadge { display: inline-block; background: var(--g); color: #000; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: var(--rad-full); margin-top: 4px }
+.contact.unread .info .name { font-weight: 700 }
+.contact.unread .info .preview { color: var(--t1); font-weight: 600 }
+.contact.unread .meta .time { color: var(--g); font-weight: 700 }
+.self-card .avatar { background: var(--gd) }
 
 /* ─── Chat area ─── */
 .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); max-width: 100% }
@@ -1168,6 +1172,7 @@ del.md-del { opacity: .6 }
         <div class="contact-filter-wrap">
           <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaFilterContacts" class="contact-filter" autocomplete="off" enterkeyhint="search">
         </div>
+        <div id="msg-self-card" class="contact self-card hidden" role="button" tabindex="0" data-i18n-aria="profileTitle"></div>
         <div id="msg-contacts" role="list" data-i18n-aria="ariaContacts" class="contact-list">
           <div class="skeleton skeleton-contact"></div>
           <div class="skeleton skeleton-contact"></div>
@@ -2281,10 +2286,8 @@ const _I = {
     statusOnline: 'Online',
     ariaUnread: "{0} unread",
     justNow: 'just now',
+    timeYesterday: 'Yesterday',
     timeCompactMin: "{0}m",
-    timeCompactHour: "{0}h",
-    timeCompactDay: "{0}d",
-    timeCompactLt1m: '<1m',
     uiNoServer: 'No server configured',
     uiAuditUnavail: 'Audit store not available.',
     uiShareId: 'Share your Breeze ID',
@@ -8091,6 +8094,22 @@ async function initMessenger(dbName) {
   }
 
   // v3.4: Smart time-based section key
+  // LINE-style list timestamp: today -> HH:MM, yesterday -> t('timeYesterday'),
+  // earlier this year -> M/D, older -> YYYY/M/D. Buckets are the device's local
+  // calendar days, not 24h spans — a message from 23:59 yesterday reads
+  // "Yesterday" even when it is only minutes old. Math.round absorbs the
+  // 23h/25h local days around DST transitions.
+  function listTime(ts, now = Date.now()) {
+    if (!ts) return '';
+    const d = new Date(ts);
+    const dayStart = (x) => { const c = new Date(x); c.setHours(0, 0, 0, 0); return c.getTime(); };
+    const dayDiff = Math.round((dayStart(now) - dayStart(ts)) / MS.DAY);
+    if (dayDiff <= 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (dayDiff === 1) return t('timeYesterday');
+    if (d.getFullYear() === new Date(now).getFullYear()) return `${d.getMonth() + 1}/${d.getDate()}`;
+    return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}`;
+  }
+
   function getTimeSection(ts) {
     if (!ts) return t('sectionOlder');
     const diff = Date.now() - ts;
@@ -8136,7 +8155,26 @@ async function initMessenger(dbName) {
     if (e.key === 'Escape') { e.target.value = ''; _contactFilter = ''; renderContacts(); e.target.blur(); }
   });
 
+  // Self profile card pinned above the contact list (LINE-style): my avatar,
+  // name and short ID; a tap opens the profile panel. Data comes from the
+  // profile module (settings record, falling back to the identity keys) —
+  // no new storage. Account tabs render at the very top of the sidebar, so
+  // with 2+ accounts the card still sits below them.
+  async function renderSelfCard() {
+    const card = _DOM.get('msg-self-card');
+    if (!card) return;
+    let prof = null;
+    try { prof = _profileUI ? await _profileUI.myProfile() : null; } catch(e) { _dbg(e, 'self-card'); }
+    const name = prof?.name || myName || '';
+    const face = prof?.img ? `<img class="avatar-img" src="${esc(prof.img)}" alt="">` : esc(prof?.emoji || (name || '?')[0].toUpperCase());
+    safeSetHTML(card, `<div class="avatar">${face}</div><div class="info"><div class="name">${esc(name)}</div><div class="preview">${esc(myAlias ? '@' + myAlias : myShortId)}</div></div>`);
+    card.classList.remove('hidden');
+    card.onclick = () => { _profileUI?.showPanel().catch(e => _dbg(e, 'self-card-panel')); };
+    card.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.onclick(); } };
+  }
+
   async function renderContacts() {
+    renderSelfCard().catch(e => _dbg(e, 'self-card-render'));
     const contacts = await dbGetAll('contacts');
     const el = _DOM.get('msg-contacts');
     // v3.3: PERFORMANCE — Use DocumentFragment for batch DOM insertion
@@ -8195,7 +8233,7 @@ async function initMessenger(dbName) {
       }
       const isOnline = !c.isGroup && (peers[c.pubB64]?.connected || _presenceCache[c.id] || false);
       const div = document.createElement('div');
-      div.className = 'contact' + (activeContact?.id === c.id ? ' active' : '') + (c.blocked ? ' contact-blocked' : ''); if (activeContact?.id === c.id) div.setAttribute('aria-current', 'true');
+      div.className = 'contact' + (activeContact?.id === c.id ? ' active' : '') + (c.blocked ? ' contact-blocked' : '') + (c.unread > 0 ? ' unread' : ''); if (activeContact?.id === c.id) div.setAttribute('aria-current', 'true');
       // v3.3: Roving tabindex (WCAG 2.1.1 keyboard navigation)
       div.tabIndex = (activeContact?.id === c.id || (!activeContact && ci === 0)) ? 0 : -1;
       div.setAttribute('role', 'listitem');
@@ -8223,15 +8261,8 @@ async function initMessenger(dbName) {
       const prefix = (c.blocked ? '🚫 ' : '') + (c.pinned ? '📌 ' : '') + (c.muted ? '🔇 ' : '');
       // v3.4: Label chips for contact
       const labelHtml = (c.labels || []).map((l, i) => `<span class="contact-label" data-color="${LABEL_COLORS[i % LABEL_COLORS.length]}">${esc(l)}</span>`).join('');
-      // v3.1: Show relative time for last activity
-      let lastTime = '';
-      if (c.lastMsgAt) {
-        const diff = Date.now() - c.lastMsgAt;
-        if (diff < MS.MIN) lastTime = t('timeCompactLt1m');
-        else if (diff < MS.HOUR) lastTime = t('timeCompactMin', Math.floor(diff / MS.MIN));
-        else if (diff < MS.DAY) lastTime = t('timeCompactHour', Math.floor(diff / MS.HOUR));
-        else lastTime = t('timeCompactDay', Math.floor(diff / MS.DAY));
-      }
+      // LINE-style calendar time for last activity (see listTime)
+      const lastTime = c.lastMsgAt ? listTime(c.lastMsgAt) : '';
       const draftText = _drafts[c.id];
       let previewText;
       // v3.6: Typing indicator in contact list (highest priority preview)
