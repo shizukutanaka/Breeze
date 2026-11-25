@@ -178,7 +178,7 @@ describe("disposable ('none') identities are refused both backup producers", () 
     const src = sliceBackup('async function backupToFile()', 'function restoreFromFilePicker()');
     const factory = new Function('dbGet', 'dbGetAll', 'showToast', 't', 'showPrompt',
       '_collectBackupKeyMaterial', 'encrypt', 'downloadBlob', 'BACKUP_FORMAT_V',
-      src + '; return { backupToFile };');
+      'const D = {};\n' + src + '; return { backupToFile };');
     const api = factory(
       async () => identity, async () => [],
       (msg, type) => calls.toasts.push({ msg, type }), (k) => k,

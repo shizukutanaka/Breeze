@@ -1,5 +1,65 @@
 # Security Policy
 
+## Origin-wide key vault
+
+`/vault enable` (also `/keywrap`) replaces the old per-slot passphrase wrapping.
+Use a **separate strong passphrase, at least 12 characters**, not the `/lock` UI
+password. `/vault lock` locks all accounts and tabs; `/vault password` authenticates
+and changes that passphrase; `/vault disable` authenticates before removing protection.
+Disable must finish before `/wipe`, account deletion or reset can erase protected keys.
+The `/lock` action uses the vault lock when the vault is enabled.
+
+Protected IndexedDB identity slots: `keys`, `signing`, `pq-priv`, `spk-priv`,
+`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`. Entire records are encrypted,
+including their public metadata. **History, contacts, drafts and other settings
+remain outside this vault**. Existing message-body encryption is independent: its
+`msgkey` remains unprotected by the vault, so history is readable to someone with
+the origin's files. This is a key/session vault, not full-device encryption.
+
+A random 256-bit data key is AES-256-GCM wrapped under PBKDF2-SHA256 (600,000
+iterations, random 128-bit salt). Only the non-extractable unlocked data key is
+retained by the vault. Each record has a fresh 96-bit IV and authenticated context
+binding format version, vault ID, account database, store and exact record key.
+An explicit tagged codec preserves ArrayBuffers and typed-array byte ranges; unknown
+tags, malformed values, substituted records and plaintext protected rows are rejected.
+An authenticated per-account inventory detects deleted protected records at boot.
+Password change atomically rewraps only the data key in the control database; it
+does not rewrite protected records. No passphrase or unlocked data key is persisted.
+
+Web Locks freeze participating tabs; BroadcastChannel forces quiesce and reload.
+Timers, transport sends and network writes stop, DataChannels/WebSockets/calls close,
+the crypto worker terminates, and a generation guard rejects late crypto results.
+Reload enters a modal **pre-boot** unlock gate before identity/session initialization.
+Locked pages do not decrypt, ACK, send or process quick replies. Web Push is generic
+and has no reply/read actions whenever the vault is enabled, even in unlocked tabs.
+
+Migration first freezes writers and stages encrypted rows in a durable origin journal
+(`breeze-vault`). The phase, account list, restore index and staged-slot inventories
+are authenticated under the data key, preventing journal truncation or phase substitution.
+Each account then commits records plus its authenticated inventory
+in one atomic transaction. Boot remains blocked until *all* accounts finish. Interrupted
+enable/disable/restore resumes after authentication. Old `/keywrap` records are read
+only to migrate them, including unwrapping the out-of-scope history key. No database
+version bump is used: old clients cannot import vault-format identity records and
+must be upgraded. Close older tabs before enabling: known legacy leader tabs block
+migration. Old client code, malicious same-origin code, disk rollback, browser bugs,
+extensions and XSS are **not** a security boundary this vault can enforce against.
+
+Vault file backups contain only encrypted protected rows and the wrapped-key envelope,
+not history/contacts/drafts. Restore requires the vault passphrase and empty account
+databases on a fresh origin/profile; corrupt backups are rejected before writes.
+Disposable identities refuse export. Cloud/automatic/simple/recovery-kit exports and
+in-place legacy backup restore are disabled while enabled, rather than exporting
+decrypted private material. Preserve the existing recovery phrase and a vault backup
+before enabling. If the vault passphrase is lost, use the existing phrase/restore path
+on a fresh installation to recover the identity; **old sessions cannot be recovered**.
+Authentication cannot be bypassed by `/lock reset`.
+
+Deferred: full history/contact encryption, platform keystores/biometrics, automatic
+idle locking, encrypted cloud vault synchronization and in-place backup merging.
+There is no protection against an attacker executing JavaScript while unlocked,
+nor a guarantee that a garbage-collected browser erases every old key copy from RAM.
+
 ## Reporting a Vulnerability
 
 If you discover a security vulnerability in Breeze, please report it responsibly.

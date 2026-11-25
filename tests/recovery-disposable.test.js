@@ -112,7 +112,7 @@ function buildKit(db, { promptNewAnswer = 'kit-pass' } = {}) {
   const downloads = [];
   const shown = { phrase: null, calls: 0 };
   const src = [
-    'let _signingKey = null, _signingPubB64 = "", myId = "";',
+    'let _signingKey = null, _signingPubB64 = "", myId = ""; const D = {};',
     slice('function arr(u8a)', 'function uid()'),
     slice('async function dbGet(store, key)', 'async function dbGetAll'),
     slice('async function dbGetAll(store)', 'async function dbGetByIndex'),
