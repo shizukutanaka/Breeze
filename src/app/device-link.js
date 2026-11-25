@@ -102,8 +102,8 @@ export function createDeviceLink(D) {
     }
     if (val.startsWith('/unlink ')) {
       const idx = parseInt(val.slice(8).trim(), 10);
-      const acct = await D.dbGet('identity', 'account');
-      if (!acct || acct.root !== D.myPubB64()) { D.showToast(D.t('devPrimaryOnly'), 'error'); return; }
+      const acct = (await D.dbGet('identity', 'account')) || { root: D.myPubB64(), isPrimary: true };
+      if (acct.root !== D.myPubB64()) { D.showToast(D.t('devPrimaryOnly'), 'error'); return; }
       const current = (await D.fetchDeviceList(D.myId(), D.myPubB64())) || [D.myPubB64()];
       const victim = current[idx - 1];
       if (!victim || victim === D.myPubB64()) { D.showToast(D.t('devBadIndex'), 'error'); return; }
