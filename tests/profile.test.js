@@ -99,7 +99,7 @@ describe('stage 5 step 4 wiring + server-blindness audit', () => {
   });
 
   it('a local rename is never clobbered by a distributed profile', () => {
-    expect(html).toContain('c.nameLocked = true;');
+    expect(readFileSync(new URL('../src/app/lookalike-names.js', import.meta.url), 'utf8')).toContain('c.nameLocked = true;');
     expect(html).toContain('if (!c.nameLocked) c.name = prof.name;');
   });
 

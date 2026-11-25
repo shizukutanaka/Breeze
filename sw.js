@@ -1,5 +1,5 @@
 const VERSION = '3.8.0';
-const CACHE = 'breeze-v' + VERSION + '-device-alerts';
+const CACHE = 'breeze-v' + VERSION + '-lookalike-names';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   '/src/app/device-alerts.js',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
@@ -13,7 +13,7 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
   // seed-derived identity / offer phrase restore instead of degrading.
-  '/src/crypto/seed.js', '/src/crypto/wordlist.js',
+  '/src/crypto/seed.js', '/src/crypto/wordlist.js', '/src/app/lookalike-names.js',
   // Modularization: the app-logic subsystems extracted from index.html
   // (calls, backup/restore, QR, import parsers, notification sound) —
   // precached so a first offline boot keeps those features instead of

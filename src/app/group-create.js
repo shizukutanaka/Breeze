@@ -1,3 +1,5 @@
+import { safeName } from './lookalike-names.js';
+
 // Breeze — group creation flows (moved out of index.html in the
 // stage 5 step 4 line-budget pass; behavior unchanged).
 // createGroup: pick members from the contact list by number, enforce
@@ -11,7 +13,7 @@ export function createGroupCreate(D) {
   async function createGroup(name) {
     try {
       const contacts = await D.dbGetAll('contacts');
-      const list = contacts.filter(c => !c.isGroup).map((c, i) => `${i + 1}. ${c.name}`).join('\n');
+      const list = contacts.filter(c => !c.isGroup).map((c, i) => `${i + 1}. ${safeName(c.name)}`).join('\n');
       const sel = await D.showPrompt(D.t('addMembersPrompt') + '\n' + list, '', { placeholder: '1,2,3' });
 
       if (!sel || !sel.trim()) {

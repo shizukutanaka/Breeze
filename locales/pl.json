@@ -1065,5 +1065,8 @@
  "cfErrWorkerSource": "could not load the bundled worker source",
  "cfErrHealth": "the health check did not answer ok",
  "cfErrHttp": "HTTP {0}",
- "helpSetCloudflareSetup": "Creates or reuses the breeze-presence KV namespace, uploads the bundled Breeze Worker as the breeze script with the required KV binding, enables its workers.dev address, and checks /api/health. The token needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit. The server URL is stored on this device only; add it as a home relay from Relays if you want to use it. Setup does not configure optional secrets for push notifications, TURN, or the relay identity key, so those features stay off or in their default fallback until configured in the Cloudflare dashboard."
+ "helpSetCloudflareSetup": "Creates or reuses the breeze-presence KV namespace, uploads the bundled Breeze Worker as the breeze script with the required KV binding, enables its workers.dev address, and checks /api/health. The token needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit. The server URL is stored on this device only; add it as a home relay from Relays if you want to use it. Setup does not configure optional secrets for push notifications, TURN, or the relay identity key, so those features stay off or in their default fallback until configured in the Cloudflare dashboard.",
+  "lnSimilar": "“{0}” resembles existing contact “{1}” ({2}). Compare fingerprints before trusting this name.",
+  "lnUnsafe": "“{0}” contains hidden/control characters or a risky mixture of scripts. Compare fingerprints before trusting this name.",
+  "lnContinue": "Add anyway"
 }

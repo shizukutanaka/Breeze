@@ -1,5 +1,6 @@
 // Chat-history tools extracted from initMessenger; live account bindings arrive via deps.
 export function createHistoryTools(D) {
+  const displayName = c => (D.contactDisplayName ? D.contactDisplayName(c) : c.name);
   // GDPR data export (Art. 15/20): identity summary, contacts, message
   // metadata (text truncated to 200 chars, no keys, no file bodies).
   async function gdprExport() {
@@ -98,12 +99,12 @@ export function createHistoryTools(D) {
         const cls = m.mine ? 'me' : 'them';
         return `<div class="${cls}"><b>${esc(sender)}</b> <span class="ts">${esc(time)}</span><br>${esc(m.text || t('htmlExportFileLabel'))}</div>`;
       }).join('\n');
-      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(D.activeContact().name)}</title>
+      const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${esc(displayName(D.activeContact()))}</title>
 <style>body{font-family:system-ui;max-width:700px;margin:0 auto;padding:20px;background:#f5f5f5}
 .me,.them{padding:8px 14px;border-radius:12px;margin:4px 0;max-width:80%}
 .me{background:#d1fae5;margin-left:auto;text-align:right}.them{background:#fff}
 b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
-<body><h1>🌊 ${esc(D.activeContact().name)}</h1><p>${t('htmlExportMeta', msgs.length, new Date().toLocaleDateString())}</p>${rows}</body></html>`;
+<body><h1>🌊 ${esc(displayName(D.activeContact()))}</h1><p>${t('htmlExportMeta', msgs.length, new Date().toLocaleDateString())}</p>${rows}</body></html>`;
       downloadBlob(new Blob([html], { type: 'text/html' }), 'breeze-' + D.activeContact().name.replace(/\s+/g, '-') + '-' + new Date().toISOString().slice(0, 10) + '.html');
       showToast(t('toastExportedMessagesHTML', msgs.length), 'success');
     } else {
