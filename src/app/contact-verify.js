@@ -14,6 +14,7 @@ export const contactSafetyNumber = async (local, remote) => (await digest(['Bree
 
 export function createContactVerify(D) {
   const chains = new Map(), failed = new Set(), now = D.now || Date.now;
+  let headerRevision = 0;
   const slot = id => 'verify:' + id;
   const read = id => D.get('identity', slot(id));
   const write = async (id, value) => { if (await D.put('identity', value, slot(id)) !== true) throw new Error('verification persistence failed'); };
@@ -104,15 +105,16 @@ export function createContactVerify(D) {
     return '<b>' + D.esc(D.t('cvTitle')) + '</b><br>' + (lines.join('<br>') || D.esc(D.t('cvUnverified')));
   }
   async function paintHeader(contact) {
+    const revision = ++headerRevision;
     const html = await label(contact);
-    if (D.active()?.id !== contact.id) return;
+    if (revision !== headerRevision || D.active()?.id !== contact.id) return;
     const header = D.header(); if (!header) return;
     header.querySelector('[data-contact-verification]')?.remove();
     if (html) { const span = document.createElement('span'); D.safeSetHTML(span, html); header.appendChild(span.firstElementChild); }
     const parent = header.closest('.conv-header'); if (!parent) return;
     parent.parentElement.querySelector('[data-verification-warning]')?.remove();
     const s = await state(contact);
-    if (D.active()?.id !== contact.id || !s.changed) return;
+    if (revision !== headerRevision || D.active()?.id !== contact.id || !s.changed) return;
     const warning = document.createElement('button'); warning.type = 'button'; warning.className = 'btn btn-o btn-sm color-r'; warning.dataset.verificationWarning = contact.id;
     warning.textContent = D.t('cvChanged') + ' — ' + D.t('cvReverify'); warning.onclick = () => show(contact).catch(e => D.dbg(e, 'verification-dialog'));
     parent.insertAdjacentElement('afterend', warning);

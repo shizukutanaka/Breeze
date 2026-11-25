@@ -90,6 +90,7 @@ export function createNameTools(D) {
     if (!el || !contact) return;
     const badge = contact.isGroup && contact.members ? ' <span class="enc-badge">' + contact.members.length + ' ' + D.esc(D.t('cmdMembersLabel')) + '</span>' : ' <span class="enc-badge">E2E</span>';
     D.html(el, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + D.esc(contactDisplayName(contact)) + contactPeerNameHtml(contact) + badge + warningHtml(contact));
+    D.verification?.(contact);
   }
   async function setContactNickname(c, name) {
     const clean = (name || '').trim().slice(0, 64);

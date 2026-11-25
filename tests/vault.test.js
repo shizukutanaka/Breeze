@@ -117,7 +117,10 @@ describe('vault abort and lock boundary', () => {
     const init = html.slice(html.indexOf('async function initMessenger('));
     expect(init.indexOf('if (!globalThis.__breezeVault) throw')).toBeLessThan(init.indexOf('const DB_VER'));
     expect(init.indexOf('await _vault.boot()')).toBeLessThan(init.indexOf('const DB_VER'));
-    const handler = init.slice(init.indexOf("navigator.serviceWorker?.addEventListener('message'"));
-    expect(handler.indexOf('if (_vault.isBlocked()) return;')).toBeLessThan(handler.indexOf("e.data?.type === 'quick-reply'"));
+    expect(init).toContain('installNotificationActions({ serviceWorker: navigator.serviceWorker, signal: _ac.signal, blocked: () => _vault.isBlocked()');
+    const actions = readFileSync(new URL('../src/app/message-requests.js', import.meta.url), 'utf8');
+    const handler = actions.slice(actions.indexOf('export function installNotificationActions('));
+    expect(handler.indexOf('if (D.blocked?.()) return;')).toBeGreaterThan(-1);
+    expect(handler.indexOf('if (D.blocked?.()) return;')).toBeLessThan(handler.indexOf("e.data?.type === 'quick-reply'"));
   });
 });

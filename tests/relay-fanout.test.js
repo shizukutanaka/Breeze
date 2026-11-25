@@ -176,7 +176,7 @@ function buildWorld({ fetchT, settings = {}, origin = ORIGIN, api = API, stubs =
     'showKeyChangeWarning', 'genRatchetKey', '_x3dhInitiator', 'ecdhBits', 'hkdf', 'myKeys',
     '_hasEd25519', '_signingKey', '_signingPubB64', 'updateMsgStatus', 'registerBackgroundSync',
     '_updateOutboxBadge', 'setTimeout', '_peerSealV2', '_saveRetryQueue', '_ktHeadC',
-    `const _nameTools = null;
+    `const _nameTools = null, _requests = null;
      let _retryTimer = null;
      const _retryQueue = [];
      const _isOffline = false;
