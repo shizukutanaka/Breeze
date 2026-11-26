@@ -18,11 +18,11 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 | Clean architecture, SOLID | Robert C. Martin | Single-responsibility functions, DRY helpers (postAPIRaw, _signal, _autoHeight) |
 | Simplicity, composition | Rob Pike | Single-file client plus ES modules, no build step, no framework, no external AI dependency |
 
-### 1.2 File Inventory (661 tracked files)
+### 1.2 File Inventory (664 tracked files)
 
 | File | Size | Purpose |
 |------|------|---------|
-| index.html | 930 KB | Client: UI + CSS + JS (single file) |
+| index.html | 929 KB | Client: UI + CSS + JS (single file) |
 | _worker.js | 305 KB | Cloudflare Worker: API + signals |
 | server/* | — | Node self-host relay (same handler, SQLite state) |
 | sw.js | 11 KB | Service Worker: offline cache + push |
