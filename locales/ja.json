@@ -1041,7 +1041,7 @@
  "cfErrTokenRequired": "先に Cloudflare API トークンを貼り付けてください",
  "cfSaved": "Cloudflare トークンをこの端末に保存しました。",
  "cfDisconnected": "この端末から Cloudflare 接続を削除しました。",
- "cfNote": "トークンはこの端末だけに保存され、Cloudflare の API にだけ送信されます。サーバー構築では Breeze Worker と KV 名前空間を自分のアカウントにデプロイできますが、メッセージ用リレーは自動では切り替わりません。",
+ "cfNote": "トークンはこの端末だけに保存されます。ブラウザからの通信は保存・記録しない同一オリジン中継（/api/cf-proxy）経由で Cloudflare API へ送信されます。署名付きリレーは構築後にホームリレーへ自動追加されます。",
  "helpSetCloudflareSave": "Cloudflare API トークンをこの端末の IndexedDB 設定ストアだけに保存します。Breeze のリレーには送られず、Cloudflare の API への Bearer トークンとしてだけ使われます。サーバー構築には、アカウント読み取り（アカウント一覧）、Workers Scripts 編集、Workers KV Storage 編集の権限が必要です。",
  "helpSetCloudflareVerify": "この端末に保存されたトークンで Cloudflare のトークン確認 API とアカウント一覧 API を呼び出し、実際のトークン状態とアカウント名、または実際のエラーを表示します。トークンは Cloudflare の API にだけ送信されます。サーバー構築には、アカウント読み取り（アカウント一覧）、Workers Scripts 編集、Workers KV Storage 編集の権限が必要です。",
  "helpSetCloudflareDisconnect": "保存された Cloudflare API トークンをこの端末の IndexedDB 設定ストアから削除し、表示中の接続状態を消します。Cloudflare 側でトークンを取り消したり、Worker、KV 名前空間、その他のリソースを削除したりすることはありません。",

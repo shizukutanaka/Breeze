@@ -1048,7 +1048,7 @@
  "cfErrTokenRequired": "paste a Cloudflare API token first",
  "cfSaved": "Cloudflare token saved on this device.",
  "cfDisconnected": "Cloudflare connection removed from this device.",
- "cfNote": "The token stays only on this device and is sent only to Cloudflare's API. Setup can deploy the Breeze worker and its KV namespace to your account; it does not change messaging relays automatically.",
+ "cfNote": "The token is stored only on this device. Browser requests pass statelessly through this origin's /api/cf-proxy to Cloudflare's API without being logged or stored. Verified relays with a relay key are added to Home Relays automatically.",
  "helpSetCloudflareSave": "Stores the Cloudflare API token only in this device's IndexedDB settings store. It is sent only to Cloudflare's API as a Bearer token, never to Breeze relays. Server setup needs a token with account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.",
  "helpSetCloudflareVerify": "Calls Cloudflare's token verification and account list APIs with the token saved on this device, then shows the real token status and account names or the actual error. The token is sent only to Cloudflare's API. Server setup needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.",
  "helpSetCloudflareDisconnect": "Deletes the saved Cloudflare API token from this device's IndexedDB settings store and clears the shown connection state. It does not revoke the token, and it does not delete the Worker, KV namespace, or any other resource from your Cloudflare account.",
