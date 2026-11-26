@@ -33,7 +33,7 @@ export function initInstallBanner(D) {
       // Chrome/Edge on Android, Windows, Mac, Linux — one-click install
       const platform = isAndroid ? t('installPlatformPhone') : isMac ? 'Mac' : isWin ? 'PC' : t('installPlatformDevice');
       safeSetHTML(banner, `
-        <div class="icon">B</div>
+        <div class="icon"><img src="icon-192.png" alt="" width="44" height="44"></div>
         <div class="text"><b>${esc(t('installBannerTitle'))}</b>${esc(t('installBannerPlatform', platform))}</div>
         <button class="btn btn-g btn-sm" id="install-btn">${esc(t('installBannerInstallBtn'))}</button>
         <button class="dismiss">&times;</button>
@@ -48,7 +48,7 @@ export function initInstallBanner(D) {
       };
     } else if (isIOS) {
       safeSetHTML(banner, `
-        <div class="icon">B</div>
+        <div class="icon"><img src="icon-192.png" alt="" width="44" height="44"></div>
         <div class="text"><b>${esc(t('installBannerTitle'))}</b>${esc(t('installBannerIOSTip'))}</div>
         <button class="dismiss">&times;</button>
       `);
@@ -58,7 +58,7 @@ export function initInstallBanner(D) {
       // Show download option for native app
       const os = isMac ? 'macOS' : isWin ? 'Windows' : 'Linux';
       safeSetHTML(banner, `
-        <div class="icon">B</div>
+        <div class="icon"><img src="icon-192.png" alt="" width="44" height="44"></div>
         <div class="text"><b>${esc(t('installBannerDesktopTitle', os))}</b>${esc(t('installBannerDesktopSub'))}</div>
         <button class="btn btn-g btn-sm" id="install-dl-btn">${esc(t('installBannerDownload'))}</button>
         <button class="dismiss">&times;</button>
