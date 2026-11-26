@@ -4943,8 +4943,8 @@ async function initMessenger(dbName) {
     if (store === 'settings' && key === 'device-alerts:v1') return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => resolve(true); tx.onabort = tx.onerror = () => reject(tx.error || new Error('activity persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
     if (store === 'contacts' && typeof _contactVerify !== 'undefined') await _contactVerify?.observe(val);
     if (store === 'messages') val = await _msgSealRecord(val);
-    if (typeof _vault !== 'undefined' && _vault.enabled()) { const saved = await _vault.put(db, store, val, key); if (saved) _notifyBackupDirty(store); return saved; }
-    if (store === 'identity' && String(key).startsWith('verify:')) return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => { _notifyBackupDirty(store); resolve(true); }; tx.onabort = tx.onerror = () => reject(tx.error || new Error('verification persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
+    if (typeof _vault !== 'undefined' && _vault.enabled()) { const saved = await _vault.put(db, store, val, key); if (saved) _notifyBackupDirty(store, key); return saved; }
+    if (store === 'identity' && String(key).startsWith('verify:')) return new Promise((resolve, reject) => { try { const tx = db.transaction(store, 'readwrite'); tx.oncomplete = () => { _notifyBackupDirty(store, key); resolve(true); }; tx.onabort = tx.onerror = () => reject(tx.error || new Error('verification persistence failed')); tx.objectStore(store).put(val, key); } catch(e) { reject(e); } });
     if (store === 'identity' && _keywrapSlots.includes(key)) {
       try {
         const seed = key === 'pq-priv' ? val.seed : null;
@@ -4953,11 +4953,11 @@ async function initMessenger(dbName) {
         if (_atRestIsWrapped(val) && (val.priv || val.seed)) throw new Error('keywrap: mixed plaintext record');
         const saved = await _keywrapCommit(before, { [key]: val });
         if (saved && seed) _pqSeedUnlocked = _atRestIsWrapped(val) ? seed : null;
-        if (saved) _notifyBackupDirty(store);
+        if (saved) _notifyBackupDirty(store, key);
         return saved;
       } catch(e) { _dbg(e, 'keywrap-write'); return false; }
     }
-    return new Promise(r => { try { const tx = db.transaction(store, 'readwrite', { durability: 'relaxed' }); const req = key !== undefined ? tx.objectStore(store).put(val, key) : tx.objectStore(store).put(val); req.onsuccess = () => { _notifyBackupDirty(store); r(true); }; req.onerror = (e) => {
+    return new Promise(r => { try { const tx = db.transaction(store, 'readwrite', { durability: 'relaxed' }); const req = key !== undefined ? tx.objectStore(store).put(val, key) : tx.objectStore(store).put(val); req.onsuccess = () => { _notifyBackupDirty(store, key); r(true); }; req.onerror = (e) => {
       // v3.1: Handle QuotaExceededError — auto-cleanup old messages
       if (e.target?.error?.name === 'QuotaExceededError') {
         _dbg(null, 'IDB quota exceeded — cleaning old messages');
@@ -4971,9 +4971,9 @@ async function initMessenger(dbName) {
   // backup module registers its scheduler here once it is built (it is
   // instantiated later in this closure); until then — and in sliced
   // test builds of this region — this is a no-op.
-  let _autoBackupNotify = null;
-  function _notifyBackupDirty(store) {
-    if (!_autoBackupNotify) return;
+  let _autoBackupNotify = null, _groupPolicyNotify = null;
+  function _notifyBackupDirty(store, key) {
+    _groupPolicyNotify?.(store, key); if (!_autoBackupNotify) return;
     if (store !== 'messages' && store !== 'contacts' && store !== 'identity') return;
     try { _autoBackupNotify(); } catch(e) { _dbg(e, 'autobackup-notify'); }
   }
@@ -5779,7 +5779,7 @@ async function initMessenger(dbName) {
     return { useGroupV5: sets.every(s => s.has(CAPS_GROUP_V5)), useAuthorSig: sets.every(s => s.has(CAPS_GROUP_AUTHOR_SIG)) };
   }
   const _groupAuthor = globalThis.__breezeGroupAuthor?.createGroupAuthor({
-    get: (s, k) => s === 'messages' ? dbGet(s, k) : globalThis.__breezeGroupAuthor.readGroupAuthorRecord(db, s, k), put: dbPut,
+    get: (s, k) => s === 'messages' ? dbGet(s, k) : globalThis.__breezeGroupAuthor.readGroupAuthorRecord(db, s, k), put: dbPut, all: dbGetAll,
     pub: () => myPubB64, sigPub: () => _signingPubB64, supported: () => !!_signingKey?.privateKey && !!navigator.locks,
     authorized: g => _deviceRevocation.certified(g), devicePin: (pub, root) => _deviceRevocation.authorPin(pub, root), allowed: (pub, root) => _deviceRevocation.allowed(pub, root), revocationKey: (g, sk) => _deviceRevocation.keyFor(g, sk),
     sign: async bytes => new Uint8Array(await crypto.subtle.sign('Ed25519', _signingKey.privateKey, bytes)),
@@ -5789,7 +5789,7 @@ async function initMessenger(dbName) {
     lock: (key, work) => navigator.locks ? navigator.locks.request('breeze-ga:' + myPubB64 + ':' + key, work) : work(),
     distribute: async gid => { const g = await dbGet('contacts', gid); for (const m of g?.members || []) { if (m.pubB64 === myPubB64) continue; await distributeSenderKey(gid, m.pubB64); await _groupLive?.distributeKey(gid, m); } await _groupLive?.distributeOwnKey(gid); },
     redistributionNeeded: async (gid, epoch) => { const g = await dbGet('contacts', gid); return (g?.members || []).some(m => m.pubB64 !== myPubB64 && _skDist.get(gid + ':' + m.pubB64?.slice(0, 12))?.epoch !== epoch); },
-  });
+  }); _groupPolicyNotify = (store, key) => _groupAuthor?.inputsChanged(store, key).catch(e => _dbg(e, 'group author inputs'));
   // Computes (doesn't persist) the group decision: local flag AND every OTHER member's caps
   // (reuses _parsePeerCaps — member records and prekey bundles share {caps:[...]}). Fails CLOSED:
   // a member missing `caps` (legacy client or failed fetch) contributes [] and blocks v5 group-wide.
@@ -6492,7 +6492,7 @@ async function initMessenger(dbName) {
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
   const _deviceAlerts = globalThis.__breezeDeviceAlerts?.createDeviceAlerts({ api: () => !!API, post: postAPIRaw, get: dbGet, put: dbPut, verify: verifySignature, sign: signMessage, myId: () => myId, me: () => myPubB64, ed: () => _signingPubB64, minute: MS.MIN, ownTs: ts => { _ownRegistryTs = ts; }, dbg: _dbg, t, esc, safeSetHTML, root: () => _ac.signal.aborted ? null : _DOM.get('msg-main'), unlink: i => _deviceLink.handleCommand('/unlink ' + i) });
-  const _deviceRevocation = globalThis.__breezeDeviceRevocation.createDeviceRevocationHost({ get: dbGet, put: dbPut, all: dbGetAll, pub: () => myPubB64, ed: () => _signingPubB64, sign: signMessage, peerInfo: _peerRelayInfo, registry: _fetchDeviceRegistry, encrypt: encryptFor, send: relaySend, groupAuthor: () => _groupAuthor, dbg: _dbg, notice: (kind, root, epoch) => _deviceAlerts?.notice(kind, root, epoch), invalidate: () => { _attribDevCache.clear(); _myDevCache = null; } });
+  const _deviceRevocation = globalThis.__breezeDeviceRevocation.createDeviceRevocationHost({ get: dbGet, put: dbPut, all: dbGetAll, pub: () => myPubB64, ed: () => _signingPubB64, sign: signMessage, peerInfo: _peerRelayInfo, establishPin: pub => _fetchSessionBundleV5(pub), registry: _fetchDeviceRegistry, encrypt: encryptFor, send: relaySend, groupAuthor: () => _groupAuthor, dbg: _dbg, notice: (kind, root, epoch) => _deviceAlerts?.notice(kind, root, epoch), invalidate: () => { _attribDevCache.clear(); _myDevCache = null; } });
   async function _fetchDeviceRegistry(accountId, rootPubB64) { return await _deviceAlerts?.registry(accountId, rootPubB64) || null; }
   // A camera-scan button for the link panels, mirroring the rendezvous
   // dialog's availability rule: no BarcodeDetector (or no QR helper)

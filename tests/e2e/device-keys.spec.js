@@ -17,10 +17,11 @@ async function get(page, key) {
   }), key);
 }
 
-test('direct certificate transfer pins both device keys and the root, survives reload, rejects replay and alerts on removal', async ({ browser }) => {
+test('direct certificate transfer pins both device keys and the root, survives reload, rejects replay and alerts on removal', async ({ browser }, testInfo) => {
   test.setTimeout(180_000);
-  const primary = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.211' } });
-  const secondary = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.212' } });
+  const ip = client => '203.0.113.' + (1 + (testInfo.repeatEachIndex * 3 + client) % 254);
+  const primary = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': ip(210) } });
+  const secondary = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': ip(211) } });
   const A = await primary.newPage(), B = await secondary.newPage(), errors = [];
   A.on('pageerror', e => errors.push(e.message)); B.on('pageerror', e => errors.push(e.message));
   const root = await createIdentity(A, 'Primary keys'), pub = await createIdentity(B, 'Secondary keys');
@@ -49,7 +50,7 @@ test('direct certificate transfer pins both device keys and the root, survives r
   await command(B, '/linkto ' + certificate);
   await expect(B.locator('.toast-container')).toContainText('invalid, mismatched');
   await expect(B.locator('dialog[open]')).toHaveCount(0);
-  const peerContext = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': '203.0.113.213' } });
+  const peerContext = await browser.newContext({ extraHTTPHeaders: { 'CF-Connecting-IP': ip(212) } });
   const C = await peerContext.newPage(), peer = await createIdentity(C, 'Revocation peer');
   C.on('pageerror', e => errors.push(e.message));
   await open(A, peer); await open(C, root); await open(B, peer);

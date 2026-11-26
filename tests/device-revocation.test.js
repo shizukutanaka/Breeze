@@ -117,6 +117,39 @@ describe('signed account checkpoints and monotonic revocation', () => {
 });
 
 describe('certified group authors and unlink sender-key rotation', () => {
+  it('establishes the authenticated sender pin before consuming its first checkpoint and capability', async () => {
+    const s = await scenario(), group = { id: 'g_order', isGroup: true, members: [{ pubB64: s.root.pub }, { pubB64: s.peer.pub }] };
+    for (const f of [s.primary, s.secondary, s.remote]) f.rows.set('contacts:' + group.id, group);
+    s.secondary.contact(s.root);
+    s.secondary.rows.set('contacts:' + s.peer.pub.slice(0, 12), { pubB64: s.peer.pub });
+    s.secondary.D.establishPin = vi.fn(async pub => { expect(pub).toBe(s.peer.pub); s.secondary.contact(s.peer); });
+    const authority = createDeviceRevocation(s.secondary.D);
+    const make = (f, p, auth) => createGroupAuthor({ get: f.D.get, put: f.D.put, all: async () => [group], pub: () => p.pub, sigPub: () => p.ed, supported: () => true, authorized: g => auth.certified(g), sign: p.signBytes, negotiate: negotiateGroup, dbg: vi.fn() });
+    const receiver = make(s.secondary, s.device, authority), root = make(s.primary, s.root, s.primary.authority), peer = make(s.remote, s.peer, s.remote.authority);
+    await receiver.bindCapability(group.id, s.root.pub, await root.capability(group.id));
+    expect(s.secondary.rows.get('identity:ga-policy:' + group.id)?.strict).not.toBe(true);
+    const wire = await s.remote.authority.wrap(JSON.stringify(await peer.capability(group.id)), s.device.pub);
+    const proof = JSON.parse(await authority.unwrap(wire, s.peer.pub));
+    await receiver.bindCapability(group.id, s.peer.pub, proof);
+    expect(s.secondary.D.establishPin).toHaveBeenCalledOnce();
+    expect((await authority.state(s.peer.pub)).rootEd).toBe(s.peer.ed);
+    expect(s.secondary.rows.get('identity:ga-policy:' + group.id).strict).toBe(true);
+  });
+  it('does not establish pins from legacy bodies or unknown senders, and still rejects forged checkpoints', async () => {
+    const s = await scenario();
+    s.secondary.D.establishPin = vi.fn(async () => s.secondary.contact(s.peer));
+    const authority = createDeviceRevocation(s.secondary.D);
+    expect(await authority.unwrap('legacy', s.peer.pub)).toBe('legacy');
+    const envelope = { breezeDeviceAuthority: 1, body: 'empty', checkpoints: [], heads: [] };
+    expect(await authority.unwrap(JSON.stringify(envelope), s.root.pub)).toBe('empty');
+    const stranger = await person();
+    expect(await authority.unwrap(JSON.stringify(envelope), stranger.pub)).toBe('empty');
+    expect(s.secondary.D.establishPin).not.toHaveBeenCalled();
+    s.secondary.rows.set('contacts:' + s.peer.pub.slice(0, 12), { pubB64: s.peer.pub });
+    const cp = await s.remote.authority.own();
+    await expect(authority.unwrap(JSON.stringify({ ...envelope, checkpoints: [{ ...cp, sig: 'AA==' }] }), s.peer.pub)).rejects.toThrow('untrusted device checkpoint');
+    expect(await authority.state(s.peer.pub)).toBeUndefined();
+  });
   it('signs and verifies using the certified device key, then rejects the same device after revocation', async () => {
     const s = await scenario();
     const peerCP = await s.remote.authority.issue([{ pub: s.peer.pub }]); await s.secondary.authority.accept(peerCP);

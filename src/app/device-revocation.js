@@ -193,6 +193,7 @@ export function createDeviceRevocation(D) {
     if (encoder.encode(body).length > 65535) throw new Error('device authority frame bounds');
     if (typeof value.body !== 'string' || !Array.isArray(value.checkpoints) || !Array.isArray(value.heads) || value.checkpoints.length > 64 || value.heads.length > 64) throw new Error('device authority envelope');
     if (value.consents !== undefined && (!Array.isArray(value.consents) || value.consents.length > 640)) throw new Error('device consent bounds');
+    if (D.establishPin && !await pin(peer) && (await D.get('contacts', peer.slice(0, 12)))?.pubB64 === peer) await D.establishPin(peer);
     for (const b of value.consents || []) if (await pin(b?.root)) await acceptConsent(b, peer);
     for (const c of value.checkpoints) if (await pin(c?.root)) await accept(c);
     for (const h of value.heads) if (await pin(h?.root)) await acceptHead(h);

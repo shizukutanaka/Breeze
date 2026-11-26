@@ -93,6 +93,13 @@ device consent before accepting the author signature. Secondary strict sends req
 checkpoints for the other roster roots (proof of upgraded participation). Legacy
 uncertified secondary sends remain unsigned in non-strict groups.
 
+On the first authority envelope from a known contact, the receiver establishes a
+missing sender signing pin through the existing verified-prekey path before
+processing checkpoints, heads or consent. Envelope keys never establish pins.
+Successful contact, signing/account, verification and group-proof writes trigger
+coalesced, serialized strict-policy re-evaluation; inputs arriving during a scan
+trigger another pass. Activation does not depend on later traffic or policy reads.
+
 Unlink first persists a newer checkpoint, rotates each existing local group Sender
 Key (new random 32-byte secret, incremented epoch, counter zero), distributes it only
 to active mailboxes, and broadcasts authority through existing E2EE channels before

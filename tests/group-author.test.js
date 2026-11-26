@@ -27,7 +27,7 @@ function setup({ supported = true } = {}) {
     if (rec) await put('messages', rec);
     return true;
   });
-  const deps = { get, put, commit, supported: () => supported, negotiate: negotiateGroup, attributeDevice: async () => false, dbg: vi.fn(), distribute: vi.fn(async () => {}) };
+  const deps = { get, put, all: async s => [...stores[s].values()].map(v => structuredClone(v)), commit, supported: () => supported, negotiate: negotiateGroup, attributeDevice: async () => false, dbg: vi.fn(), distribute: vi.fn(async () => {}) };
   const instance = who => createGroupAuthor({ ...deps, pub: () => who.pubB64, sigPub: () => who.sigPub,
     sign: async bytes => new Uint8Array(await crypto.subtle.sign('Ed25519', keys.get(who.id).privateKey, bytes)) });
   const alice = instance(A), bob = instance(B), charlie = instance(C);
@@ -64,6 +64,42 @@ describe('BreezeGroupAuthor/v1 byte contract', () => {
 });
 
 describe('pinned authors, strict negotiation and compatibility', () => {
+  it.each(['pin', 'checkpoint', 'members'])('activates after a late %s without another capability or policy read', async input => {
+    const h = setup(); let authorized = input !== 'checkpoint';
+    h.deps.authorized = async () => authorized;
+    const receiver = h.instance(B);
+    await receiver.bindCapability(h.group.id, A.pubB64, await h.alice.capability(h.group.id));
+    if (input === 'pin') h.stores.contacts.get(A.id).sigPub = undefined;
+    if (input === 'members') h.stores.contacts.get(h.group.id).members.push({ pubB64: 'unknown' });
+    await receiver.bindCapability(h.group.id, C.pubB64, await h.charlie.capability(h.group.id));
+    expect(h.stores.identity.get('ga-policy:' + h.group.id).strict).not.toBe(true);
+    if (input === 'pin') h.stores.contacts.get(A.id).sigPub = A.sigPub;
+    if (input === 'members') h.stores.contacts.get(h.group.id).members.pop();
+    authorized = true;
+    await receiver.inputsChanged(input === 'checkpoint' ? 'identity' : 'contacts', 'verify:device-authority:' + C.pubB64);
+    expect(h.stores.identity.get('ga-policy:' + h.group.id).strict).toBe(true);
+  });
+  it('rechecks inputs arriving during a scan and ignores unrelated writes', async () => {
+    const h = setup(); let calls = 0;
+    h.deps.all = vi.fn(async () => {
+      if (++calls === 1) queueMicrotask(() => receiver.inputsChanged('identity', 'verify:device-consent:root:device'));
+      return [];
+    });
+    const receiver = h.instance(B);
+    await receiver.inputsChanged('messages', 'message');
+    await receiver.inputsChanged('identity', 'sess:peer');
+    expect(h.deps.all).not.toHaveBeenCalled();
+    await receiver.inputsChanged('contacts', 'group');
+    expect(h.deps.all).toHaveBeenCalledTimes(2);
+  });
+  it('recovers from input scan errors without enabling an incomplete policy', async () => {
+    const h = setup(); h.deps.all = vi.fn().mockRejectedValueOnce(new Error('read failed')).mockResolvedValue([h.group]);
+    const receiver = h.instance(B);
+    await expect(receiver.inputsChanged('contacts', A.id)).rejects.toThrow('read failed');
+    await receiver.inputsChanged('identity', 'ga-policy:' + h.group.id);
+    expect(h.stores.identity.get('ga-policy:' + h.group.id)?.strict).not.toBe(true);
+    expect(h.deps.all).toHaveBeenCalledTimes(2);
+  });
   it('keeps mixed groups unsigned, but signs before a capable peer activates strict on the first distribution', async () => {
     const h = setup();
     expect(await h.alice.sign(h.group.id, payload())).toEqual({});

@@ -143,6 +143,20 @@ export function createGroupAuthor(D) {
     return state;
   }
   const policy = groupId => serial('policy:' + groupId, () => readPolicy(groupId));
+  let refreshing = null, inputsDirty = false;
+  function inputsChanged(store, key) {
+    if (store !== 'contacts' && !(store === 'identity' && (key === 'account' || key === 'signing' || /^(verify:|ga-policy:)/.test(key)))) return Promise.resolve();
+    inputsDirty = true;
+    if (!refreshing) refreshing = Promise.resolve().then(async () => {
+      try {
+        while (inputsDirty) {
+          inputsDirty = false;
+          for (const group of await D.all('contacts')) if (group.isGroup) await policy(group.id);
+        }
+      } finally { refreshing = null; }
+    });
+    return refreshing;
+  }
   async function capability(groupId) {
     if (!D.supported()) return {};
     const group = await D.get('contacts', groupId);
@@ -264,5 +278,5 @@ export function createGroupAuthor(D) {
       if (next) await ensureDistributed(gid, next);
     });
   }
-  return { sign, receive, capability, bindCapability, prepareKey, policy, ensureDistributed, rotate, supported: D.supported, withKey: (gid, work) => serial('key:' + gid, work), withSend: (gid, work) => serial('send:' + gid, work) };
+  return { sign, receive, capability, bindCapability, prepareKey, policy, inputsChanged, ensureDistributed, rotate, supported: D.supported, withKey: (gid, work) => serial('key:' + gid, work), withSend: (gid, work) => serial('send:' + gid, work) };
 }
