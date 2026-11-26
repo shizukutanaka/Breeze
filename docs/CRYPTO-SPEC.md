@@ -1,5 +1,36 @@
 # Breeze Crypto Module Specification (`src/crypto/`)
 
+## Sealed Sender v2 delivery and retry policy
+
+The deployed `_buildWire` uses the existing `sealMeta`/`unsealMeta` mirror of
+`src/crypto/seal.js`; no cipher, transcript or envelope format changes. A successful
+`/prekey/status` response identifies the recipient and supplies the `seal-v2` capability
+without consuming an OTP. A missing capability on a valid legacy response permits the
+legacy envelope; HTTP/network/parse errors do not. Positive capability cache entries
+remain positive on refresh failure; expired negative entries must be refreshed before
+sending legacy traffic. Status probes try stored contact homes and the origin relay.
+These relay-reported capabilities do not authenticate protection against cap stripping.
+
+For a capable peer the only deposited envelope is
+`{to,ts,payload,sv:2,se:{ek,iv,ct}}`. Sender metadata, author keys/signatures, reply
+previews and device markers go inside `se`, including the bootstrap `pkm.ik` relocated
+to `_pkik`. Sealing failure queues the original ratchet ciphertext without spending
+delivery attempts; `/sealed/send` failure queues/reuses the wire, never `/msg/send`.
+Alternate-home failover and redundant copies use this same rule and identical v2 bytes.
+
+New retries persist the recipient public key alongside the original payload and, once
+built, the wire. Old IDB/localStorage ordinary retries, sender-visible fan-out wires and
+unparseable wires are rebuilt before sending. Missing keys are recovered from the local
+contact or a successful status response whose identity key matches the addressed prefix;
+otherwise the item remains queued. Existing v2 wires retain their sealed bytes across
+reload and outages; only their routing/ciphertext/seal fields are re-emitted. Retry
+targets remain only the relays still owed a copy. Failed legacy HTTP deposits also stay
+queued. The existing bounded transport retries/dead-letter behavior remains in place.
+
+Coverage: `tests/sealed-retries.test.js` runs the deployed queue loader, builder, delivery
+and retry functions against real sealing, checks wire leaks and opens the metadata;
+`tests/e2e/seal.spec.js` wiretaps a real browser exchange through a failed send and retry.
+
 ## Opt-in device-key linking v1 (first slice)
 
 `src/app/device-keys.js` is deployed ESM, not an inline crypto mirror. All signatures

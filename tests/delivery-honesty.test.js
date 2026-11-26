@@ -141,13 +141,13 @@ describe('client — updateMsgStatus semantics (D4)', () => {
 
 // ── (1b) Wiring pins: which call sites may say 'delivered' ───────
 describe('client — status call-site wiring (D4)', () => {
-  it("relaySend marks relay acks 'deposited' at all four ack sites", () => {
+  it("relaySend marks relay acks 'deposited' at all five ack sites, including sealed-only failover", () => {
     // Three sites until H4 (2026-11-16); the fourth is the legacy
     // path's failover deposit — a stand-in relay's ack, so the SAME
     // rule applies: 'deposited', never 'delivered' (asserted above).
     const src = sliceBetween('async function relaySend', 'function scheduleRetry');
     expect(src).not.toContain("updateMsgStatus(msgTs, 'delivered')");
-    expect(src.match(/updateMsgStatus\(msgTs, 'deposited'\)/g)).toHaveLength(4);
+    expect(src.match(/updateMsgStatus\(msgTs, 'deposited'\)/g)).toHaveLength(5);
   });
 
   it("scheduleRetry's fan-out retry also marks 'deposited'", () => {

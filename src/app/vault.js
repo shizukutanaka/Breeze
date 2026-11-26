@@ -687,7 +687,7 @@ export function vaultGate(D, unlock) {
     const panel = document.createElement('div'); panel.className = 'modal i-max-popup i-flex-col';
     const title = document.createElement('h2'); title.className = 'modal-title'; title.textContent = D.t('vaultTitle');
     const hint = document.createElement('p'); hint.className = 'modal-desc'; hint.textContent = D.t('vaultRecovery');
-    const input = document.createElement('input'); input.type = 'password'; input.className = 'modal-input'; input.autocomplete = 'current-password'; input.setAttribute('aria-label', D.t('vaultUnlock'));
+    const input = document.createElement('input'); input.type = 'password'; input.className = 'field modal-input'; input.autocomplete = 'current-password'; input.setAttribute('aria-label', D.t('vaultUnlock'));
     const button = document.createElement('button'); button.className = 'btn btn-g'; button.textContent = D.t('uiUnlock');
     const error = document.createElement('p'); error.className = 'modal-desc'; error.setAttribute('role', 'alert');
     panel.append(title, hint, input, button, error); overlay.append(panel); document.body.appendChild(overlay);

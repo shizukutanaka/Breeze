@@ -635,3 +635,236 @@ describe('power mode — focus banner countdown floor', () => {
     expect(h.bar.textContent).toBe('');
   });
 });
+// The conversation-status refresh is display-only periodic work bundled into
+// the presence heartbeat tick. Extract the deployed tick line verbatim and
+// drive it with the real power helpers.
+const presenceTickRegistration = lineContaining('_presenceTimer = setTimeout(() => { if (!_powerPresenceOff()) { beat();');
+const runPresenceTickRegistration = new Function(
+  '_presenceTimer', 'setTimeout', 'document', 'CONFIG', 'interval', '_powerPresenceOff', 'beat', 'activeContact', 'updateConvStatus', 'schedulePresence',
+  presenceTickRegistration + '\nreturn true;');
+
+function presenceTickHarness(settings) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const beat = vi.fn();
+  const updateConvStatus = vi.fn();
+  const schedulePresence = vi.fn();
+  const activeContact = { id: 'c1' };
+  const timers = [];
+  let interval = 30000;
+  runPresenceTickRegistration(
+    null,
+    (fn, ms) => { timers.push({ fn, ms }); return 1; },
+    { hidden: false },
+    { PRESENCE_INTERVAL_MS: 30000, PRESENCE_BG_INTERVAL_MS: 120000 },
+    interval,
+    power._powerPresenceOff,
+    beat,
+    activeContact,
+    updateConvStatus,
+    schedulePresence,
+  );
+  return { beat, updateConvStatus, schedulePresence, activeContact, timers };
+}
+
+describe('power mode — presence tick conversation status', () => {
+  it('skips beat and the status refresh outside normal mode while continuing to re-schedule', () => {
+    const settings = { powerMode: 'emergency' };
+    const h = presenceTickHarness(settings);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(30000);
+
+    h.timers[0].fn();
+    h.timers[0].fn();
+    h.timers[0].fn();
+    expect(h.beat).not.toHaveBeenCalled();
+    expect(h.updateConvStatus).not.toHaveBeenCalled();
+    expect(h.schedulePresence).toHaveBeenCalledTimes(3);
+
+    settings.powerMode = 'normal';
+    h.timers[0].fn();
+    expect(h.beat).toHaveBeenCalledTimes(1);
+    expect(h.updateConvStatus).toHaveBeenCalledTimes(1);
+    expect(h.updateConvStatus).toHaveBeenLastCalledWith(h.activeContact);
+    expect(h.schedulePresence).toHaveBeenCalledTimes(4);
+
+    settings.powerMode = 'saver';
+    h.timers[0].fn();
+    h.timers[0].fn();
+    expect(h.beat).toHaveBeenCalledTimes(1);
+    expect(h.updateConvStatus).toHaveBeenCalledTimes(1);
+    expect(h.schedulePresence).toHaveBeenCalledTimes(6);
+  });
+
+  it('keeps every tick live in normal mode', () => {
+    const h = presenceTickHarness({ powerMode: 'normal' });
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(30000);
+
+    h.timers[0].fn();
+    h.timers[0].fn();
+    h.timers[0].fn();
+    expect(h.beat).toHaveBeenCalledTimes(3);
+    expect(h.updateConvStatus).toHaveBeenCalledTimes(3);
+    expect(h.updateConvStatus).toHaveBeenNthCalledWith(1, h.activeContact);
+    expect(h.updateConvStatus).toHaveBeenNthCalledWith(2, h.activeContact);
+    expect(h.updateConvStatus).toHaveBeenNthCalledWith(3, h.activeContact);
+    expect(h.schedulePresence).toHaveBeenCalledTimes(3);
+  });
+});
+
+// The Electron badge recount is display-only periodic DOM work, so its deployed
+// five-second timer must honour the same power gate as the browser tab-title recount.
+function electronBadgeStatement() {
+  const marker = '// ELECTRON NATIVE INTEGRATION';
+  const markerAt = html.indexOf(marker);
+  const start = html.indexOf('  setInterval(async () => {', markerAt);
+  const endMarker = '  }, 5000);';
+  const end = html.indexOf(endMarker, start);
+  if (markerAt < 0 || start < 0 || end < 0) throw Error('electron badge interval moved');
+  return html.slice(start, end + endMarker.length);
+}
+const runElectronBadgeRegistration = new Function(
+  'setInterval', '_powerPresenceOff', 'document', 'window', '_updateTitle', '_dbg',
+  electronBadgeStatement());
+
+function electronBadgeHarness(settings) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const timers = [];
+  const querySelectorAll = vi.fn(() => [{ textContent: '2' }, { textContent: '3' }]);
+  const electronWindow = { breeze: { setBadge: vi.fn() } };
+  const updateTitle = vi.fn();
+  runElectronBadgeRegistration(
+    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    power._powerPresenceOff,
+    { querySelectorAll },
+    electronWindow,
+    updateTitle,
+    vi.fn(),
+  );
+  return { timers, querySelectorAll, electronWindow, updateTitle };
+}
+
+describe('power mode — electron badge recount', () => {
+  it('skips the recount outside normal mode and re-evaluates every tick', async () => {
+    const settings = { powerMode: 'emergency' };
+    const h = electronBadgeHarness(settings);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(5000);
+
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).not.toHaveBeenCalled();
+    expect(h.electronWindow.breeze.setBadge).not.toHaveBeenCalled();
+    expect(h.updateTitle).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).toHaveBeenCalledTimes(1);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenCalledTimes(1);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenLastCalledWith(5);
+    expect(h.updateTitle).toHaveBeenCalledTimes(1);
+    expect(h.updateTitle).toHaveBeenLastCalledWith(5);
+
+    settings.powerMode = 'saver';
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).toHaveBeenCalledTimes(1);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenCalledTimes(1);
+    expect(h.updateTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps every tick live in normal mode and recounts the summed total', async () => {
+    const h = electronBadgeHarness({ powerMode: 'normal' });
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(5000);
+
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).toHaveBeenCalledTimes(2);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenCalledTimes(2);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenNthCalledWith(1, 5);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenNthCalledWith(2, 5);
+    expect(h.updateTitle).toHaveBeenCalledTimes(2);
+    expect(h.updateTitle).toHaveBeenNthCalledWith(1, 5);
+    expect(h.updateTitle).toHaveBeenNthCalledWith(2, 5);
+  });
+});
+
+// The per-message disappearing countdown is display-only — expiry is enforced by
+// the gated DB sweep above — but each rendered message owns a self-rescheduling
+// timer chain. Extract the deployed updateCountdown closure verbatim and drive it
+// with controlled clocks, timers, DOM nodes, and power floors.
+const countdownBlock = slice('        const updateCountdown = () => {', '\n        requestAnimationFrame(() => setTimeout(updateCountdown, MS.SEC));');
+const createCountdown = new Function(
+  '_DOM', 'CONFIG', 'MS', 'setTimeout', 'requestAnimationFrame', 'timerId', 'disappearAt', 'Date', '_powerPollFloorMs',
+  countdownBlock + '\nreturn { updateCountdown };');
+
+function countdownHarness(floor, remainingMs) {
+  const now = 1000000;
+  const timeouts = [];
+  const msgEl = { classList: { add: vi.fn() }, remove: vi.fn() };
+  const badge = {
+    textContent: '',
+    classList: { add: vi.fn() },
+    closest: vi.fn(() => msgEl),
+  };
+  const { updateCountdown } = createCountdown(
+    { get: vi.fn(() => badge) },
+    { FADE_OUT_MS: 250 },
+    { SEC: 1000, MIN: 60000 },
+    (fn, ms) => { timeouts.push({ fn, ms }); return timeouts.length; },
+    () => 1,
+    'ttl-test',
+    now + remainingMs,
+    { now: () => now },
+    () => floor,
+  );
+  updateCountdown();
+  return { timeouts, badge, msgEl };
+}
+
+describe('power mode — disappearing message countdown floor', () => {
+  it('keeps the 30-second reschedule in normal mode while more than a minute remains', () => {
+    const h = countdownHarness(0, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(30000);
+  });
+
+  it('keeps the one-second reschedule in normal mode during the final minute', () => {
+    const h = countdownHarness(0, 60000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(1000);
+  });
+
+  it('stretches the reschedule to one minute in saver mode', () => {
+    const h = countdownHarness(60000, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(60000);
+  });
+
+  it('stretches the reschedule to ten minutes in emergency mode', () => {
+    const h = countdownHarness(600000, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(600000);
+  });
+
+  it('keeps the chain alive in emergency mode — each tick reschedules rather than stopping', () => {
+    const h = countdownHarness(600000, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(typeof h.timeouts[0].fn).toBe('function');
+    h.timeouts[0].fn();
+    expect(h.timeouts).toHaveLength(2);
+    expect(h.timeouts[1].ms).toBe(600000);
+  });
+
+  it('still takes the expiry fade-out path when no time remains', () => {
+    const h = countdownHarness(600000, -1);
+    expect(h.badge.closest).toHaveBeenCalledWith('.msg');
+    expect(h.msgEl.classList.add).toHaveBeenCalledWith('fade-out');
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(250);
+    h.timeouts[0].fn();
+    expect(h.msgEl.remove).toHaveBeenCalledTimes(1);
+  });
+});
