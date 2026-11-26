@@ -27,7 +27,7 @@ export function settingsPanelHtml(v) {
   const tabOrderRows = (validTabOrder ? v.tabOrder : TAB_ORDER).map((k, i) => {
     const [iconName, labelKey] = TAB_META[k];
     const move = (dir, moveIcon, labelKey2, disabled) => `<button type="button" class="btn btn-o btn-sm tab-order-move" data-action="tab-move" data-tab="${k}" data-dir="${dir}" aria-label="${esc(t(labelKey2))}"${disabled ? ' disabled' : ''}>${ico(moveIcon)}</button>`;
-    return `<div class="settings-row settings-tab-order-row" draggable="true" data-order-tab="${k}"><span class="settings-row-main">${ico(iconName)}<span class="settings-row-label">${esc(t(labelKey))}</span></span>${move('-1', 'arrow-left', 'tabMoveLeft', i === 0)}${move('1', 'arrow-right', 'tabMoveRight', i === TAB_ORDER.length - 1)}</div>`;
+    return `<div class="settings-row settings-tab-order-row" draggable="true" data-order-tab="${k}"><span class="settings-row-main">${ico(iconName)}<span class="settings-row-label">${esc(t(labelKey))}</span></span><span class="tab-order-moves">${move('-1', 'arrow-left', 'tabMoveLeft', i === 0)}${move('1', 'arrow-right', 'tabMoveRight', i === TAB_ORDER.length - 1)}</span></div>`;
   }).join('');
 
   const relayRows = v.relays.map((r) => {
