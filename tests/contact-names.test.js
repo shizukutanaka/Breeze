@@ -29,7 +29,7 @@
 //      reachable from both the contact context menu and the
 //      conversation menu.
 //   7. The new i18n keys exist in EN + JA (real translation) and
-//      in all 71 locale files.
+//      in all 81 locale files.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createNameTools } from '../src/app/lookalike-names.js';
@@ -176,10 +176,10 @@ describe('i18n — the new keys land everywhere', () => {
   it('EN carries all of them', () => {
     for (const k of KEYS) expect(html).toContain(k + ':');
   });
-  it('all 71 locale files carry all of them; JA is a real translation', () => {
+  it('all 81 locale files carry all of them; JA is a real translation', () => {
     const dir = new URL('../locales/', import.meta.url);
     const files = readdirSync(dir).filter(f => f.endsWith('.json'));
-    expect(files).toHaveLength(71);
+    expect(files).toHaveLength(81);
     for (const f of files) {
       const loc = JSON.parse(readFileSync(new URL(f, dir), 'utf8'));
       for (const k of KEYS) expect(typeof loc[k], f + ':' + k).toBe('string');
