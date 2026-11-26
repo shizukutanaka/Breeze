@@ -1,14 +1,14 @@
 const VERSION = '3.8.0';
-const CACHE = 'breeze-v' + VERSION + '-vault-history';
+const CACHE = 'breeze-v' + VERSION + '-safety-number-v2';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
-  '/src/app/device-alerts.js', '/src/app/device-keys.js',
+  '/src/app/device-alerts.js', '/src/app/device-keys.js', '/src/app/device-revocation.js',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
   // at runtime (INTEGRATION.md §0(A)) — precached so a first offline boot
   // still mints PQ key material instead of degrading to classical bundles.
   // Stage-3 step 5 adds the PQXDH session facade and the combiner it wraps
   // (pqxdh.js → pq.js → mlkem.js/bytes.js, already listed).
   '/src/crypto/pqkey.js', '/src/crypto/mlkem.js', '/src/crypto/bytes.js',
-  '/src/crypto/pqxdh.js', '/src/crypto/pq.js',
+  '/src/crypto/pqxdh.js', '/src/crypto/pq.js', '/src/crypto/fingerprint.js', '/src/app/safety-number.js',
   '/src/app/group-author.js', '/src/app/vault.js', '/src/app/vault-history.js', '/src/app/vault-browser.js', '/src/app/contact-verify.js',
   // Recovery plan step 3: the account-seed facade and its vendored BIP39
   // wordlist — precached so a first offline boot can still create a
