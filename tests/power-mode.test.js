@@ -594,64 +594,6 @@ describe('power mode — group member poll', () => {
   });
 });
 
-// The tab-title recount is cosmetic periodic DOM work, so its five-second timer
-// must honour the same power gate as the network-quality probe. Extract the
-// deployed registration line verbatim and drive it with the real power helpers.
-const tabTitleRegistration = lineContaining('setInterval(() => { if (!_powerPresenceOff()) updateTabTitle(); }');
-const runTabTitleRegistration = new Function(
-  '_intervals', 'setInterval', 'CONFIG', '_powerPresenceOff', 'updateTabTitle',
-  tabTitleRegistration + '\nreturn true;');
-
-function tabTitleHarness(settings) {
-  const power = create({ MIN: 60000 }, settings, {}, () => {});
-  const updateTabTitle = vi.fn();
-  const timers = [];
-  const intervals = [];
-  runTabTitleRegistration(
-    intervals,
-    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
-    { POLL_UNREAD_MS: 5000 },
-    power._powerPresenceOff,
-    updateTabTitle,
-  );
-  return { updateTabTitle, timers, intervals };
-}
-
-describe('power mode — tab title recount', () => {
-  it('skips the periodic recount outside normal mode and re-evaluates every tick', () => {
-    const settings = { powerMode: 'emergency' };
-    const h = tabTitleHarness(settings);
-    expect(h.timers).toHaveLength(1);
-    expect(h.timers[0].ms).toBe(5000);
-    expect(h.intervals).toHaveLength(1);
-
-    h.timers[0].fn();
-    h.timers[0].fn();
-    h.timers[0].fn();
-    expect(h.updateTabTitle).not.toHaveBeenCalled();
-
-    settings.powerMode = 'normal';
-    h.timers[0].fn();
-    expect(h.updateTabTitle).toHaveBeenCalledTimes(1);
-
-    settings.powerMode = 'saver';
-    h.timers[0].fn();
-    h.timers[0].fn();
-    expect(h.updateTabTitle).toHaveBeenCalledTimes(1);
-  });
-
-  it('keeps every tick live in normal mode', () => {
-    const h = tabTitleHarness({ powerMode: 'normal' });
-    expect(h.timers).toHaveLength(1);
-    expect(h.timers[0].ms).toBe(5000);
-
-    h.timers[0].fn();
-    h.timers[0].fn();
-    h.timers[0].fn();
-    expect(h.updateTabTitle).toHaveBeenCalledTimes(3);
-  });
-});
-
 // The focus-mode countdown banner is display-only — expiry is enforced by the
 // _focusActive() timestamp checks in _shouldAlert, not by this timer — so its
 // self-rescheduling setTimeout chain is pure wake cost. Extract the deployed
@@ -886,7 +828,7 @@ describe('power mode — presence heartbeat schedule floor', () => {
 });
 
 // The Electron badge recount is display-only periodic DOM work, so its deployed
-// five-second timer must honour the same power gate as the browser tab-title recount.
+// five-second timer must honour the power-presence gate.
 function electronBadgeStatement() {
   const marker = '// ELECTRON NATIVE INTEGRATION';
   const markerAt = html.indexOf(marker);
