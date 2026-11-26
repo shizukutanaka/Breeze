@@ -59,7 +59,7 @@ describe('settings help translations', () => {
   const localeFiles = readdirSync(join(root, 'locales')).filter((f) => f.endsWith('.json')).sort();
 
   it('defines every description key in the inline English dictionary', () => {
-    expect(helpKeys.length).toBe(37);
+    expect(helpKeys.length).toBe(38);
     for (const key of helpKeys) {
       expect(typeof EN[key], `${key} missing from inline English`).toBe('string');
       expect(EN[key].trim().length, `${key} empty in inline English`).toBeGreaterThan(0);

@@ -711,6 +711,7 @@
   "toastMin4Chars": "Liosta 4 carachtair",
   "toastLabelsClear": "Glan Lipéid",
   "toastInstalling": "Á Suiteáil...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze suiteáilte!",
   "toastWiped": "Gléas a scriosadh go cianda",
   "toastDbConflict": "@ info: whatsthis",
@@ -1151,5 +1152,7 @@
   "mockSeedB2": "An féidir liom iarracht a sheoladh teachtaireacht?",
   "mockSeedB3": "Tá. Gintear freagraí go logánta tar éis moill ghearr.",
   "mockSeedG1": "Fáilte go dtí an grúpa sampla.",
-  "mockSeedG2": "Cuidíonn sé seo a thaispeáint cén cosúil comhrá grúpa."
+  "mockSeedG2": "Cuidíonn sé seo a thaispeáint cén cosúil comhrá grúpa.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }
