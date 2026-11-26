@@ -17,6 +17,12 @@ async function compare(page, id, { groups = 12, screenshot = false } = {}) {
   expect(await modal.locator('.verification-modal').evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
   expect((await modal.locator('.verification-modal').boundingBox()).width).toBeLessThanOrEqual(400);
   await expect(modal.locator('canvas')).toBeVisible();
+  const checkbox = modal.locator('.verification-strict input[type="checkbox"]');
+  await checkbox.focus();
+  expect(await checkbox.evaluate(el => {
+    const firstLetter = document.createRange(); firstLetter.setStart(el.nextSibling, 0); firstLetter.setEnd(el.nextSibling, 1);
+    return firstLetter.getBoundingClientRect().left - el.getBoundingClientRect().right;
+  })).toBeGreaterThanOrEqual(8);
   if (screenshot) await page.screenshot({ path: '/Users/devin/safety-number-v2-verification.png' });
   await mark.click(); await expect(modal.locator('[role="status"]')).toHaveText('✓ Verified');
   await modal.getByRole('button', { name: 'Close', exact: true }).click();

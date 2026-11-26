@@ -133,7 +133,7 @@ export function createContactVerify(D) {
     D.safeSetHTML(overlay, `<div class="modal verification-modal"><div class="i-emoji-lg">🔐</div><div class="fw-700 text-sm mb-2">${D.t('safetyNumber')}</div><div class="i-safety-num">${D.esc(num || '')}</div><div class="text-xs color-t3 mb-3">${D.t('safetyDesc')}</div><div class="text-xs mb-3" id="kt-audit-status">${D.esc(D.t('ktChecking'))}</div></div>`);
     const modal = overlay.firstElementChild;
     const both = document.createElement('p'); both.className = 'text-xs'; both.textContent = D.t('cvCompare') + (combined ? '\n' + combined : '\n' + D.t('cvMissingPin')); modal.appendChild(both);
-    const strict = document.createElement('label'), checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = s.strict !== false;
+    const strict = document.createElement('label'), checkbox = document.createElement('input'); strict.className = 'verification-strict'; checkbox.type = 'checkbox'; checkbox.checked = s.strict !== false;
     strict.append(checkbox, document.createTextNode(D.t('cvStrict'))); modal.appendChild(strict);
     const result = document.createElement('p'); result.setAttribute('role', 'status'); result.textContent = D.t(labelKey(s)); modal.appendChild(result);
     const version = document.createElement('p'); version.className = 'text-xs color-t3'; version.textContent = D.t(num.split(' ').length === 12 ? 'snV2' : 'snLegacy'); modal.appendChild(version);
