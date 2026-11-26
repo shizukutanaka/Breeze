@@ -7868,8 +7868,14 @@ async function initMessenger(dbName) {
     if (_mock) {
       const nameInput = _DOM.get('msg-name-random');
       if (nameInput) nameInput.value = t('mockSelfName');
-      await _runSetupCreate('random');
-      return;
+      // A showroom copy can opt into a manual start via a deploy-time flag
+      // (window.__BREEZE_MOCK_MANUAL__): the visitor then registers from the
+      // real setup screen below instead of being auto-created, and seeding
+      // still runs after their own createIdentity.
+      if (!globalThis.__BREEZE_MOCK_MANUAL__) {
+        await _runSetupCreate('random');
+        return;
+      }
     }
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
