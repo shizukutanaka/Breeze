@@ -380,57 +380,104 @@ function lineContaining(needle) {
   return html.slice(start, end < 0 ? undefined : end).trim();
 }
 
-// The device-alerts check is periodic network work, so its one-minute timer must
-// honour the same power gate as the network-quality probe. Extract the deployed
-// registration line verbatim and drive its ticks with the real power-mode helpers.
-const deviceAlertsRegistration = lineContaining('_deviceAlerts?.check(); _intervals.push(setInterval(');
+// The device-alerts check is periodic network work, so its timer must both honour
+// the power gate and stop waking the device merely to evaluate that gate. Extract
+// the deployed registration verbatim and drive its self-rescheduling chain with
+// the real power-mode helpers.
+const deviceAlertsRegistration = slice('    _deviceAlerts?.check();', '\n    await _contactVerify.migrate();').trim();
 const runDeviceAlertsRegistration = new Function(
-  '_deviceAlerts', '_intervals', 'setInterval', 'MS', '_powerPresenceOff',
-  deviceAlertsRegistration + '\nreturn true;');
+  '_deviceAlerts', '_intervals', 'setInterval', 'setTimeout', 'MS', '_powerPresenceOff', '_powerPollFloorMs',
+  'let _deviceAlertsTimer = null;\n' + deviceAlertsRegistration + '\nreturn { pendingTimer: () => _deviceAlertsTimer };');
 
 function deviceAlertsHarness(settings) {
   const power = create({ MIN: 60000 }, settings, {}, () => {});
   const check = vi.fn();
   const timers = [];
-  runDeviceAlertsRegistration(
+  const intervals = [];
+  const registration = runDeviceAlertsRegistration(
     { check },
-    [],
+    intervals,
+    (fn, ms) => { intervals.push({ fn, ms }); return intervals.length; },
     (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     { MIN: 60000 },
     power._powerPresenceOff,
+    power._powerPollFloorMs,
   );
-  return { check, timers };
+  return { check, timers, intervals, registration };
 }
 
 describe('power mode — device alerts check', () => {
-  it('skips only the periodic tick outside normal mode and re-evaluates every tick', () => {
+  it.each([
+    ['normal', 60000],
+    ['saver', 60000],
+    ['emergency', 600000],
+  ])('starts immediately and schedules the first tick in %s mode at %i ms', (mode, ms) => {
+    const h = deviceAlertsHarness({ powerMode: mode });
+    expect(h.check).toHaveBeenCalledTimes(1);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(ms);
+    expect(h.registration.pendingTimer()).toBe(1);
+    expect(h.intervals).toHaveLength(0);
+  });
+
+  it('skips the check but still reschedules at the emergency floor, then re-evaluates live in normal mode', () => {
     const settings = { powerMode: 'emergency' };
     const h = deviceAlertsHarness(settings);
     expect(h.check).toHaveBeenCalledTimes(1);
-    expect(h.timers).toHaveLength(1);
-    expect(h.timers[0].ms).toBe(60000);
+    expect(h.timers[0].ms).toBe(600000);
 
     h.timers[0].fn();
     expect(h.check).toHaveBeenCalledTimes(1);
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
+    expect(h.registration.pendingTimer()).toBe(2);
 
     settings.powerMode = 'normal';
-    h.timers[0].fn();
+    h.timers[1].fn();
     expect(h.check).toHaveBeenCalledTimes(2);
+    expect(h.timers).toHaveLength(3);
+    expect(h.timers[2].ms).toBe(60000);
+    expect(h.registration.pendingTimer()).toBe(3);
 
     settings.powerMode = 'saver';
-    h.timers[0].fn();
+    h.timers[2].fn();
     expect(h.check).toHaveBeenCalledTimes(2);
+    expect(h.timers).toHaveLength(4);
+    expect(h.timers[3].ms).toBe(60000);
+    expect(h.registration.pendingTimer()).toBe(4);
+  });
+
+  it('keeps the chain alive when the check throws', () => {
+    const h = deviceAlertsHarness({ powerMode: 'normal' });
+    h.check.mockImplementationOnce(() => { throw Error('device alerts boom'); });
+    expect(() => h.timers[0].fn()).toThrow('device alerts boom');
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(60000);
+    expect(h.registration.pendingTimer()).toBe(2);
+
+    h.timers[1].fn();
+    expect(h.check).toHaveBeenCalledTimes(3);
+    expect(h.timers).toHaveLength(3);
   });
 
   it('keeps the immediate session-start call direct, ungated, and ahead of the timer', () => {
     const directCall = deviceAlertsRegistration.indexOf('_deviceAlerts?.check();');
-    const timer = deviceAlertsRegistration.indexOf('setInterval(');
+    const timer = deviceAlertsRegistration.indexOf('setTimeout(');
+    const firstStatement = deviceAlertsRegistration.split('\n', 1)[0];
     expect(directCall).toBe(0);
     expect(timer).toBeGreaterThan(directCall);
-    expect(deviceAlertsRegistration.slice(0, timer)).not.toContain('_powerPresenceOff');
+    expect(firstStatement).toBe('_deviceAlerts?.check();');
+    expect(firstStatement).not.toContain('_powerPresenceOff');
+    expect(deviceAlertsRegistration).not.toContain('setInterval(');
+    expect(deviceAlertsRegistration).not.toContain('_intervals');
 
     const h = deviceAlertsHarness({ powerMode: 'emergency' });
     expect(h.check).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears the pending chain explicitly in messenger cleanup', () => {
+    const cleanupBlock = slice('  function _registerMessengerCleanup() {', '\n  async function _startLiveSession()');
+    expect(cleanupBlock).toContain('if (_deviceAlertsTimer) { clearTimeout(_deviceAlertsTimer); _deviceAlertsTimer = null; }');
   });
 });
 

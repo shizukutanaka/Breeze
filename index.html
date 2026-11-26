@@ -5305,6 +5305,7 @@ async function initMessenger(dbName) {
   let _focusTimer = null;
   let _readTimer = null; // pending delayed read receipt (see openConversation)
   let _disappearCleanupTimer = null; // pending disappearing-message cleanup chain tick
+  let _deviceAlertsTimer = null; // pending device-alerts check chain tick
   let _noReplyNeeded = false; // one-shot: marks the NEXT message as needing no reply
   // True when this install is a LINKED secondary (see /linkto); resolved at boot and
   // refreshed by /link, /linkto and /unlink. _myAcctRoot is the account root pub this
@@ -7638,8 +7639,9 @@ async function initMessenger(dbName) {
         clearTimeout(_readTimer);
         _readTimer = null;
       }
-      // The expiry sweep is a timeout chain too; it must not survive account switch.
+      // The expiry sweep and device-alerts check are timeout chains too; neither may survive account switch.
       if (_disappearCleanupTimer) { clearTimeout(_disappearCleanupTimer); _disappearCleanupTimer = null; }
+      if (_deviceAlertsTimer) { clearTimeout(_deviceAlertsTimer); _deviceAlertsTimer = null; }
       // Discard this account's in-memory outbox. The Map is module-level and persists
       // across initMessenger calls; without clearing it here, pending P2P messages from
       // the old account would be sent under the new account's identity if both accounts
@@ -7712,7 +7714,9 @@ async function initMessenger(dbName) {
   // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
   // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
-    _deviceAlerts?.check(); _intervals.push(setInterval(() => { if (!_powerPresenceOff()) _deviceAlerts?.check(); }, MS.MIN));
+    _deviceAlerts?.check();
+    const _deviceAlertsTick = () => { try { if (!_powerPresenceOff()) _deviceAlerts?.check(); } finally { _deviceAlertsTimer = setTimeout(_deviceAlertsTick, Math.max(MS.MIN, (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0))); } };
+    _deviceAlertsTimer = setTimeout(_deviceAlertsTick, Math.max(MS.MIN, (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0)));
     await _contactVerify.migrate();
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
@@ -7727,7 +7731,6 @@ async function initMessenger(dbName) {
     _updateFocusBanner(); // focus mode survives a reload — show it, or silence looks like "no messages"
     await _refreshDeviceRole();
     await _loadRetryQueue(); // v3.6: Restore pending messages from IDB
-
     // v3.6: Prune stale Double Ratchet sessions (contacts deleted but sessions remain)
     try {
       const allContacts = await dbGetAll('contacts');
