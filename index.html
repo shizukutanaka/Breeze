@@ -1413,6 +1413,10 @@ import { createDialogs } from './src/app/dialogs.js';
 window.__breezeDialogs = { createDialogs };
 </script>
 <script type="module">
+import { applyLandingLinks } from './src/app/landing-links.js';
+window.__breezeLandingLinks = { applyLandingLinks };
+</script>
+<script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
 // below (index.html carries a hard line budget — validate.sh). The bridges
 // are read opportunistically, so boot survives without them — but these are
@@ -1712,6 +1716,10 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     // Landing
     heroTitle: 'Private messaging,<br>without the baggage',
     heroDesc: 'No phone number. No email. No app store. Open a link, start chatting. Everything encrypted end-to-end.',
+    inviteTitle: '{0} invited you to Breeze',
+    inviteTitleAnon: 'You have been invited to Breeze',
+    inviteDesc: 'Enter your name and start — you will be connected with your inviter automatically. No server setup and no registration needed.',
+    inviteBtn: 'Accept invite & start',
     featEncrypt: 'End-to-end encrypted',
     featEncryptSub: 'No one else can read your messages',
     featNoReg: 'No registration',
@@ -3494,36 +3502,7 @@ let _userId = '';
 let _turnCredential = null; // v3.6: { iceServers: [...], ttl, provider } — from /api/turn
 try { _userId = localStorage.getItem('brz-uid') || ''; } catch(e) { _dbg(e); }
 
-// If arriving via ?join=token, show group info on setup screen
-if (joinToken && (globalThis.__brzApiReady?.() ?? !!API)) {
-  postAPIRaw('/group/info', { token: joinToken })
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-      if (!data) return;
-      const title = _DOM.get('msg-setup-title');
-      const desc = _DOM.get('msg-setup-desc');
-      const btn = _DOM.get('b-msg-setup');
-      if (title) title.textContent = t('joinGroup', data.name);
-      if (desc) desc.textContent = t('invitedBy', data.creatorName, data.members.length);
-      if (btn) btn.textContent = t('joinBtn');
-    })
-    .catch(e => _dbg(e));
-}
-
-// v3.6: Web Share Target handler — receive shared text/URLs from other apps
-if (P.get('text') || P.get('url') || P.get('title')) {
-  const sharedText = [P.get('title'), P.get('text'), P.get('url')].filter(Boolean).join('\n');
-  if (sharedText) {
-    // Store shared text; paste into input when conversation is opened
-    sessionStorage.setItem('brz-shared-text', sharedText);
-    history.replaceState(null, '', '/');
-    // If already in a conversation, paste immediately
-    setTimeout(() => {
-      const input = _DOM.get('msg-input');
-      if (input && activeContact) { input.value = sharedText; input.focus(); }
-    }, 1000);
-  }
-}
+_appModulesReady.then(() => { try { globalThis.__breezeLandingLinks?.applyLandingLinks({ addKey: P.get('add'), addName: P.get('name'), joinToken, shareText: [P.get('title'), P.get('text'), P.get('url')].filter(Boolean).join('\n'), apiReady: () => (globalThis.__brzApiReady?.() ?? !!API), postAPIRaw, DOM: _DOM, t, dbg: _dbg, getActiveContact: () => null }); } catch (e) { _dbg(e, 'landing-links'); } });
 
 // ======================== CRYPTO ========================
 async function deriveKey(passphrase, salt, usage) {
@@ -4174,7 +4153,7 @@ document.addEventListener('keydown', (e) => {
 async function initMessenger(dbName) {
   // Still locked from before this page load (reload, reopened tab): lock before anything renders.
   try { if (localStorage.getItem('brz-locked')) showLockScreen(); } catch(e) { _dbg(e, 'lock-restore'); }
-  try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // either bridge unset ⇒ its module block aborted: /security, calls, backup or the dialog foundation would otherwise do nothing, silently
+  try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs || !globalThis.__breezeLandingLinks) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // either bridge unset ⇒ its module block aborted: /security, calls, backup or the dialog foundation would otherwise do nothing, silently
   if (!globalThis.__breezeVault) throw new Error(t('vaultFailed')); if (!globalThis.__breezeContactVerify) throw new Error(t('toastModulesFailed'));
   let _contactVerify = null, _groupProtection = null;
   const _vault = globalThis.__breezeVault.getVault({ t, dbg: _dbg, accounts: getAccounts, restoreAccounts: saveAccounts, reload: () => location.reload(),

@@ -65,7 +65,7 @@ describe('shared dialog foundation extraction', () => {
     expect(block).toBeTruthy();
     expect(block).toContain("import { createDialogs } from './src/app/dialogs.js';");
     expect(block).not.toContain('p2p-stats.js');
-    expect(html).toContain('if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs) showToast');
+    expect(html).toContain('if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs || !globalThis.__breezeLandingLinks) showToast');
   });
 
   it('index.html bridges the module once and keeps only delegating same-name wrappers', () => {
