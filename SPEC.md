@@ -1,8 +1,8 @@
 # Breeze Messenger — Detailed Specification
 
-**Document version**: 2026-03-14 R210; header, §4.2 and §7 re-verified 2026-11-21 (R09); total codebase figure re-measured 2026-11-22 (S06); header figures, §1.2, §2.1, §3, §4.3–§4.5, §5, §9, §10.5, §11 and §12 re-measured against the current code 2026-11-25; §4.5 and the header / §1.2 / §3.1 / §4.3 / §9 / §10 / §11 figures updated again the same day for the first-run, automatic-backup and contact-name changes (PR #531–#533), and the header / §1.2 / §4.1 / §4.5 / §10 / §11 figures and §4.5 text updated again the same day for the bottom-tab expansion and the on-device call history (PR #534, #536)
-**Status**: Living reference. Originally written for v3.6.0; the sections named above were re-measured against the current codebase (CONFIG VERSION 3.8.0, main as of 2026-11-25). Other sections describe the design as of v3.6.0 and may lag the code — where this document and the code disagree, the code and its tests win.
-**Total codebase**: 15,999 (index.html) + 13,519 (src/ modules) + 5,213 (_worker.js) + 245 (SW) = 34,976 lines (plus the Node self-host under `server/`: 1,037 lines, not part of the historical formula)
+**Document version**: 2026-03-14 R210
+**Status**: Living reference. Where this document and the code disagree, the code and its tests win.
+**Total codebase**: not copied here; `validate.sh` prints the live `index.html` line count and enforces its ceiling, and `npm test` prints the live test counts.
 
 ---
 
@@ -18,14 +18,14 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 | Clean architecture, SOLID | Robert C. Martin | Single-responsibility functions, DRY helpers (postAPIRaw, _signal, _autoHeight) |
 | Simplicity, composition | Rob Pike | Single-file client plus ES modules, no build step, no framework, no external AI dependency |
 
-### 1.2 File Inventory (601 tracked files)
+### 1.2 File Inventory (661 tracked files)
 
 | File | Size | Purpose |
 |------|------|---------|
-| index.html | 915 KB | Client: UI + CSS + JS (single file) |
+| index.html | 930 KB | Client: UI + CSS + JS (single file) |
 | _worker.js | 305 KB | Cloudflare Worker: API + signals |
 | server/* | — | Node self-host relay (same handler, SQLite state) |
-| sw.js | 12 KB | Service Worker: offline cache + push |
+| sw.js | 11 KB | Service Worker: offline cache + push |
 | manifest.json | 2 KB | PWA manifest |
 | locales/* | — | 50 UI locale files (see §11) |
 | icon-192.png / icon-512.png | — | PWA icons |
@@ -267,117 +267,198 @@ Instance counts are literal call-pattern occurrences in `index.html`, grep-measu
 
 ### 4.4 CSS Design System
 
-**42 CSS Custom Properties** in `:root` (dark theme shown; the `.light` theme
-overrides the colour tokens — its accent/error values were re-measured for
-WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
-`--r` #c81e1e, `--t3` #636366; dark `--t3` is #93939f):
+The visual system is token-first: spacing, type, radius, colour, elevation,
+motion and touch-target decisions live in custom properties, and composite
+screens are assembled from shared component classes. Feature-specific one-off
+values still exist in the stylesheet, but the scales below are the canonical
+foundation for new UI. The accessibility floor is 12px for text and `--touch`
+(48px) for primary touch targets, with platform- and pointer-specific
+adjustments described in §10.5.
 
-| Property | Purpose | Dark Value |
-|----------|---------|------------|
-| --bg | Background | #050505 |
-| --s1 | Surface 1 | rgba(28,28,30,.85) |
-| --s2 | Surface 2 | rgba(44,44,46,.7) |
-| --s3 | Surface 3 | rgba(58,58,60,.6) |
-| --t1 | Text primary | #f2f2f7 |
-| --t2 | Text secondary | #98989d |
-| --t3 | Text tertiary | #93939f |
-| --g | Green accent | #34d399 |
-| --gl | Green light | rgba(52,211,153,.08) |
-| --gd | Green dark | #10b981 |
-| --r | Red/error | #ff6b6b |
-| --y | Yellow/warning | #fbbf24 |
-| --blue | Blue/info | #60a5fa |
-| --b1 | Border | rgba(255,255,255,.08) |
-| --rad | Border radius | 16px |
-| --font | Font family | -apple-system, system-ui, sans-serif |
-| --mono | Monospace | 'SF Mono', ui-monospace, monospace |
-| --sp-1 | Spacing scale 1 | 4px |
-| --sp-2 | Spacing scale 2 | 8px |
-| --sp-3 | Spacing scale 3 | 12px |
-| --sp-4 | Spacing scale 4 | 16px |
-| --sp-5 | Spacing scale 5 | 24px |
-| --sp-6 | Spacing scale 6 | 32px |
-| --sp-7 | Spacing scale 7 | 48px |
-| --fs-caption | Caption/metadata font size | 12px |
-| --fs-sub | Secondary text font size | 13px |
-| --fs-body | Body font size | 15px |
-| --fs-name | Contact/display-name font size | 16px |
-| --fs-title | Title font size | 18px |
-| --fs-display | Display font size | 22px |
-| --rad-sm | Small border radius | 8px |
-| --rad-bubble | Message-bubble border radius | 18px |
-| --ease | Transition | .3s cubic-bezier(.175,.885,.32,1.275) |
-| --touch | Touch min-size | 48px |
+**46 custom properties are defined in `:root`** for the dark scheme. `.light`
+and the light branch of `.auto-theme` override the same 17 colour/shadow
+tokens; `prefers-contrast: more` strengthens `--b1` and `--t3`; Android
+overrides `--font`, `--rad` and `--rad-lg`. `--kb-offset` is a local dynamic
+property used by keyboard-aware layouts, not a root design token.
 
-**71 CSS Utility Classes** (`.i-*` prefix, counted 2026-11-26).
+| Theme-overridden token | Dark value | Light value |
+|---|---|---|
+| `--bg` | `#050505` | `#f2f2f7` |
+| `--s1` | `rgba(28,28,30,.85)` | `rgba(255,255,255,.85)` |
+| `--s2` | `rgba(44,44,46,.7)` | `rgba(242,242,247,.9)` |
+| `--s3` | `rgba(58,58,60,.6)` | `rgba(229,229,234,.8)` |
+| `--b1` | `rgba(255,255,255,.08)` | `rgba(0,0,0,.06)` |
+| `--t1` | `#f2f2f7` | `#1c1c1e` |
+| `--t2` | `#98989d` | `#48484a` |
+| `--t3` | `#93939f` | `#636366` |
+| `--g` | `#34d399` | `#046c4e` |
+| `--gd` | `#10b981` | `#065f46` |
+| `--gl` | `rgba(52,211,153,.08)` | `rgba(5,150,105,.08)` |
+| `--r` | `#ff6b6b` | `#c81e1e` |
+| `--y` | `#fbbf24` | `#92400e` |
+| `--blue` | `#60a5fa` | `#007aff` |
+| `--shadow-sm` | `0 1px 3px rgba(0,0,0,.3)` | `0 1px 3px rgba(0,0,0,.08)` |
+| `--shadow-md` | `0 4px 16px rgba(0,0,0,.25)` | `0 4px 16px rgba(0,0,0,.06)` |
+| `--shadow-float` | `0 8px 32px rgba(0,0,0,.35)` | `0 8px 32px rgba(0,0,0,.1)` |
 
-**Component primitives** (UI/UX unification phase 2):
+| Shared token | Value | Role |
+|---|---|---|
+| `--font` | `-apple-system, 'SF Pro Display', 'SF Pro Text', system-ui, 'Helvetica Neue', sans-serif` | UI font |
+| `--mono` | `'SF Mono', ui-monospace, Menlo, Consolas, monospace` | Monospace font |
+| `--sp-1` / `--sp-2` / `--sp-3` / `--sp-4` / `--sp-5` / `--sp-6` / `--sp-7` | `4px` / `8px` / `12px` / `16px` / `24px` / `32px` / `48px` | Spacing scale |
+| `--fs-caption` | `12px` | Captions, metadata, minimum text size |
+| `--fs-sub` | `13px` | Secondary text and previews |
+| `--fs-body` | `15px` | Body and message text |
+| `--fs-name` | `16px` | Names and row headings |
+| `--fs-title` | `18px` | Titles and large controls |
+| `--fs-display` | `22px` | Display headings |
+| `--rad-sm` | `8px` | Small radius and grouped-bubble corners |
+| `--rad` | `16px` | Standard radius |
+| `--rad-bubble` | `18px` | Message-bubble radius |
+| `--rad-lg` | `22px` | Large cards and modals |
+| `--rad-full` | `9999px` | Pills and circular controls |
+| `--bubble-self` | `linear-gradient(135deg, var(--g), var(--gd))` | Own-message bubble |
+| `--bubble-other` | `var(--s2)` | Peer-message bubble |
+| `--badge-bg` | `var(--g)` | Unread/count badge background |
+| `--danger` | `var(--r)` | Danger action/state colour |
+| `--ease` | `.3s cubic-bezier(.175,.885,.32,1.275)` | Standard expressive transition |
+| `--ease-smooth` | `.25s ease` | Smooth state transition |
+| `--bounce` | `cubic-bezier(.34,1.56,.64,1)` | Spring-like overshoot |
+| `--touch` | `48px` | Primary touch-target size |
+| `--glass` | `blur(20px) saturate(1.5)` | Translucent surface treatment |
 
-- **Badges** are one component, `.bdg`. Folder tabs, bottom tabs, folder-entry counts,
-  contact-row unread counts and account-tab alerts all carry it;
-  `.bdg-row`, `.bdg-count` and `.bdg-acc` carry only the placement,
-  spacing and colour deltas. The former `.badge` / `.cbadge` / `.acc-badge` split
-  is removed.
-- **Text inputs** carry `.field` as the common base. Context modifiers
-  (`.setup-input`, `.setup-input-alt`, `.contact-filter`, `.modal-input`,
-  `.settings-name-input`) layer only the screen-specific presentation
-  deltas (layout, spacing, border or type size). Off-scale legacy measurements are written as `calc()`
-  offsets from the spacing, font and radius tokens so their computed
-  values stay unchanged.
-- **Buttons** use `.btn` as the base system. The purpose-specific
-  variants `.tool`, `.send`, `.tab-btn` and `.folder-tab` keep their
-  class names but share the same tokenised foundation: touch dimensions
-  derive from `--touch`, radii from the `--rad-*` scale and typography
-  from the `--fs-*` scale (`calc()` only where a legacy value sits
-  between scale steps).
+`--bubble-self` is not redefined by the light theme: the light scheme keeps
+the green gradient and switches the foreground on own bubbles to white.
 
-### 4.5 UI Structure (2026-11 UI pass)
+**71 utility classes** use the `.i-*` prefix (counted as exact single-class
+selector rules in the stylesheet). They are small presentation
+rules for templates (layout, truncation, colour/state, spacing and reusable
+output fragments); composite UI belongs to the component classes below. Some
+utility names are legacy hooks rather than literal measurements — for example
+`i-fs10` and `i-t3-10` now resolve to the 12px caption scale.
 
-- **Bottom tab bar (mobile)**: at ≤640px in the list view, a tab bar
-  with five tabs (chats / calls / contacts / my card / settings) is
-  shown; it is `role="navigation"` with `aria-current` on the active
-  tab. Chats and Contacts are two modes of the sidebar list
-  (`_listTab`: chats keeps recency order plus folder/label filters,
-  contacts shows friends only — no groups, no archived — in name
-  order), Calls is a third list mode owned by the call-history
-  module, My card opens the profile panel, and Settings opens the
-  settings view; selection state follows whichever entry point opened
-  the screen. The Chats tab carries the unread-count badge (the
-  `totalUnread` the contact renderer already computes). Which of the
-  optional tabs (calls / contacts / my card / settings) are shown is
-  a per-tab Settings choice (the "Bottom tabs" section,
-  `_settings.tabCalls / tabContacts / tabSelf / tabSettings`, all
-  default shown); the Chats tab is always shown, hiding the Settings
-  tab never strands the user (the sidebar gear button still opens
-  Settings), and hiding the tab of the mode currently on screen
-  returns the list to Chats.
-- **Input bar + more panel**: the composer keeps only +, text field,
-  character count, emoji and send. Attachment, voice recording, dictation,
-  location, stickers and no-reply-needed live in the "+" panel (`#msg-more-panel`);
-  the no-reply-needed state also shows as a dot on the "+" button.
-- **Line icons**: action buttons use a shared inline-SVG set (`.ico`,
-  24×24, `stroke: currentColor`); the send icon is a line-drawn paper plane,
-  matching the app icon (a pixel-art paper plane).
-- **Delivery status by shape**: sent = single check, relay-queued = check
-  inside a ring, delivered = double check, read = filled blue chip,
-  failed = filled red chip — colour is never the only signal. Presence
-  dots likewise differ by shape (online filled circle, away square,
-  offline hollow circle).
+**Component primitives**
+
+- **Buttons**: the general-purpose primitive is `.btn`, with `.btn-g`
+  (primary), `.btn-o` (secondary), `.btn-r` (danger) and `.btn-sm` (compact).
+  Composer, tab and folder controls keep their context classes (`.input-bar
+  .tool`, `.input-bar .send`, `.tab-btn`, `.folder-tab`) but derive their key
+  dimensions, radii and type from the same `--touch`, `--rad-*` and `--fs-*`
+  tokens rather than maintaining independent measurement systems.
+- **Text inputs**: `textarea`, `input[type=password]`, `input[type=text]`,
+  `select` and `.field` share the base text-control rule and focus treatment.
+  Screen/context classes include `.setup-input`, `.setup-input-alt`,
+  `.contact-filter`, `.modal-input`, `.settings-name-input` and
+  `.cloudflare-token-input`; recovery, add-contact and group forms add feature
+  hooks such as `.rp-phrase`, `.add-input` and `.group-input` on top of the
+  same base rather than parallel input components.
+- **Badges**: `.bdg` is the single badge base. `.bdg-row`, `.bdg-count` and
+  `.bdg-acc` are placement/context modifiers for list rows, folder counts and
+  account-tab alerts. The account-tab alert caps its label at `99+`; chat and
+  folder counts currently render their full numeric count.
+- **List rows**: chats, contacts and call-history entries use the `.contact`
+  row shape — circular avatar/initial on the left, name over preview in the
+  centre, time and count/status metadata on the right. Unread rows strengthen
+  the name, preview and time rather than relying on colour alone.
+- **Message bubbles**: `.msg` uses `--rad-bubble`, `--fs-body` and
+  `--shadow-sm`; `.msg.me` is right-aligned with `--bubble-self`, `.msg.them`
+  is left-aligned with `--bubble-other`, and `.msg.sys` is the centred system
+  pill. Consecutive messages use `.grouped` and tighten the adjacent corners
+  to `--rad-sm`.
+- **Composer**: `.input-bar` owns the primary row; `.input-bar .tool` is the
+  circular icon control, `.input-bar .send` is the round send button, and the
+  auto-growing textarea shares the bar. Secondary compose actions live in the
+  `.more-panel` grid as `.more-item` tiles.
+- **Dialogs and modals**: native `<dialog>` is the preferred modal primitive,
+  with auto-inert content, backdrop styling, Escape dismissal and focus
+  behaviour supplied by the dialog helpers; `.overlay` / `.modal` remain for
+  legacy modal surfaces.
+- **Settings**: `.settings-view` is the full-screen container. Inside it,
+  `.settings-panel`, `.settings-section`, `.settings-card`, `.settings-row`,
+  `.settings-row-main`, `.settings-action-row` and `.settings-chevron` form
+  grouped profile/control rows. Markup is produced by `settingsPanelHtml()` in
+  `src/app/settings-panel.js` and exposed through `window.__breezeSettingsPanel`;
+  behaviour remains in delegated handlers in `index.html`.
+- **Empty states**: `.empty-state` and `.empty-actions` are the shared
+  empty-state presentation, normally created through `_emptyState(text,
+  actions)` when actions are dynamic; `.empty-ico` is the defined optional
+  icon treatment, although the present helper emits text and actions.
+- **Icons**: `src/app/icons.js` is the 35-entry line-icon dictionary. Its
+  `icon()`, `iconSlot()`, `createIcon()` and `hydrateIcons()` helpers produce
+  or hydrate SVGs; `index.html` carries the pre-module `_ICON_SHAPES` mirror
+  and the two dictionaries are pinned identical by `tests/ui-icons.test.js`.
+  Dictionary shapes use a 24×24 `viewBox`; the `.ico` class renders them at
+  20×20 by default (`fill: none`, `stroke: currentColor`, round caps/joins),
+  with context sizes for small buttons, tabs, status icons, setup features and
+  large empty/fatal states. Sanitized templates use `data-icon` slots because
+  Trusted Types sanitization does not pass raw SVG through unchanged.
+
+### 4.5 UI Structure
+
+- **Main shell**: the messenger is a sidebar-plus-conversation layout on wide
+  screens and a full-width list/conversation flow on mobile. The sidebar owns
+  account tabs, folder/label filters, search and the self card; the
+  conversation pane owns the header, message log and composer.
+- **Bottom tab bar (mobile)**: at ≤640px in the list view, a tab bar with five
+  possible tabs (chats / calls / contacts / my card / settings) is shown. It is
+  `role="navigation"` with `aria-current` on the active tab. Chats and Contacts
+  are two modes of the sidebar list (`_listTab`: chats keeps recency order plus
+  folder/label filters; contacts shows friends only — no groups, no archived —
+  in name order), Calls is a third list mode owned by the call-history module,
+  My card opens the profile panel, and Settings opens the settings view;
+  selection state follows whichever entry point opened the screen. The Chats
+  tab carries the total unread-count badge and the Calls tab carries the unseen
+  missed-call badge. Which optional tabs are shown is a per-tab Settings choice
+  (`_settings.tabCalls / tabContacts / tabSelf / tabSettings`, all default
+  shown); Chats is always shown, hiding Settings never strands the user (the
+  sidebar gear button remains), and hiding the tab of the mode currently on
+  screen returns the list to Chats.
+- **List rows**: chat, contact and call-history rows share the `.contact`
+  component described in §4.4. Chats may be grouped into time sections and
+  folder/label filters; contacts use name order; call-history rows add a
+  same-mode redial button when the peer is still in contacts.
+- **Conversation**: own messages are right-aligned and peer messages
+  left-aligned using the bubble tokens in §4.4; consecutive messages tighten
+  their adjacent corners. Date separators, unread separators and system
+  messages are centred small pills/lines rather than bubbles.
+- **Delivery status by shape**: sent = single check, relay-queued/deposited =
+  check inside a ring, delivered = double check, read = double check in a
+  filled blue chip, failed = a filled red retry chip — colour is never the only
+  signal. Presence dots likewise differ by shape (online filled circle, away
+  square, offline hollow circle; P2P adds a double-ring treatment).
+- **Input bar + more panel**: the composer keeps only +, text field, character
+  count, emoji and send. Attachment, voice recording, dictation, location,
+  stickers and no-reply-needed live in the "+" panel (`#msg-more-panel`); the
+  no-reply-needed state also shows as a dot on the "+" button. There is no
+  microphone button in the primary row while the panel is closed.
+- **Line icons**: action/status controls use the shared dictionary described in
+  §4.4. Static markup carries `data-icon` slots; dynamic DOM uses `createIcon()`
+  or `_createIcon()`, and sanitized HTML is hydrated after insertion. The send
+  icon is a line-drawn paper plane, matching the product icon motif.
 - **Settings view**: settings render in a dedicated full-screen view
   (`#settings-view`) with its own history entry, opened from the mobile
-  settings tab, the sidebar gear button (`#b-msg-settings`) or `/settings`
-  — never into the chat log.
+  settings tab, the sidebar gear button (`#b-msg-settings`) or `/settings` —
+  never into the chat log. The panel order is: profile card, Privacy, Sound,
+  Notifications, Share, Accounts, Backup, Relays, Bottom tabs, then the
+  advanced Cloudflare section. Sections are grouped cards of icon + label +
+  control rows; navigational/action rows carry a chevron, status rows reuse the
+  same row shape, and the Cloudflare disconnect action is the danger row inside
+  the advanced section.
+- **Empty states**: empty or filtered chat-list states and empty `/search` /
+  `/searchall` results use `_emptyState()` with an explanation plus a next
+  action where one exists (add contact, invite, migrate, clear search, show
+  all, or create group). The initial conversation area also carries a static
+  empty state with an Add friend action. Call history is the current exception:
+  it renders a text-only `.call-history-empty` row.
 - **Add-contact dialog**: the "友達追加" button opens a dialog with three
   explicit choices — add contact (ID or QR), invite friend (invite link),
   create group (plain name field, no `group:` prefix knowledge needed).
-- **Chat header**: a search icon (in-chat search) and an overflow menu
-  routing to existing commands (`/security`, `/mute`, `/pin`, `/poll`);
-  typing `/` in the composer opens a suggestion popover sourced from
-  `_SLASH_COMMANDS`.
-- **Self card**: the user's own profile card sits at the top of the
-  contact list and scrolls with it; the profile panel shows the full
-  public-key ID with a copy button, and the header name and the card open
-  the same editor.
+- **Chat header**: a search icon (in-chat search) and an overflow menu routing
+  to existing commands (`/security`, `/mute`, `/pin`, `/poll`); typing `/` in
+  the composer opens a suggestion popover sourced from `_SLASH_COMMANDS`.
+- **Self card**: the user's own profile card sits at the top of the contact
+  list and scrolls with it; the profile panel shows the full public-key ID with
+  a copy button, and the header name and the card open the same editor.
 - **Power modes**: `auto` / `normal` / `saver` / `emergency` (§3.4);
   in `auto` the mode follows `navigator.getBattery()` (>50% normal,
   20–50% saver, ≤20% emergency; charging steps one level back). Listening
@@ -390,9 +471,8 @@ WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
   is shown at creation, and a "Restore an existing account" expander
   holds the three restore entries (backup file, recovery phrase,
   account + passphrase). There is no disposable / no-recovery creation
-  mode (removed in PR #531); identities created by it earlier keep
-  `recoveryMode: 'none'` and remain refused a backup or a kit, but no
-  new one can be made. The display name is also editable later in the
+  mode; identities created by it earlier keep `recoveryMode: 'none'`
+  and remain refused a backup or a kit, but no new one can be made. The display name is also editable later in the
   Settings profile section, writing through the profile module's own
   save path.
 - **Automatic backup** (`src/app/backup.js`): a Settings toggle
@@ -603,11 +683,11 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 | 2. Security | eval=0, CSP present, no API key leaks | All pass |
 | 3. i18n | Hardcoded strings < 10, toast i18n >= 95% | Met |
 | 4. Code Quality | .style.X < 25, onclick=0, DRY headers=100% | Met |
-| 5. Performance | Lines, RAF >= 2, Fragment >= 1, throttle | Met (index.html 15,999 lines, under the 16,000-line test cap) |
+| 5. Performance | Lines, RAF >= 2, Fragment >= 1, throttle | Met (the index.html line ceiling is enforced by this gate; re-run for the live count) |
 | 6. Protocol Spec | 6 crypto features verified | Met |
 | 7. Required Files | 10 files exist | Met |
 
-**Current score: 165/171, 44 checks, 0 failures — `./validate.sh` PASSED, measured 2026-11-25 (the check count grows as gates land, so re-run rather than trust this figure). Test suite at the same date: 161 files / 2,630 tests, all passing.**
+**Pass/fail status, score and check count are emitted by `./validate.sh` at runtime; the check count grows as gates land, so re-run rather than trust a copied figure.**
 
 ---
 
@@ -628,16 +708,27 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ---
 
-## 10.5 Design System — "Airy Joy" (v3.6.0)
+## 10.5 Motion, Themes, and Platform Adaptation
 
-| Principle | Source | CSS Implementation |
-|-----------|--------|-------------------|
-| Frosted glass layers | iOS HIG | `--glass: blur(20px) saturate(1.5)` token; `backdrop-filter` used 32 times in the stylesheet |
-| Bouncy micro-interactions | Nintendo Switch UI | `--bounce: cubic-bezier(.34,1.56,.64,1)` token |
-| Spring physics feel | Web Animation Best Practices | `:active { transform: scale(.88) }` press-in |
-| Haptic feedback | iOS Taptic Engine | 5 patterns: tap/send/success/error/notify |
+The "Airy Joy" visual character is implemented through translucent layered
+surfaces, spring-like micro-interactions and platform-specific layout
+adaptations, while reduced-motion and contrast preferences remain hard floors.
 
-### Animations (21 named keyframes, counted 2026-11-25)
+| Mechanism | Implementation |
+|-----------|----------------|
+| Frosted layers | `--glass: blur(20px) saturate(1.5)` consumed through standard `backdrop-filter` declarations, with `-webkit-backdrop-filter` fallbacks on key surfaces |
+| Motion tokens | `--ease`, `--ease-smooth` and `--bounce` centralize the standard, smooth and spring-like timing curves |
+| Press feedback | `:active` scale transitions on buttons, contacts, composer controls and call controls; composer/call primary actions use the strongest `scale(.88)` press-in |
+| Haptic feedback | Five named patterns in `src/app/sound.js`: tap, send, success, error and notify; the Capacitor shell replaces them with native `Haptics` calls |
+| Theme transition | `html.theme-transitioning` temporarily enables colour/surface transitions while the theme class changes |
+| Reduced motion | `prefers-reduced-motion: reduce` collapses animation and transition durations and disables smooth scrolling |
+| Increased contrast | `prefers-contrast: more` strengthens `--b1` and `--t3` in dark, light and automatic-light schemes; `forced-colors: active` maps own bubbles, primary buttons and the active-contact edge to system Highlight colours |
+
+### Animations
+
+The stylesheet contains 22 `@keyframes` blocks but 21 unique keyframe names:
+`shimmer` is defined twice with the same body in the two loading-skeleton
+blocks. The unique set is:
 
 `msgBounce` (new message, spring overshoot), `msgAppear`, `msgFlash`,
 `ctxPop` (context menu), `badgePop` (notification badge), `toastBounce`,
@@ -646,16 +737,31 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 `presencePulse`, `typingAppear`, `typingBounce`, `fadeOut`, `lockShake`,
 `shimmer`, `spin`.
 
-### Platform-Specific CSS (58 selector occurrences, counted 2026-11-25)
+### Themes
 
-| Target | Occurrences | Key Adaptations |
-|--------|-------|----------------|
-| `.is-ios` | 16 | Safe area insets, 44pt targets, rubber-band scroll, hover disabled |
-| `.is-android` | 14 | Material You radii (20px), Roboto font, edge-to-edge |
-| `.is-mobile` | 12 | Full-width sidebar, hidden scrollbars, selection disabled |
-| `.is-desktop` | 7 | Compact targets, hover msg-copy, pointer precision |
-| `.is-pwa` | 5 | Frameless, install banner hidden |
-| `.is-electron` | 4 | Drag region, Mac traffic light offset |
+Dark is the `:root` default. `.light` carries the explicit light scheme and
+`.auto-theme` follows `prefers-color-scheme`, using the same 17 light
+colour/shadow overrides listed in §4.4. The theme choice is stored as
+`brz-theme` (`auto`, `dark` or `light`); choosing dark or light manually
+removes `auto-theme` and toggles the `light` class directly.
+
+### Platform-Specific CSS
+
+Platform detection adds classes to `<html>` (`is-ios`, `is-android`,
+`is-mobile` or `is-desktop`, plus `is-win`, `is-linux`, `is-mac`,
+`is-pwa`, `is-electron`, `is-touch` and `is-capacitor`). `is-linux`, `is-touch`
+and `is-capacitor` currently have no dedicated stylesheet rules. The other
+hooks are used for the following adaptations:
+
+| Target | Key adaptations |
+|--------|----------------|
+| `.is-ios` | Safe-area-aware header/sidebar/composer layout, momentum scrolling, larger touch targets, coarse-pointer hover suppression, PWA header treatment |
+| `.is-android` | Safe-area/edge-to-edge layout, Material-style radii (`--rad: 20px`, `--rad-lg: 28px`), Roboto font, sidebar border removal |
+| `.is-mobile` | Full-width/absolute sidebar, wider message bubbles, hidden scrollbars, selection disabled on chrome controls, larger smart replies |
+| `.is-desktop` | Compact rows/buttons on precise pointers, smaller avatars, hover-revealed message copy button |
+| `.is-pwa` | Frameless full-bleed layout and hidden install banner |
+| `.is-electron` | Conversation-header drag region with no-drag controls; `.is-mac.is-electron` offsets the sidebar for macOS traffic lights |
+| `.is-win` | Explicit `--s1` sidebar and conversation-header backgrounds |
 
 ---
 
@@ -755,4 +861,4 @@ Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
 
 ---
 
-*Generated: 2026-03-15 | Last re-measured: 2026-11-25 | Breeze v3.8.0 (CONFIG VERSION) | 34,976 total lines (index.html + src/ + _worker.js + sw.js) | Tests: 161 files / 2,630 passing*
+*Generated: 2026-03-15 | Breeze v3.8.0 (CONFIG VERSION) | `validate.sh` prints the live index.html line count and `npm test` prints the live test counts*
