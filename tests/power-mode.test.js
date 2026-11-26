@@ -209,53 +209,93 @@ describe('power mode — presence checks', () => {
 
 const networkBlock = slice('  // ===== v3.3: Network quality tracking =====', '\n  // ===== Share ID');
 const createNetworkQuality = new Function(
-  'API', '_isOffline', 'fetchT', '_DOM', 'activeContact', 'peers', '_intervals',
-  'setInterval', 'MS', '_powerPresenceOff',
-  networkBlock + '\nreturn measureNetworkQuality;');
+  'API', '_isOffline', 'fetchT', '_DOM', 'activeContact', 'peers',
+  'setTimeout', 'MS', '_powerPresenceOff', '_powerPollFloorMs',
+  networkBlock + '\nreturn { measure: measureNetworkQuality, setActiveContact: c => { activeContact = c; } };');
 
 function networkHarness(settings) {
   const power = create({ MIN: 60000 }, settings, {}, () => {});
   const fetchT = vi.fn(async () => ({ ok: true }));
   const timers = [];
-  const measure = createNetworkQuality(
+  const probe = createNetworkQuality(
     'https://api.test',
     false,
     fetchT,
     { get: () => null },
     null,
     {},
-    [],
-    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    (fn, ms) => { timers.push({ fn, ms, type: 'timeout' }); return timers.length; },
     { MIN: 60000 },
     power._powerPresenceOff,
+    power._powerPollFloorMs,
   );
-  return { fetchT, timers, measure };
+  return { fetchT, timers, ...probe };
 }
 
 describe('power mode — network quality probe', () => {
-  it('skips only the periodic /health probe outside normal mode, re-evaluates every tick, and keeps direct calls live', async () => {
+  it.each([
+    ['normal', 60000],
+    ['saver', 60000],
+    ['emergency', 600000],
+  ])('schedules the first periodic tick in %s mode at %i ms', (mode, ms) => {
+    const h = networkHarness({ powerMode: mode });
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(ms);
+    expect(h.timers[0].type).toBe('timeout');
+  });
+
+  it('re-evaluates the power floor when the mode changes between cycles', () => {
     const settings = { powerMode: 'emergency' };
     const h = networkHarness(settings);
-    expect(h.timers).toHaveLength(1);
-    expect(h.timers[0].ms).toBe(60000);
+    expect(h.timers[0].ms).toBe(600000);
 
+    h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
+
+    settings.powerMode = 'normal';
+    h.timers[1].fn();
+    expect(h.timers).toHaveLength(3);
+    expect(h.timers[2].ms).toBe(60000);
+  });
+
+  it('does not fetch on a periodic tick while no conversation is open, even in normal mode', async () => {
+    const h = networkHarness({ powerMode: 'normal' });
     h.timers[0].fn();
     await flushMicrotasks();
     expect(h.fetchT).not.toHaveBeenCalled();
+    expect(h.timers).toHaveLength(2);
+  });
 
+  it('fetches on a periodic tick in normal mode when a conversation is open', async () => {
+    const h = networkHarness({ powerMode: 'normal' });
+    h.setActiveContact({ pubB64: 'pub1' });
+    h.timers[0].fn();
+    await flushMicrotasks();
+    expect(h.fetchT).toHaveBeenCalledTimes(1);
+    expect(h.fetchT.mock.calls[0][0]).toBe('https://api.test/health');
+    expect(h.timers).toHaveLength(2);
+  });
+
+  it.each(['saver', 'emergency'])('does not fetch on a periodic tick in %s mode even when a conversation is open', async (mode) => {
+    const h = networkHarness({ powerMode: mode });
+    h.setActiveContact({ pubB64: 'pub1' });
+    h.timers[0].fn();
+    await flushMicrotasks();
+    expect(h.fetchT).not.toHaveBeenCalled();
+    expect(h.timers).toHaveLength(2);
+  });
+
+  it('keeps direct measureNetworkQuality calls live without the periodic gates', async () => {
+    const h = networkHarness({ powerMode: 'emergency' });
     await h.measure();
     expect(h.fetchT).toHaveBeenCalledTimes(1);
     expect(h.fetchT.mock.calls[0][0]).toBe('https://api.test/health');
+  });
 
-    settings.powerMode = 'normal';
-    h.timers[0].fn();
-    await flushMicrotasks();
-    expect(h.fetchT).toHaveBeenCalledTimes(2);
-
-    settings.powerMode = 'saver';
-    h.timers[0].fn();
-    await flushMicrotasks();
-    expect(h.fetchT).toHaveBeenCalledTimes(2);
+  it('clears the chain timer explicitly on account switch', () => {
+    const cleanup = slice('_messengerCleanup = () => {', '\n      // Discard this account');
+    expect(cleanup).toContain('if (_netQualityTimer) { clearTimeout(_netQualityTimer); _netQualityTimer = null; }');
   });
 });
 
