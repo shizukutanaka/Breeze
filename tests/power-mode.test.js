@@ -436,16 +436,15 @@ describe('power mode — device alerts check', () => {
 
 // The disappearing-message cleanup is local periodic work, but it still wakes the
 // CPU and scans the whole message store. Slice the deployed registration verbatim
-// and drive its ticks with the real power-mode helpers.
+// and drive its self-rescheduling chain with the real power-mode helpers.
 const disappearBlock = slice('  // Disappearing message cleanup: run every 10s', '\n\n  // GROUP CHAT');
 const runDisappearRegistration = new Function(
-  '_intervals', 'setInterval', 'db', 'activeContact', '_DOM', '_dbg', 'CONFIG', '_powerPresenceOff', '_vault',
-  disappearBlock + '\nreturn true;');
+  'setTimeout', 'db', 'activeContact', '_DOM', '_dbg', 'CONFIG', '_powerPresenceOff', '_powerPollFloorMs', '_vault',
+  'let _disappearCleanupTimer = null;\n' + disappearBlock + '\nreturn { pendingTimer: () => _disappearCleanupTimer };');
 
-function disappearHarness(settings, rows = []) {
+function disappearHarness(settings, rows = [], ui = null) {
   const power = create({ MIN: 60000 }, settings, {}, () => {});
   const timers = [];
-  const intervals = [];
   const store = {
     getAll: vi.fn(() => {
       const req = {
@@ -462,29 +461,40 @@ function disappearHarness(settings, rows = []) {
       objectStore: vi.fn(() => store),
     })),
   };
-  runDisappearRegistration(
-    intervals,
+  const registration = runDisappearRegistration(
     (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     db,
-    null,
-    { get: () => null },
+    ui?.activeContact || null,
+    ui?.dom || { get: () => null },
     vi.fn(),
     { DISAPPEAR_CHECK_MS: 10000, FADE_OUT_MS: 250 },
     power._powerPresenceOff,
+    power._powerPollFloorMs,
     { isBlocked: () => false },
   );
-  return { timers, intervals, db, store };
+  return { timers, db, store, registration };
 }
 
 describe('power mode — disappearing message cleanup', () => {
-  it('performs no db work in saver mode, even over multiple ticks', async () => {
-    const h = disappearHarness({ powerMode: 'saver' });
+  it.each([
+    ['normal', 10000],
+    ['saver', 60000],
+    ['emergency', 600000],
+  ])('schedules the first tick in %s mode at %i ms', (mode, ms) => {
+    const h = disappearHarness({ powerMode: mode });
     expect(h.timers).toHaveLength(1);
-    expect(h.timers[0].ms).toBe(10000);
-    expect(h.intervals).toEqual([1]);
+    expect(h.timers[0].ms).toBe(ms);
+    expect(h.db.transaction).not.toHaveBeenCalled();
+  });
+
+  it.each(['saver', 'emergency'])('performs no db work in %s mode, even over multiple ticks', async (mode) => {
+    const h = disappearHarness({ powerMode: mode });
+    expect(h.timers).toHaveLength(1);
 
     await h.timers[0].fn();
-    await h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    await h.timers[1].fn();
+    expect(h.timers).toHaveLength(3);
     await flushMicrotasks();
 
     expect(h.db.transaction).not.toHaveBeenCalled();
@@ -492,29 +502,20 @@ describe('power mode — disappearing message cleanup', () => {
     expect(h.store.delete).not.toHaveBeenCalled();
   });
 
-  it('performs no db work in emergency mode, even over multiple ticks', async () => {
-    const h = disappearHarness({ powerMode: 'emergency' });
-
-    await h.timers[0].fn();
-    await h.timers[0].fn();
-    await h.timers[0].fn();
-    await flushMicrotasks();
-
-    expect(h.db.transaction).not.toHaveBeenCalled();
-    expect(h.store.getAll).not.toHaveBeenCalled();
-    expect(h.store.delete).not.toHaveBeenCalled();
-  });
-
-  it('re-evaluates the gate every tick and scans on the next tick after switching to normal', async () => {
-    const settings = { powerMode: 'saver' };
+  it('re-evaluates the delay after every tick when the mode changes', async () => {
+    const settings = { powerMode: 'emergency' };
     const h = disappearHarness(settings);
+    expect(h.timers[0].ms).toBe(600000);
 
     await h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
     expect(h.db.transaction).not.toHaveBeenCalled();
 
     settings.powerMode = 'normal';
-    await h.timers[0].fn();
-
+    await h.timers[1].fn();
+    expect(h.timers).toHaveLength(3);
+    expect(h.timers[2].ms).toBe(10000);
     expect(h.db.transaction).toHaveBeenCalledTimes(1);
     expect(h.db.transaction).toHaveBeenLastCalledWith('messages', 'readwrite');
   });
@@ -534,6 +535,22 @@ describe('power mode — disappearing message cleanup', () => {
     expect(h.store.getAll).toHaveBeenCalledTimes(1);
     expect(h.store.delete).toHaveBeenCalledTimes(1);
     expect(h.store.delete).toHaveBeenLastCalledWith('expired');
+  });
+
+  it('keeps the chain alive when a tick throws', async () => {
+    const h = disappearHarness({ powerMode: 'normal' }, [], {
+      activeContact: { id: 'c1' },
+      dom: { get: () => ({ querySelectorAll() { throw Error('dom gone'); } }) },
+    });
+
+    await expect(h.timers[0].fn()).rejects.toThrow('dom gone');
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(10000);
+  });
+
+  it('clears the chain timer explicitly on account switch', () => {
+    const cleanup = slice('_messengerCleanup = () => {', '\n      // Discard this account');
+    expect(cleanup).toContain('if (_disappearCleanupTimer) { clearTimeout(_disappearCleanupTimer); _disappearCleanupTimer = null; }');
   });
 });
 
