@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const profileSrc = readFileSync(new URL('../src/app/profile.js', import.meta.url), 'utf8');
 const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
+const settingsViewSrc = readFileSync(new URL('../src/app/settings-view.js', import.meta.url), 'utf8');
 const accountTabsSrc = readFileSync(new URL('../src/app/account-tabs.js', import.meta.url), 'utf8');
 const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
 
@@ -55,16 +56,17 @@ describe('(a) settings is a dedicated view with history', () => {
   });
 
   it('openSettingsView renders into the view and pushes a history entry', () => {
-    const fn = sliceBetween('function openSettingsView()', 'function closeSettingsView()');
-    expect(fn).toContain("_DOM.get('settings-body')");
-    expect(fn).toContain('_renderSettingsPanel(d)');
+    const start = settingsViewSrc.indexOf('function open()');
+    const fn = settingsViewSrc.slice(start, settingsViewSrc.indexOf('function close()', start));
+    expect(fn).toContain("deps._DOM.get('settings-body')");
+    expect(fn).toContain('deps._renderSettingsPanel(d)');
     expect(fn).toContain("history.pushState({ breezeSettings: true }, '');");
     expect(fn).not.toContain('msg-messages');
   });
 
   it('Back closes the view (popstate + the view back button)', () => {
-    expect(html).toContain("window.addEventListener('popstate', () => { if (_settingsViewOpen) closeSettingsView(); }, { signal: _ac.signal });");
-    const fn = sliceBetween("_DOM.get('b-settings-back')?.addEventListener('click'", "window.addEventListener('popstate', () => { if (_settingsViewOpen)");
+    expect(html).toContain("window.addEventListener('popstate', () => { if (_settingsView?.isOpen()) closeSettingsView(); }, { signal: _ac.signal });");
+    const fn = sliceBetween("_DOM.get('b-settings-back')?.addEventListener('click'", "window.addEventListener('popstate', () => { if (_settingsView?.isOpen())");
     expect(fn).toContain('history.back()');
     expect(fn).toContain('closeSettingsView()');
   });
@@ -76,9 +78,11 @@ describe('(a) settings is a dedicated view with history', () => {
   });
 
   it('the settings panel no longer renders into #msg-messages', () => {
-    const fn = sliceBetween('function _renderSettingsPanel(d)', 'function openSettingsView()');
+    const start = settingsViewSrc.indexOf('function renderPanel(d)');
+    const fn = settingsViewSrc.slice(start, settingsViewSrc.indexOf('function open()', start));
     expect(fn).not.toContain('_cmdPanelEl');
     expect(fn).not.toContain('box.appendChild');
+    expect(fn).not.toContain('msg-messages');
     // The panel content itself survived the move (privacy + backup rows);
     // after the stage-4 extraction that markup lives in the module.
     expect(settingsPanelSrc).toContain("check('hide-rr'");
@@ -86,7 +90,8 @@ describe('(a) settings is a dedicated view with history', () => {
   });
 
   it('settings has no add-account button (the tab bar is the one door)', () => {
-    const fn = sliceBetween('function _renderSettingsPanel(d)', 'function openSettingsView()');
+    const start = settingsViewSrc.indexOf('function renderPanel(d)');
+    const fn = settingsViewSrc.slice(start, settingsViewSrc.indexOf('function open()', start));
     expect(fn).not.toContain('data-action="add-account"');
   });
 });

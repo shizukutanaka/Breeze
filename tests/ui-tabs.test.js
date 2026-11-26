@@ -20,10 +20,12 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
 const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
+const settingsViewSrc = readFileSync(new URL('../src/app/settings-view.js', import.meta.url), 'utf8');
 
 const barStart = html.indexOf('<nav id="msg-tabbar"');
 const bar = html.slice(barStart, html.indexOf('</nav>', barStart));
 const slice = (from, to) => html.slice(html.indexOf(from), html.indexOf(to, html.indexOf(from)));
+const sliceSettingsView = (from, to) => settingsViewSrc.slice(settingsViewSrc.indexOf(from), settingsViewSrc.indexOf(to, settingsViewSrc.indexOf(from)));
 
 describe('bottom tab bar markup', () => {
   it('exists inside the main UI with exactly five tabs, calls second', () => {
@@ -165,12 +167,12 @@ describe('bottom tab bar wiring', () => {
     expect(fn).toContain("_DOM.get('b-msg-back')?.classList.remove('hidden');");
   });
   it('opening the settings view from any entry point marks the settings tab current', () => {
-    const fn = slice('function openSettingsView()', 'function closeSettingsView()');
-    expect(fn).toContain("_renderSettingsPanel(d); _setActiveTab('settings');");
+    const fn = sliceSettingsView('function open()', 'function close()');
+    expect(fn).toContain("deps._renderSettingsPanel(d); deps._setActiveTab('settings');");
   });
   it('closing the settings view restores the list tab that is showing', () => {
-    const fn = slice('function closeSettingsView()', "_DOM.get('b-msg-settings')");
-    expect(fn).toContain('_setActiveTab(_listTab);');
+    const fn = sliceSettingsView('function close()', 'function isOpen()');
+    expect(fn).toContain('deps._setActiveTab(deps.listTab());');
   });
   it('the my card tab opens the profile panel and restores the list tab when it closes', () => {
     const fn = slice('function _showSelfTab()', 'function _showSettingsTab()');
@@ -211,25 +213,26 @@ describe('tab visibility settings (Settings → Bottom tabs)', () => {
   it('the privacy section offers the call-history recording switch', () => {
     expect(settingsPanelSrc).toContain("check('call-history-log'");
     expect(settingsPanelSrc).toContain("t('callHistoryLogLabel')");
-    expect(html).toContain("if (s === 'call-history-log') { _settings.callHistoryLog = cb.checked; saveSettings(); return; }");
+    expect(settingsViewSrc).toContain("if (s === 'call-history-log') { deps.settings().callHistoryLog = cb.checked; deps.saveSettings(); return; }");
     expect(ja.callHistoryLogLabel).toBe('この端末に通話履歴を残す');
   });
   it('toggling a checkbox persists and re-applies the bar immediately', () => {
-    const handler = slice("if (s === 'show-peer-name')", "if (s === 'rr-delay')");
+    const handler = sliceSettingsView("if (s === 'show-peer-name')", "if (s === 'rr-delay')");
     expect(handler).toContain("if (s.startsWith('tab-vis-')) {");
-    expect(handler).toContain('saveSettings(); _applyTabVisibility();');
+    expect(handler).toContain('deps.saveSettings(); deps._applyTabVisibility();');
   });
   it('hiding the tab of the screen you are on returns you to chats', () => {
-    const handler = slice("if (s === 'show-peer-name')", "if (s === 'rr-delay')");
-    expect(handler).toContain("if (!cb.checked && k === 'contacts' && _listTab === 'contacts') _showChatsTab();");
-    expect(handler).toContain("if (!cb.checked && k === 'calls' && _listTab === 'calls') _showChatsTab();");
-    expect(handler).toContain("if (!cb.checked && k === 'settings') closeSettingsView();");
+    const handler = sliceSettingsView("if (s === 'show-peer-name')", "if (s === 'rr-delay')");
+    expect(handler).toContain("if (!cb.checked && k === 'contacts' && deps.listTab() === 'contacts') deps._showChatsTab();");
+    expect(handler).toContain("if (!cb.checked && k === 'calls' && deps.listTab() === 'calls') deps._showChatsTab();");
+    expect(handler).toContain("if (!cb.checked && k === 'settings') deps.closeSettingsView();");
   });
   it('_applyTabVisibility hides exactly the tabs whose setting is off, and runs at wiring time', () => {
     const fn = slice('function _applyTabVisibility()', 'function _showListTab(mode)');
     expect(fn).toContain("const vis = { calls: _settings.tabCalls, contacts: _settings.tabContacts, self: _settings.tabSelf, settings: _settings.tabSettings };");
     expect(fn).toContain("classList.toggle('hidden', vis[k] === false);");
-    expect(html.match(/_applyTabVisibility\(\);/g)).toHaveLength(2); // wiring time + the settings change handler line
+    expect(html.match(/_applyTabVisibility\(\);/g)).toHaveLength(1); // wiring time
+    expect(settingsViewSrc.match(/deps\._applyTabVisibility\(\);/g)).toHaveLength(1); // the settings change handler line
   });
   it('settings stays reachable with its tab hidden (the header gear keeps its own door)', () => {
     expect(html).toContain("_DOM.get('b-msg-settings')?.addEventListener('click', () => openSettingsView());");
@@ -257,10 +260,10 @@ describe('bottom tab order settings', () => {
     expect(apply).toContain('bar.appendChild(el)');
     expect(html).toContain('_applyTabOrder(); _applyTabVisibility();');
     expect(html).toContain('await loadSettings(); _applyTabOrder();');
-    expect(html).toContain('tabOrder: _validTabOrder()');
-    expect(html).toContain("ev.target.closest('[data-action=\"tab-move\"]')");
-    expect(html).toContain("d.addEventListener('dragstart'");
-    expect(html).toContain("d.addEventListener('drop'");
-    expect(html).toContain('_settings.tabOrder = order.slice(); saveSettings(); _applyTabOrder();');
+    expect(settingsViewSrc).toContain('tabOrder: deps._validTabOrder()');
+    expect(settingsViewSrc).toContain("ev.target.closest('[data-action=\"tab-move\"]')");
+    expect(settingsViewSrc).toContain("d.addEventListener('dragstart'");
+    expect(settingsViewSrc).toContain("d.addEventListener('drop'");
+    expect(settingsViewSrc).toContain('deps.settings().tabOrder = order.slice(); deps.saveSettings(); deps._applyTabOrder();');
   });
 });

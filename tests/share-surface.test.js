@@ -11,10 +11,13 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createShareTools } from '../src/app/share.js';
+import { settingsPanelHtml } from '../src/app/settings-panel.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
 const sw = readFileSync(join(HERE, '..', 'sw.js'), 'utf8');
+const settingsPanelRendered = settingsPanelHtml({ t: (key) => key, esc: (x) => String(x), myName: '', fanout: 2, powerMode: 'auto', relays: [] });
+const settingsViewSrc = readFileSync(join(HERE, '..', 'src', 'app', 'settings-view.js'), 'utf8');
 const ja = JSON.parse(readFileSync(join(HERE, '..', 'locales', 'ja.json'), 'utf8'));
 
 // ── Fake DOM: just enough of <dialog>/<input> for the module ─────────
@@ -221,10 +224,10 @@ describe('surfacing wiring (index.html / sw.js / locales)', () => {
   });
 
   it('the settings panel offers the same two doors', () => {
-    expect(html).toContain('data-action="invite-friend"');
-    expect(html).toContain('data-action="migrate-apps"');
-    expect(html).toContain("ev.target.closest('[data-action=\"invite-friend\"]')");
-    expect(html).toContain("ev.target.closest('[data-action=\"migrate-apps\"]')");
+    expect(settingsPanelRendered).toContain('data-action="invite-friend"');
+    expect(settingsPanelRendered).toContain('data-action="migrate-apps"');
+    expect(settingsViewSrc).toContain("ev.target.closest('[data-action=\"invite-friend\"]')");
+    expect(settingsViewSrc).toContain("ev.target.closest('[data-action=\"migrate-apps\"]')");
   });
 
   it('EN keys are in index.html and JA keys in locales/ja.json', () => {

@@ -37,6 +37,7 @@ import { createNameTools } from '../src/app/lookalike-names.js';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const names = readFileSync(new URL('../src/app/lookalike-names.js', import.meta.url), 'utf8');
 const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
+const settingsViewSrc = readFileSync(new URL('../src/app/settings-view.js', import.meta.url), 'utf8');
 
 function loadNameTools(settings, activeContact) {
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -159,7 +160,7 @@ describe('wiring — one shared path, no parallel store', () => {
   it('the Settings toggle exists, defaults on, and re-renders on change', () => {
     expect(html).toContain('showPeerName: true,');
     expect(settingsPanelSrc).toContain("check('show-peer-name'");
-    expect(html).toContain("if (s === 'show-peer-name') { _settings.showPeerName = cb.checked; saveSettings(); renderContacts(); if (activeContact) _setConvName(activeContact); return; }");
+    expect(settingsViewSrc).toContain("if (s === 'show-peer-name') { deps.settings().showPeerName = cb.checked; deps.saveSettings(); deps.renderContacts(); const current = deps.activeContact(); if (current) deps._setConvName(current); return; }");
   });
 
   it('the contact-info panel is reachable from both menus and carries the editor + local-only note', () => {
