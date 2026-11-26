@@ -46,9 +46,10 @@ export function createGroupCreate(D) {
       D.auditLog('group', 'Created group: ' + name + ' (' + members.length + ' members)');
       await D.renderContacts();
 
+      const invite = await D.invitation?.({ type: 'group_invite', groupId, name, members }) || { type: 'group_invite', groupId, name, members };
       for (const m of members) {
         if (m.id === D.myId()) continue;
-        const encrypted = await D.encryptFor(JSON.stringify({ type: 'group_invite', groupId, name, members }), m.pubB64);
+        const encrypted = await D.encryptFor(JSON.stringify(invite), m.pubB64);
         if (!encrypted) { D.dbg(null, 'encrypt failed for invite to ' + m.id?.slice(0, 8)); continue; }
         await D.relaySend(m.id, { to: m.id, from: D.myId(), fromPub: D.myPubB64(), fromName: D.myName(), payload: encrypted, ts: Date.now(), isGroupInvite: true }, m.pubB64);
       }
@@ -71,10 +72,11 @@ export function createGroupCreate(D) {
         members: [{ id: D.myId(), pubB64: D.myPubB64(), name: D.myName() }],
         addedAt: Date.now(), unread: 0, pubB64: ''
       });
+      const invite = await D.invitation?.({ type: 'group_invite', groupId, name, members: [{ id: D.myId(), pubB64: D.myPubB64(), name: D.myName(), caps: gcaps }] });
       await D.renderContacts();
 
       // Generate and share invite link
-      const joinUrl = D.origin() + D.pathname() + '?join=' + data.token;
+      const joinUrl = D.origin() + D.pathname() + '?join=' + data.token + (invite?.protectionInvite ? '&invite=' + encodeURIComponent(JSON.stringify(invite)) : '');
       D.clipboardWrite(joinUrl);
 
       const [box, d] = D.cmdPanel('import-result');
@@ -94,8 +96,10 @@ export function createGroupCreate(D) {
 
   function startGroupMemberPoll(token, groupId) {
     if (!D.hasApi()) return;
+    let polling = false;
     const poll = setInterval(async () => {
-      if (D.powerOff?.()) return;
+      if (D.powerOff?.() || polling) return;
+      polling = true;
       try {
         const resp = await D.postAPIRaw('/group/info', { token });
         if (!resp.ok) { clearInterval(poll); return; }
@@ -106,6 +110,7 @@ export function createGroupCreate(D) {
         const oldCount = group.members?.length || 0;
         const newMembers = safeMemberList(data.members);
         if (newMembers.length > oldCount) {
+          if (D.admitRoster && !await D.admitRoster(group, newMembers)) return;
           group.members = newMembers;
           await D.dbPut('contacts', group);
           // sendMessage reads activeContact.members (separate object) — without this an open group silently excludes new joiners until reopened.
@@ -117,7 +122,7 @@ export function createGroupCreate(D) {
           }
           D.renderContacts();
         }
-      } catch(e) { D.dbg(e); }
+      } catch(e) { D.dbg(e); } finally { polling = false; }
     }, 5000);
     D.pushInterval(poll);
     // Stop after 30 minutes
@@ -127,6 +132,7 @@ export function createGroupCreate(D) {
   async function processJoinToken(token) {
     if (!D.hasApi()) return;
     try {
+      const linkInvite = D.linkInvite?.();
       // Join the group on server
       const joinCaps = [...(D.groupV5() ? [D.capsGroupV5()] : []), ...(D.authorCaps?.() || [])];
       const joinAuth = D.groupJoinAuth ? await D.groupJoinAuth(token, D.myPubB64(), D.myName(), joinCaps) : {};
@@ -143,8 +149,11 @@ export function createGroupCreate(D) {
       const existing = await D.dbGet('contacts', groupId);
       if (existing) {
         // Update members list
-        existing.members = safeMemberList(data.members);
-        await D.dbPut('contacts', existing);
+        const next = safeMemberList(data.members);
+        if (!D.admitRoster || await D.admitRoster(existing, next)) {
+          existing.members = next;
+          await D.dbPut('contacts', existing);
+        }
       } else {
         await D.dbPut('contacts', {
           id: groupId, name: typeof data.name === 'string' ? data.name.slice(0, 64) : 'Group',
@@ -161,6 +170,7 @@ export function createGroupCreate(D) {
           await D.addContact(m.pubB64, m.name);
         }
       }
+      if (!existing && linkInvite) await D.acceptLink(groupId, linkInvite);
 
       await D.renderContacts();
 

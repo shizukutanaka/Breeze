@@ -343,6 +343,47 @@ window, legacy label and rollout limits are specified in [GROUP_AUTHOR_SIG.md](G
 It signs the existing v3/v5 ciphertext string without changing Sender-Key KDFs; it is
 not an implementation of the reference per-message/epoch signing-key ratchets below.
 
+### Authenticated legacy-admission exception
+
+`src/app/group-protection.js` keeps the sticky `ga-policy` strict floor intact and stores
+anchor, sequence, exact authorized roster and the last 20 protection notices under
+`identity/verify:group-protection:<groupId>` (covered by vault history encryption).
+No relay field establishes authority. New E2EE invitations carry `protectionInvite`;
+new share links carry that signed invitation as the explicit `invite` URL parameter.
+The creator's Ed25519 key must match the local contact pin, establishing a missing pin
+only through verified v5 prekeys. An already-existing group cannot appoint an admin by
+receiving another invitation. Its user verifies a contact's both-key safety number and
+explicitly confirms that contact as admin from the group screen instead.
+An existing local creator can explicitly self-confirm after proving possession of its
+local signing key. This is gated by the fresh locally stored `createdBy` creation record
+and its own roster membership, never relay creator/admin fields; both record and keys
+are rechecked after the default-cancel confirmation. Join/invitation ingress does not
+copy relay creation roles. This does not waive other members' contact verification.
+
+Ed25519 signs UTF-8 `BreezeGroupProtection/invite/v1:` followed by compact JSON of
+`[groupId,adminEncryptionPub,adminSigningPub,name,roster]`. Roster controls sign the
+domain `BreezeGroupProtection/roster/v1:` and JSON
+`[groupId,adminEncryptionPub,adminSigningPub,positiveSequence,mode,roster]`.
+Keys/signatures use canonical standard base64. The roster is sorted by full encryption
+public key; entries contain `id,pubB64,name,caps` in that property order, unique keys,
+64-character names, and sorted/deduplicated capability strings (20 of at most 32 chars).
+IDs equal the first 12 public-key characters. Canonical transcripts are at most 60KB;
+serialized control frames at most 65535 UTF-8 bytes. No Sender-Key KDF or primitive changes.
+
+Controls use `{type:'group_protection',groupId,admin,ed,seq,mode,members,sig}` in the existing
+E2EE `isProfile` channel. Unknown/legacy peers ignore them. Only the pinned admin may
+authorize a greater sequence containing both itself and the receiver. Invalid signatures,
+wrong groups/pins and stale sequences reject. An explicit default-cancel warning precedes
+signing a legacy roster. `legacy` permits unsigned author messages only while the local
+roster exactly matches the authorized roster; any mismatch stays strict. Authorization is
+persisted before the roster so an interrupted update stays strict. Removing legacy members
+via the admin flow signs `strict`; fresh authenticated capability proofs from all legacy
+members can also tighten locally. Both transitions persist notices. This does not add roster
+consensus, prevent relay withholding, or retrofit enforcement into old clients.
+An approved roster containing a pre-v5 member rotates each upgraded sender's frozen
+v5 chain into fresh v3 material at a greater epoch before distribution; it never reuses
+a v5 chain as a legacy raw key. Signed-author restoration remains independent of v3/v5.
+
 ```
 { v:5, g:true, ep:epoch, c:counter, i:[iv], d:[ct‖tag], cm:[keyCommitment],
   s:[perMsgSig], es:[epochSig], spk:[perMsgPub], nsk:[nextPerMsgPub] }

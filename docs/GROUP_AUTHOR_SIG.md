@@ -105,8 +105,12 @@ their authenticated sender must match the original message author before history
 
 ## Explicitly deferred
 
-- Downgrade-confirmation/admission UI and membership consensus. Strict never downgrades,
-  so adding a legacy member can make that member unable to contribute readable traffic.
+- Membership consensus. A sticky strict floor now permits an exact-roster legacy
+  exception only through the pinned admin's sequenced signature and explicit
+  default-cancel warning. New signed invitations establish admin anchors; existing
+  groups require contact verification and explicit group-screen confirmation, never
+  relay roles. Persistent notices track reduced/restored protection. See the
+  authenticated legacy-admission section of [CRYPTO-SPEC.md](CRYPTO-SPEC.md).
 - Root-signed device **signing-key** bindings. The current registry binds encryption
   keys only. Secondary senders are unsigned/visibly legacy until separately pinned;
   they cannot send into strict groups. Root copies still reach linked devices using

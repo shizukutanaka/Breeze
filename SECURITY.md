@@ -686,9 +686,9 @@ an envelope or relay roster. Own-account root copies use the locally pinned link
 `group-author-sig-v1` is independent of `group-v5`. The N-party AND floor uses explicit
 capability proofs signed by every member's pinned identity and carried in authenticated
 1:1 Sender-Key distributions. Relay-only caps cannot activate strict mode. Strict is
-persisted monotonically, survives roster changes/restarts, and never falls back; entering
+persisted monotonically and survives roster changes/restarts; entering
 strict rotates fresh Sender-Key material into a new epoch. Invalid signatures reject in
-every group. Unsigned legacy messages remain permitted ONLY before strict activation,
+every group. Unsigned legacy messages remain permitted before strict activation,
 with **Legacy — author not verified** shown live and on history reload. Such groups still
 permit symmetric-key insider forgery of unsigned traffic; the label is not an author proof.
 
@@ -702,7 +702,32 @@ Acceptance, receiver ratchet and replay state share one IDB transaction. Web Loc
 sender allocation and receiver processing across tabs; runtimes without signing/Web Locks
 stay legacy-only. Message-at-rest sealing and backup-dirty notifications are preserved.
 
-**Deferred rollout work:** explicit downgrade/legacy-admission confirmation UI, membership
+**Explicit legacy admission:** a strict group's floor can only be excepted by a root
+Ed25519-signed, monotonically sequenced roster authorized by its locally pinned admin.
+The creator signs new invitations (including the signed invitation carried in new join
+links). An existing group never learns admin authority from relay roles, capabilities,
+or a newly received invitation: users must verify the admin contact's both-key safety
+number, then explicitly confirm that contact from the group screen. Without that anchor,
+existing strict groups remain strict. A changed admin pin also fails closed.
+The creator may instead explicitly confirm its own signing identity, proved with its
+local private key, from the group screen. This exception requires the existing local
+`createdBy` creation record and local roster membership, rechecked after confirmation.
+Only local creation writes that field: join responses and received invitations discard
+creator/admin role fields. Relay `creatorId`, `admins` or an in-memory role claim cannot
+authorize this exception. Other members still verify and confirm the creator contact.
+
+Before admitting a roster containing legacy capability claims the anchored admin sees
+an impersonation warning with Cancel focused; cancellation persists across reloads.
+The exception covers only that exact signed roster, not later relay changes. Upgraded
+members retain bounded, vault-covered drop/restoration notices in the group header.
+Removal of legacy members through the admin flow, or fresh authenticated signature
+proofs from every legacy member, restores rejection of unsigned messages. The sticky
+strict floor is never erased. Old clients ignore the E2EE profile control extension;
+they cannot enforce this policy or display these notices. A relay can withhold updates
+and split availability, not mint an admin or authorize a downgrade; this is not group
+membership consensus. Imported/old unsigned join links do not establish an admin anchor.
+
+**Deferred rollout work:** membership
 consensus, per-message forward-secure signing keys, selective relay ACK redesign, and
 group consumption of root-signed **device signing-key** bindings. Opt-in linking now
 issues both-key certificates, but the group protocol does not consume them yet.
