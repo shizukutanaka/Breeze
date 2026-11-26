@@ -81,9 +81,14 @@ function hasBaseRule(selector) {
   return re.test(html);
 }
 function fontSizeOf(selector) {
-  const m = ruleBody(selector).match(/font-size:\s*(\d+(?:\.\d+)?)px/);
-  expect(m, `${selector} declares a font-size`).toBeTruthy();
-  return parseFloat(m[1]);
+  const body = ruleBody(selector);
+  const literal = body.match(/font-size:\s*(\d+(?:\.\d+)?)px/);
+  if (literal) return parseFloat(literal[1]);
+  const ref = body.match(/font-size:\s*var\((--[a-z0-9-]+)\)/);
+  expect(ref, `${selector} declares a literal or token font-size`).toBeTruthy();
+  const value = THEMES['dark (:root)'][ref[1]];
+  expect(value, `${selector} token ${ref[1]} is defined in :root`).toMatch(/^\d+(?:\.\d+)?px$/);
+  return parseFloat(value);
 }
 
 // ── (a) line icons ──────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createDeviceAlerts, activityText, activityHash } from '../src/app/device-alerts.js';
 import { createDeviceLink } from '../src/app/device-link.js';
+import { bindingText } from '../src/app/device-keys.js';
 import worker, { handleAccountActivity, handlePreKeyStatus, handleAccountDelete } from '../_worker.js';
 import { makeEnv, apiRequest } from './helpers/mockKV.js';
 
@@ -87,6 +88,34 @@ describe('device alert factory and signed registry extraction', () => {
 });
 
 describe('account activity and key discrepancy detection', () => {
+  it('authenticates binding metadata independently and retains it when a relay strips metadata', async () => {
+    const f = await fixture(), secondary = await identity();
+    const proof = { v: 1, root: f.who.pub, rootEd: f.who.ed, pub: secondary.pub, ed: secondary.ed, nonce: 'a'.repeat(32), issuedAt: 100 };
+    proof.sig = await f.who.sign(bindingText(proof));
+    const rec = await registry(f.who, [f.who.pub, secondary.pub], 100);
+    rec.devices[1].binding = { ...proof, ed: f.who.ed };
+    f.setResponse(rec); await f.module.registry(f.who.userId, f.who.pub);
+    expect(f.state().registries[f.who.userId].bindings).toEqual({});
+    rec.devices[1].binding = proof; f.setResponse(rec); await f.module.registry(f.who.userId, f.who.pub);
+    expect(f.state().events.filter(e => e.kind === 'binding')).toHaveLength(1);
+    delete rec.devices[1].binding;
+    f.setResponse(rec); await createDeviceAlerts(f.D).registry(f.who.userId, f.who.pub);
+    expect(f.state().registries[f.who.userId].bindings[secondary.pub]).toEqual(proof);
+    expect(f.state().events.filter(e => e.kind === 'binding')).toHaveLength(1);
+    f.setResponse(await registry(f.who, [f.who.pub], 200)); await f.module.registry(f.who.userId, f.who.pub);
+    expect(f.state().events.filter(e => e.kind === 'removed')).toMatchObject([{ device: secondary.pub }]);
+    expect(f.state().registries[f.who.userId].bindings).toEqual({});
+    await createDeviceAlerts(f.D).registry(f.who.userId, f.who.pub);
+    expect(f.state().events.filter(e => e.kind === 'removed')).toHaveLength(1);
+  });
+  it('prefers the protected ceremony root pin to a conflicting public contact pin', async () => {
+    const f = await fixture(), root = await identity(), wrong = await identity();
+    f.rows.set('identity:account', { root: root.pub, rootEd: wrong.ed });
+    f.rows.set('identity:verify:device-link', { binding: { root: root.pub, rootEd: root.ed } });
+    f.rows.set('contacts:' + root.userId, { sigPub: wrong.ed });
+    f.setResponse(await registry(root, [root.pub, f.who.pub]));
+    expect((await f.module.registry(root.userId, root.pub)).list).toContain(f.who.pub);
+  });
   it.each(['session', 'push'])('authenticates a new %s and persists acknowledgement across reload', async kind => {
     const f = await fixture(), e = await event(f.who, kind);
     await f.module.observeActivities({ events: [e] }, f.who.pub, f.who.ed, 'a'.repeat(32));

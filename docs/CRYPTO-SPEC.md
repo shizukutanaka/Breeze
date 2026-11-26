@@ -1,5 +1,53 @@
 # Breeze Crypto Module Specification (`src/crypto/`)
 
+## Opt-in device-key linking v1 (first slice)
+
+`src/app/device-keys.js` is deployed ESM, not an inline crypto mirror. All signatures
+use WebCrypto Ed25519, standard padded canonical base64 keys (32 bytes) and signatures
+(64 bytes), and UTF-8 transcripts. No private key is transferred.
+
+On the secondary, `/link keys` persists a fresh random 16-byte hex nonce in
+`identity:verify:device-link`, then displays `breeze-device-offer:v1:` followed by
+base64 UTF-8 JSON `{v:1,pub,ed,nonce,sig}`. The signature proves possession of `ed`:
+`BreezeDeviceOffer/v1:` + JSON `[pub,ed,nonce]`. The user transfers the entire offer
+directly to the primary, which confirms the encryption-key identity and signs a
+certificate `{v:1,root,rootEd,pub,ed,nonce,issuedAt,sig}` over
+`BreezeDeviceBinding/v1:` + JSON `[root,rootEd,pub,ed,nonce,issuedAt]`.
+`issuedAt` is a positive safe-integer Unix millisecond timestamp, not a revocation epoch.
+The primary must control the locally configured root identity; an offer alone does
+not prove possession of the encryption private key. Root authorization of the
+physically transferred offer binds the two public keys.
+
+The certificate is published as optional `devices[].binding` metadata in the existing
+legacy signed registry, preserved by the current Worker. Each certificate is verified
+independently; the legacy registry signature authenticates only the encryption-key list
+and timestamp. Certificates cannot be transplanted to another root or device. A relay
+may strip metadata; previously verified bindings are retained until the signed list
+removes that device. A retained certificate is evidence of issuance, not fresh authority.
+
+The primary returns `breeze-device-binding:v1:` + base64 UTF-8 JSON certificate.
+The user carries this entire token directly back to the same secondary and runs
+`/linkto <certificate>`, explicitly confirming its provenance. The root signing pin
+comes from this out-of-band token, NEVER the relay's `rootEd`. The secondary verifies
+its own two keys, outstanding nonce, root signature and signed registry membership
+with a registry timestamp at least `issuedAt`. It persists the protected certificate
+before the legacy role cache, then consumes the offer. Web Locks serialize offer
+generation/confirmation; unsupported runtimes fail authenticated linking closed.
+An existing authenticated root pin cannot be replaced or downgraded by raw-key linking.
+An interrupted role-cache write can retry the same certificate safely.
+
+Versioned token opt-in is the capability gate for this slice. No prekey or group
+capability is advertised. Legacy raw `/link` and `/linkto` remain the existing
+relay-assisted bootstrap; they do NOT establish an authenticated both-key binding.
+Old clients ignore certificate metadata and retain their existing wire behavior.
+No group transcript or deployed crypto mirror is changed.
+
+**Not yet implemented:** revocation epochs, contact/group enforcement of revoked
+device keys, linked-device strict author-signature sending, unlink-triggered Sender
+Key rotation, and cross-device certificate/checkpoint gossip. V1 certificates must
+not be consumed as group-author authority. `/unlink` still revokes fan-out only;
+signed-list removal alerts do not mean past device keys are cryptographically revoked.
+
 ## Deployed key/session vault (application storage, no wire change)
 
 `src/app/vault.js` implements vault format 1. AES-256-GCM uses fresh 12-byte IVs

@@ -1,7 +1,9 @@
+import { verifyBinding } from './device-keys.js';
+
 const utf8 = new TextEncoder();
 export const activityText = e => 'BreezeAccountActivity/v1:' + JSON.stringify([e.userId, e.pub, e.ed, e.kind, e.id, e.ts]);
 export const activityHash = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', utf8.encode(value))), b => b.toString(16).padStart(2, '0')).join('');
-const labels = { linked: 'daLinked', session: 'daSession', push: 'daPush', relayKeys: 'daRelayKeys' };
+const labels = { linked: 'daLinked', binding: 'dkBound', removed: 'dkRemoved', session: 'daSession', push: 'daPush', relayKeys: 'daRelayKeys' };
 
 export function createDeviceAlerts(D) {
   let busy = false, panel = null, unavailable = false, chain = Promise.resolve();
@@ -29,6 +31,16 @@ export function createDeviceAlerts(D) {
       if (old && result.ts === old.ts && JSON.stringify(old.list) !== JSON.stringify(result.list)) throw new Error('registry equivocation');
       for (const pub of result.list.filter(pub => !(old?.list || [root]).includes(pub)))
         record(s, 'link:' + accountId + ':' + result.ts + ':' + pub, 'linked', pub, result.ts);
+      for (const pub of (old?.list || []).filter(pub => !result.list.includes(pub)))
+        record(s, 'removed:' + accountId + ':' + result.ts + ':' + pub, 'removed', pub, result.ts);
+      const bindings = Object.fromEntries(Object.entries(old?.bindings || {}).filter(([pub]) => result.list.includes(pub)));
+      for (const [pub, binding] of Object.entries(result.bindings || {})) {
+        if (bindings[pub]?.issuedAt > binding.issuedAt) continue;
+        if (bindings[pub]?.issuedAt === binding.issuedAt && bindings[pub].sig !== binding.sig) throw new Error('binding equivocation');
+        if (bindings[pub]?.sig !== binding.sig) record(s, 'binding:' + accountId + ':' + binding.sig, 'binding', pub, binding.issuedAt);
+        bindings[pub] = binding;
+      }
+      result = { ...result, bindings };
       s.registries[accountId] = result; await save(s); return result;
     });
     await paint(); return accepted;
@@ -44,13 +56,17 @@ export function createDeviceAlerts(D) {
       if (rec.devices.some(d => !d || typeof d.pub !== 'string' || d.pub.length > 200) || !rec.devices.some(d => d.pub === rec.root)) return null;
       const digest = (await activityHash(JSON.stringify(rec.devices.map(d => d.pub)))).slice(0, 32);
       let sigPub = accountId === D.myId() ? D.ed() : null;
-      if (!sigPub) sigPub = (await D.get('contacts', accountId))?.sigPub || null;
       if (!sigPub) {
         const acct = await D.get('identity', 'account');
-        if (acct?.root?.slice(0, 12) === accountId) sigPub = acct.rootEd;
+        const link = await D.get('identity', 'verify:device-link');
+        if (acct?.root?.slice(0, 12) === accountId) sigPub = link?.binding?.root === acct.root ? link.binding.rootEd : acct.rootEd;
       }
+      if (!sigPub) sigPub = (await D.get('contacts', accountId))?.sigPub || null;
       if (!sigPub || await D.verify(`breeze-device-set:${accountId}:${rec.ts}:${digest}`, rec.sig, sigPub) !== true) return null;
-      const result = await observeRegistry(accountId, rec.root, { list: rec.devices.map(d => d.pub), ts: rec.ts });
+      const bindings = {};
+      for (const d of rec.devices) if (d.binding && await verifyBinding(d.binding, { root: rec.root, rootEd: sigPub, pub: d.pub }) && d.binding.issuedAt <= rec.ts) bindings[d.pub] = d.binding;
+      const snapshot = { list: rec.devices.map(d => d.pub), ts: rec.ts };
+      const result = await observeRegistry(accountId, rec.root, { ...snapshot, bindings });
       if (accountId === D.myId()) D.ownTs(result.ts);
       return result;
     } catch(e) { D.dbg(e, 'device-list'); return null; }

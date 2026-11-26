@@ -267,7 +267,7 @@ Instance counts are literal call-pattern occurrences in `index.html`, grep-measu
 
 ### 4.4 CSS Design System
 
-**27 CSS Custom Properties** in `:root` (dark theme shown; the `.light` theme
+**42 CSS Custom Properties** in `:root` (dark theme shown; the `.light` theme
 overrides the colour tokens — its accent/error values were re-measured for
 WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
 `--r` #c81e1e, `--t3` #636366; dark `--t3` is #93939f):
@@ -291,10 +291,25 @@ WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
 | --rad | Border radius | 16px |
 | --font | Font family | -apple-system, system-ui, sans-serif |
 | --mono | Monospace | 'SF Mono', ui-monospace, monospace |
+| --sp-1 | Spacing scale 1 | 4px |
+| --sp-2 | Spacing scale 2 | 8px |
+| --sp-3 | Spacing scale 3 | 12px |
+| --sp-4 | Spacing scale 4 | 16px |
+| --sp-5 | Spacing scale 5 | 24px |
+| --sp-6 | Spacing scale 6 | 32px |
+| --sp-7 | Spacing scale 7 | 48px |
+| --fs-caption | Caption/metadata font size | 12px |
+| --fs-sub | Secondary text font size | 13px |
+| --fs-body | Body font size | 15px |
+| --fs-name | Contact/display-name font size | 16px |
+| --fs-title | Title font size | 18px |
+| --fs-display | Display font size | 22px |
+| --rad-sm | Small border radius | 8px |
+| --rad-bubble | Message-bubble border radius | 18px |
 | --ease | Transition | .3s cubic-bezier(.175,.885,.32,1.275) |
 | --touch | Touch min-size | 48px |
 
-**71 CSS Utility Classes** (`.i-*` prefix, counted 2026-11-25).
+**62 CSS Utility Classes** (`.i-*` prefix, counted 2026-11-26).
 
 ### 4.5 UI Structure (2026-11 UI pass)
 
