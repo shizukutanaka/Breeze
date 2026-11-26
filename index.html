@@ -8755,16 +8755,24 @@ async function initMessenger(dbName) {
   }
 
   function updateFaviconBadge(count) {
-    const link = document.querySelector('link[rel="icon"]') || (() => { const l = document.createElement('link'); l.rel = 'icon'; document.head.appendChild(l); return l; })();
-    if (count === 0) { link.href = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>"; return; }
-    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
-    const ctx = c.getContext('2d');
-    ctx.font = '48px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🌊', 32, 32);
-    // Red badge circle
-    ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(50, 14, 14, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.fillText(count > 9 ? '9+' : String(count), 50, 15);
-    link.href = c.toDataURL('image/png');
+    updateFaviconBadge._n = count;
+    const link = document.querySelector('link[rel="icon"]') || (() => { const l = document.createElement('link'); l.rel = 'icon'; l.type = 'image/png'; document.head.appendChild(l); return l; })();
+    if (count === 0) { link.type = 'image/png'; link.href = 'icon-192.png'; return; }
+    const img = updateFaviconBadge._img;
+    if (img && img.complete && img.naturalWidth) {
+      const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, 64, 64);
+      // Red badge circle
+      ctx.fillStyle = '#ef4444'; ctx.beginPath(); ctx.arc(50, 14, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 16px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(count > 9 ? '9+' : String(count), 50, 15);
+      link.type = 'image/png'; link.href = c.toDataURL('image/png');
+      return;
+    }
+    if (!img) { const i = new Image(); i.onload = () => { if (updateFaviconBadge._n > 0) updateFaviconBadge(updateFaviconBadge._n); }; i.src = 'icon-192.png'; updateFaviconBadge._img = i; }
+    link.type = 'image/png'; link.href = 'icon-192.png';
   }
 
   let _notifRequested = false;
