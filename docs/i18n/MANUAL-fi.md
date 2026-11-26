@@ -24,8 +24,6 @@ Valitse laitteellesi sopiva tiedosto [lataussivulta](https://github.com/shizukut
 
 Jokaisen tiedoston mukana on tarkistusluku (SHA256SUMS.txt). Jos olet huolissasi, voit tarkistaa, että lataamasi tiedoston luku täsmää.
 
-> **Kokeilusivusta**: Kokeilusivu toiminnan tarkistamiseen (https://breeze-469.pages.dev/) on tarjolla. Siellä oleva on sama ohjelmisto, mutta kokeilu voi muuttua tai pysähtyä ilman ilmoitusta. Todelliseen käyttöön käytä omalle palvelimellesi sijoittamaasi kopiota. Omalle palvelimellesi sijoitettuun kopioon kokeilun pysähtyminen ei vaikuta.
-
 ### Ensiasetukset
 
 1. Avaa sovellus.
@@ -233,7 +231,6 @@ Jos päivityksen aikana menee jotain pieleen (esimerkiksi tiedoston tarkistus ei
 | Puhelun vahvistuskoodi ei täsmää | Katkaise puhelu ja soita uudelleen. Älä jatka, kun se ei täsmää. |
 | Unohtunut tunnuslause | Palautus on mahdotonta. Luo uusi identiteetti ja kerro yhteyshenkilöillesi uudelleen. |
 | Kadonnut laite | Jos sinulla on varmuuskopio, voit palauttaa uudella laitteella. Jos ei, siitä tulee uusi identiteetti. |
-| Kokeilusivu ei aukea | Kokeilu voi pysähtyä ilman ilmoitusta. Käytä omalle palvelimellesi sijoittamaasi kopiota. |
 
 Ilmoita vioista [Issue-sivulla](https://github.com/shizukutanaka/Breeze/issues), kiitos.
 

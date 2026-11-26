@@ -18,7 +18,6 @@ Breezellä ei ole "ylläpitäjäyrityksen palvelinta". **Käyttääksesi sitä h
 
 - Vakioasennus käyttää Cloudflarea, joten **Cloudflare-tili vaaditaan**. Ohjeet ovat [asennusoppaassa](SELF_HOSTING-fi.md) (muunkieliset versiot voi valita oppaan alusta).
 - Hae sovellus (Windows / Mac / Linux / Android / iPhone) [lataussivulta](https://github.com/shizukutanaka/Breeze/releases/latest) ja käytä sitä yhdistettynä omaan palvelimeesi.
-- **Esimerkkiasennuksesta (rehellinen huomautus)**: Toiminnan tarkistamista varten on esimerkki (https://breeze-469.pages.dev/). Se on sama ohjelmisto, mutta käytä todelliseen käyttöön omaa palvelintasi. Esimerkki voi muuttua tai pysähtyä ilman ennakkoilmoitusta. Omalle palvelimellesi sijoittamaasi Breezeen esimerkin pysähtyminen ei vaikuta.
 
 Yksityiskohtaiset käyttöohjeet ovat [käyttöoppaassa](MANUAL-fi.md) (muunkieliset versiot voi valita oppaan alusta).
 

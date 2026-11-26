@@ -18,7 +18,6 @@ Breeze nema «poslužitelj operaterske tvrtke». **Da biste ga koristili, sami o
 
 - Standardno postavljanje koristi Cloudflare, pa je **potreban Cloudflare račun**. Koraci su u [uputama za postavljanje](SELF_HOSTING-hr.md) (druge jezike možete odabrati na početku uputa).
 - Aplikacije (Windows / Mac / Linux / Android / iPhone) uzimate sa [stranice za preuzimanje](https://github.com/shizukutanaka/Breeze/releases/latest) i koristite ih povezane na svoj poslužitelj.
-- **O oglednom postavljanju (iskrena obavijest)**: Za provjeru rada postavljen je ogledni primjerak (https://breeze-469.pages.dev/). Ondje je isti softver, ali za stvarnu uporabu koristite svoj poslužitelj. Ogledni se primjerak može promijeniti ili zaustaviti bez najave. Ono što ste postavili na svoj poslužitelj ne trpi posljedice zaustavljanja oglednog primjerka.
 
 Detaljna je uporaba u [uputama](MANUAL-hr.md) (druge jezike možete odabrati na početku uputa).
 
