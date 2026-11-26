@@ -15709,6 +15709,7 @@ if (PLATFORM === 'electron' && window.breeze) {
   // timers on switch, and is out of scope here — referencing it threw a ReferenceError
   // the moment this block stopped being dead code).
   setInterval(async () => {
+    if (_powerPresenceOff()) return;
     try {
       // Simple approach: read unread count from contact list DOM
       const badges = document.querySelectorAll('.cbadge');
