@@ -12610,7 +12610,7 @@ async function initMessenger(dbName) {
     if (!_powerPresenceOff()) beat();
     function schedulePresence() {
       if (_presenceTimer) clearTimeout(_presenceTimer);
-      const interval = document.hidden ? CONFIG.PRESENCE_BG_INTERVAL_MS : CONFIG.PRESENCE_INTERVAL_MS;
+      const interval = Math.max(document.hidden ? CONFIG.PRESENCE_BG_INTERVAL_MS : CONFIG.PRESENCE_INTERVAL_MS, (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0));
       _presenceTimer = setTimeout(() => { if (!_powerPresenceOff()) { beat(); if (activeContact) updateConvStatus(activeContact); } schedulePresence(); }, interval);
     }
     schedulePresence();
