@@ -121,27 +121,29 @@ describe('action buttons use the shared line-icon family, not emoji', () => {
     }
   });
 
-  it('every target button renders an inline SVG icon and keeps its aria hook', () => {
+  it('every target button carries a dictionary icon slot and keeps its aria hook', () => {
     const targets = [
-      ['b-msg-back', 'ariaBack'], ['b-msg-call', 'ariaCall'], ['b-msg-video', 'ariaVideoCall'],
-      ['b-msg-timer', 'ariaTimer'], ['b-msg-clear', 'ariaClearChat'],
-      ['b-msg-voice', 'ariaVoice'], ['b-msg-stt', 'ariaDict'], ['b-msg-loc', 'ttLocation'],
-      ['b-msg-sticker', 'ttStickers'], ['b-msg-nrn', 'nrnAria'],
-      ['b-msg-more', 'ariaMoreActions'], ['b-msg-emoji', 'ttEmoji'], ['b-msg-send', 'send'],
-      ['tab-contacts', 'ariaContacts'], ['tab-settings', 'helpSettings'],
+      ['b-msg-back', 'ariaBack', 'arrow-left'], ['b-msg-call', 'ariaCall', 'phone'], ['b-msg-video', 'ariaVideoCall', 'video'],
+      ['b-msg-timer', 'ariaTimer', 'clock'], ['b-msg-clear', 'ariaClearChat', 'trash'],
+      ['b-msg-voice', 'ariaVoice', 'mic'], ['b-msg-stt', 'ariaDict', 'message-text'], ['b-msg-loc', 'ttLocation', 'map-pin'],
+      ['b-msg-sticker', 'ttStickers', 'star'], ['b-msg-nrn', 'nrnAria', 'message-check'],
+      ['b-msg-more', 'ariaMoreActions', 'plus'], ['b-msg-emoji', 'ttEmoji', 'smile'], ['b-msg-send', 'send', 'send'],
+      ['tab-contacts', 'ariaContacts', 'users'], ['tab-settings', 'helpSettings', 'settings'],
     ];
-    for (const [id, ariaKey] of targets) {
+    for (const [id, ariaKey, icon] of targets) {
       const at = html.indexOf(`id="${id}"`);
       expect(at, id).toBeGreaterThan(-1);
       const end = html.indexOf('</button>', at);
       const chunk = html.slice(at, end);
-      expect(chunk, id).toContain('<svg class="ico"');
+      expect(chunk, id).toContain(`data-icon="${icon}"`);
+      expect(chunk, id).not.toContain('<svg class="ico"');
       expect(chunk, id).toContain(`data-i18n-aria="${ariaKey}"`);
     }
     // The attach control is a <label> wrapping the hidden file input; the
-    // icon sits before the input inside the same label.
+    // icon slot sits before the input inside the same label.
     const label = sliceBetween('<label class="tool"', '</label>');
-    expect(label).toContain('<svg class="ico"');
+    expect(label).toContain('data-icon="paperclip"');
+    expect(label).not.toContain('<svg class="ico"');
     expect(label).toContain('id="msg-file"');
   });
 
