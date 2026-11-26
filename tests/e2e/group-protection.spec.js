@@ -32,21 +32,6 @@ test('signed invite anchor → strict → relay legacy claim warns/cancels → e
   await expect(a.locator('#msg-messages')).toContainText('establish strict B', { timeout: 20_000 });
   for (const p of [a, b]) await expect.poll(async () => (await stored(p, 'identity', 'ga-policy:' + gid))?.strict).toBe(true);
 
-  // Model a pre-anchor local group while preserving its original local creation record.
-  await a.evaluate(gid => new Promise((resolve, reject) => {
-    const req = indexedDB.open('breeze-messenger'); req.onerror = () => reject(req.error);
-    req.onsuccess = () => { const db = req.result, tx = db.transaction('identity', 'readwrite'); tx.objectStore('identity').delete('verify:group-protection:' + gid); tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => reject(tx.error); };
-  }), gid);
-  await a.reload(); await a.locator('#msg-contacts .contact').filter({ hasText: 'Protection test' }).click();
-  const selfAnchor = a.getByRole('button', { name: 'Confirm my creator identity as admin' });
-  await selfAnchor.click();
-  const ownDialog = a.getByRole('dialog').filter({ hasText: 'This device’s local record says you created this group.' });
-  await expect(ownDialog.locator('[value="cancel"]')).toBeFocused();
-  await a.screenshot({ path: '/Users/devin/group-downgrade-self-anchor.png' });
-  await a.keyboard.press('Enter'); await expect(ownDialog).toBeHidden();
-  expect(await stored(a, 'identity', 'verify:group-protection:' + gid)).toBeUndefined();
-  await selfAnchor.click(); await ownDialog.locator('[value="ok"]').click();
-  await expect.poll(async () => (await stored(a, 'identity', 'verify:group-protection:' + gid))?.anchor.source).toBe('local-creator');
 
   let inject = true;
   const legacyPub = Buffer.alloc(32, 7).toString('base64');
@@ -74,4 +59,33 @@ test('signed invite anchor → strict → relay legacy claim warns/cancels → e
   await a.locator('#msg-input').fill('/admin kick Legacy'); await a.locator('#msg-input').press('Enter');
   for (const p of [a, b]) await expect(p.locator('[data-group-protection]')).toContainText('Signed-author protection restored', { timeout: 20_000 });
   await ac.close(); await bc.close();
+});
+
+test('a locally created pre-anchor group can explicitly confirm its own creator identity', async ({ browser }) => {
+  const ac = await browser.newContext();
+  const a = await ac.newPage();
+  await createIdentity(a, 'Creator');
+  await openAddContact(a, 'group');
+  const form = a.locator('dialog[open] .add-form-group');
+  await form.locator('.modal-input').fill('Creator anchor'); await form.locator('button.btn-g').click();
+  await a.locator('dialog[open] [value="ok"]').click();
+  const link = await a.locator('.i-mono-box').textContent();
+  const gid = 'g_' + new URL(link).searchParams.get('join');
+  // Model a pre-anchor local group while preserving its original local creation record.
+  await a.evaluate(gid => new Promise((resolve, reject) => {
+    const req = indexedDB.open('breeze-messenger'); req.onerror = () => reject(req.error);
+    req.onsuccess = () => { const db = req.result, tx = db.transaction('identity', 'readwrite'); tx.objectStore('identity').delete('verify:group-protection:' + gid); tx.oncomplete = () => { db.close(); resolve(); }; tx.onabort = () => reject(tx.error); };
+  }), gid);
+  await a.reload(); await a.locator('#msg-contacts .contact').filter({ hasText: 'Creator anchor' }).click();
+  const selfAnchor = a.getByRole('button', { name: 'Confirm my creator identity as admin' });
+  await selfAnchor.click();
+  const ownDialog = a.getByRole('dialog').filter({ hasText: 'This device’s local record says you created this group.' });
+  await expect(ownDialog.locator('[value="cancel"]')).toBeFocused();
+  await a.screenshot({ path: '/Users/devin/group-downgrade-self-anchor.png' });
+  await a.keyboard.press('Enter'); await expect(ownDialog).toBeHidden();
+  expect(await stored(a, 'identity', 'verify:group-protection:' + gid)).toBeUndefined();
+  await selfAnchor.click(); await ownDialog.locator('[value="ok"]').click();
+  await expect.poll(async () => (await stored(a, 'identity', 'verify:group-protection:' + gid))?.anchor.source).toBe('local-creator');
+
+  await ac.close();
 });
