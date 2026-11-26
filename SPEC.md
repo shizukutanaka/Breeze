@@ -340,7 +340,7 @@ WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
   (`_listTab`: chats keeps recency order plus folder/label filters,
   contacts shows friends only — no groups, no archived — in name
   order), Calls is a third list mode owned by the call-history
-  module, My card opens the profile panel, and Settings opens the
+  module, Profile opens the profile panel, and Settings opens the
   settings view; selection state follows whichever entry point opened
   the screen. The Chats tab carries the unread-count badge (the
   `totalUnread` the contact renderer already computes). Which of the

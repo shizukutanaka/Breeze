@@ -73,7 +73,7 @@ If the other person also has the app open, you connect directly and can talk.
 - **The contact list**: The time you last talked is shown as the time for today, "Yesterday" for yesterday, month/day for this year, and year/month/day for anything earlier. Contacts with messages you have not read have their name and time emphasised.
 - **Names for contacts**: Open "Contact info" (in the right-click menu of a contact, or the conversation's "⋮" menu) and you can set your own name for that contact (a nickname). Nicknames are stored only on this device and are never sent to the contact or the relay server. When you set a nickname, the name the contact set for themselves is also shown next to it in a muted colour. You can turn that second name off with "Also show the name each contact set for themselves" in the "Privacy" section of the settings.
 - **Your own card**: At the top of the list is your own profile card; press it to open your profile. It scrolls together with the list.
-- **Bottom tabs on a phone**: At phone widths, five tabs appear at the bottom of the screen: "Chats", "Calls", "Contacts", "My card", and "Settings". You can choose which tabs are shown, one by one, under "Bottom tabs" in the settings (Chats is always shown. Even if you hide the Settings tab, you can still open the settings from the gear button on the screen).
+- **Bottom tabs on a phone**: At phone widths, five tabs appear at the bottom of the screen: "Chats", "Calls", "Contacts", "Profile", and "Settings". You can choose which tabs are shown, one by one, under "Bottom tabs" in the settings (Chats is always shown. Even if you hide the Settings tab, you can still open the settings from the gear button on the screen).
 - **The conversation header**: From the search icon you can search within the conversation. From the "⋮" menu you can check the safety number, mute notifications, pin, create a poll, and more.
 
 ### Commands
@@ -123,7 +123,7 @@ Settings open as their own screen. On a phone, open them from the "Settings" tab
 - **Also show the name each contact set for themselves**: In the "Privacy" section. For a contact you have given a nickname, you can choose whether their own name is shown alongside it (chapter 3).
 - **Blocking**: You can block a troublesome contact. Messages from a blocked contact will not reach you.
 - **Whether to keep a call history**: With "Keep a call history on this device" in the "Privacy" section, you can stop call-history recording (chapter 5).
-- **Bottom tab visibility**: In the "Bottom tabs" section, you can show or hide the phone's bottom tabs (Calls / Contacts / My card / Settings) one by one. Chats is always shown.
+- **Bottom tab visibility**: In the "Bottom tabs" section, you can show or hide the phone's bottom tabs (Calls / Contacts / Profile / Settings) one by one. Chats is always shown.
 
 ---
 

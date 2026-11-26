@@ -118,9 +118,11 @@ describe('shared icon dictionary', () => {
 });
 
 describe('inline SVG duplication is eliminated', () => {
-  it('static markup contains icon slots, not inline SVG documents', () => {
+  it('static markup uses icon slots, with only the no-JS wave as inline SVG', () => {
     const staticMarkup = html.slice(html.indexOf('<body>'), html.indexOf('<script type="module">'));
-    expect(staticMarkup).not.toContain('<svg');
+    expect((staticMarkup.match(/<svg\s/g) || []).length).toBe(1);
+    expect(staticMarkup).toContain('<noscript><div');
+    expect(staticMarkup).toContain('<svg class="ico noscript-wave" viewBox="0 0 24 24" aria-hidden="true">');
     expect((staticMarkup.match(/\bdata-icon=/g) || []).length).toBeGreaterThanOrEqual(25);
   });
 
@@ -129,9 +131,11 @@ describe('inline SVG duplication is eliminated', () => {
       if (name.endsWith('src/app/icons.js')) continue;
       expect(text, `${name} must not handwrite <svg`).not.toContain('<svg');
     }
-    // index.html has exactly one SVG writer: the mirrored icon() component.
-    expect((html.match(/<svg\s/g) || []).length).toBe(1);
+    // index.html has exactly one SVG writer (the mirrored icon() component)
+    // plus the deliberate no-JS wave brand mark required inside <noscript>.
+    expect((html.match(/<svg\s/g) || []).length).toBe(2);
     expect(html).toContain('function _icon(name, extraClass = \'\')');
+    expect(html).toContain('<svg class="ico noscript-wave" viewBox="0 0 24 24" aria-hidden="true">');
   });
 
   it('no SVG shape string is duplicated between different dictionary entries', () => {
@@ -152,6 +156,17 @@ describe('functional emoji icons are replaced', () => {
       expect(text, `${name}: direct emoji control glyph`).not.toMatch(directGlyphWrite);
       expect(text, `${name}: exact emoji status/avatar literal`).not.toMatch(exactPrefixLiteral);
     }
+  });
+
+  it('the stored wave emoji renders through the wave icon rather than as a glyph', () => {
+    const accountTabs = readFileSync(new URL('../src/app/account-tabs.js', import.meta.url), 'utf8');
+    expect(ICON_SHAPES.wave).toContain('M2 8c1.7-2.7');
+    expect(accountTabs).toContain("createIcon('wave', 'acc-wave')");
+    expect(accountTabs).toContain("acc.avatar === '🌊'");
+    expect(html).toContain("prof?.emoji === '🌊' ? _iconSlot('wave')");
+    expect(html).toContain("_createIcon('wave', 'avatar-wave')");
+    expect(accountTabs).toContain("const avatars = ['🔥'");
+    expect(accountTabs).not.toContain("const avatars = ['🌊'");
   });
 
   it('the replacement rendering paths are wired through icons with accessible state text', () => {

@@ -275,7 +275,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .settings-note, .settings-status { padding: var(--sp-2) var(--sp-3); color: var(--t3); font-size: var(--fs-caption); line-height: 1.5 }
 .settings-danger-row .settings-action-main { color: var(--danger) }
 .settings-row > .settings-help-btn, .settings-profile-card > .settings-help-btn { margin-right: var(--sp-2); flex-shrink: 0 }
-.settings-end { text-align: center }
+.settings-end { text-align: center } .settings-tab-order-row { cursor: grab } .settings-tab-order-row.dragging { opacity: .45 } .settings-tab-order-row.drag-over { box-shadow: inset 0 2px 0 var(--g) }
 /* One-time cards in the chat log (keywrap tip, first-contact backup nudge) */
 .nudge-card { display: flex; flex-direction: column; gap: var(--sp-2) }
 .nudge-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap }
@@ -444,7 +444,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; pointer-events: none }
 .btn-sm .ico { width: 17px; height: 17px }
 .tab-ico .ico { width: 22px; height: 22px }
-.ico.state-ico, .pin-banner .ico { width: 14px; height: 14px } .ico.state-ico { vertical-align: -2px; margin-right: 2px } .setup-feat .ico { width: calc(var(--fs-display) + 6px); height: calc(var(--fs-display) + 6px); display: block; margin: 0 auto var(--sp-2) } .i-icon48 .ico, .drop-page-icon .ico { width: 48px; height: 48px } .i-emoji-lg .ico { width: 28px; height: 28px }
+.ico.state-ico, .pin-banner .ico { width: 14px; height: 14px } .ico.state-ico { vertical-align: -2px; margin-right: 2px } .setup-feat .ico { width: calc(var(--fs-display) + 6px); height: calc(var(--fs-display) + 6px); display: block; margin: 0 auto var(--sp-2) } .i-icon48 .ico, .drop-page-icon .ico { width: 48px; height: 48px } .i-emoji-lg .ico { width: 28px; height: 28px } .noscript-wave { width: 28px; height: 28px; vertical-align: -5px } .name .avatar-wave { width: 16px; height: 16px; vertical-align: -2px }
 .timer-label { font-weight: 600 }
 .timer-label:not(:empty) { margin-left: var(--sp-1) }
 
@@ -606,7 +606,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .acc-tab { position: relative; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; flex-shrink: 0; border: 2px solid transparent; background: var(--s2); transition: transform .15s var(--bounce), border-color .15s ease, box-shadow .15s ease; width: 34px; height: 34px; user-select: none; box-shadow: var(--shadow-sm) }
 .acc-tab.active { border-color: var(--g); background: var(--s2); box-shadow: 0 0 0 3px rgba(52,211,153,.2) }
 .acc-tab:hover:not(.active) { background: var(--s2); transform: scale(1.12) }
-.acc-tab:active { transform: scale(.9) }
+.acc-tab:active { transform: scale(.9) } .acc-tab .ico { width: 18px; height: 18px }
 @keyframes badgePop { from { transform: scale(0) } to { transform: scale(1) } }
 .acc-tab .acc-shortcut { position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%; background: var(--s3); color: var(--t3); font-size: var(--fs-caption); display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .2s }
 .acc-tabs:hover .acc-shortcut { opacity: 1 }
@@ -1148,7 +1148,7 @@ del.md-del { opacity: .6 }
 </head>
 <body>
 <!-- v3.5: Accessibility — skip to content -->
-<noscript><div style="padding:40px;text-align:center;font-family:system-ui;background:#0a0a0a;color:#f5f5f5;min-height:100vh;display:flex;align-items:center;justify-content:center"><div><h1>🌊 Breeze Messenger</h1><p style="color:#999;margin:16px 0">Breeze requires JavaScript for end-to-end encryption.<br>Please enable JavaScript in your browser settings.</p></div></div></noscript>
+<noscript><div style="padding:40px;text-align:center;font-family:system-ui;background:#0a0a0a;color:#f5f5f5;min-height:100vh;display:flex;align-items:center;justify-content:center"><div><h1><svg class="ico noscript-wave" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8c1.7-2.7 3.3-2.7 5 0s3.3 2.7 5 0 3.3-2.7 5 0 3.3 2.7 5 0"/><path d="M2 15c1.7-2.7 3.3-2.7 5 0s3.3 2.7 5 0 3.3-2.7 5 0 3.3 2.7 5 0"/></svg> Breeze Messenger</h1><p style="color:#999;margin:16px 0">Breeze requires JavaScript for end-to-end encryption.<br>Please enable JavaScript in your browser settings.</p></div></div></noscript>
 <a href="#msg-main" class="skip-to-content" data-i18n="skipToContent">Skip to content</a>
 
 <!-- Header -->
@@ -1156,8 +1156,8 @@ del.md-del { opacity: .6 }
   <div class="wrap flex-c">
     <span class="logo"><b>B</b>reeze</span>
     <nav>
-      <a href="?terms">Terms</a>
-      <a href="?privacy">Privacy</a>
+      <a href="?terms" data-i18n="navTerms">Terms</a>
+      <a href="?privacy" data-i18n="navPrivacy">Privacy</a>
     </nav>
   </div>
 </header>
@@ -1366,7 +1366,7 @@ del.md-del { opacity: .6 }
       <button class="tab-btn active" id="tab-chats" aria-current="page" data-action="tab-chats" data-i18n-aria="tabChats"><span class="tab-ico"><span data-icon="message"></span></span><span><span data-i18n="tabChats">Chats</span> <span class="bdg" id="tab-badge-chats"></span></span></button>
       <button class="tab-btn" id="tab-calls" data-action="tab-calls" data-i18n-aria="tabCalls"><span class="tab-ico"><span data-icon="phone"></span></span><span><span data-i18n="tabCalls">Calls</span> <span class="bdg" id="tab-badge-calls"></span></span></button>
       <button class="tab-btn" id="tab-contacts" data-action="tab-contacts" data-i18n-aria="ariaContacts"><span class="tab-ico"><span data-icon="users"></span></span><span data-i18n="ariaContacts">Contacts</span></button>
-      <button class="tab-btn" id="tab-self" data-action="tab-self" data-i18n-aria="tabSelf"><span class="tab-ico"><span data-icon="user"></span></span><span data-i18n="tabSelf">My card</span></button>
+      <button class="tab-btn" id="tab-self" data-action="tab-self" data-i18n-aria="tabSelf"><span class="tab-ico"><span data-icon="user"></span></span><span data-i18n="tabSelf">Profile</span></button>
       <button class="tab-btn" id="tab-settings" data-action="tab-settings" data-i18n-aria="helpSettings"><span class="tab-ico"><span data-icon="settings"></span></span><span data-i18n="helpSettings">Settings</span></button>
     </nav>
   </div>
@@ -1375,7 +1375,7 @@ del.md-del { opacity: .6 }
 
 </div></main>
 
-<footer><div class="wrap">Breeze v3.8.0 — P2P encrypted messenger. <a href="?terms">Terms</a> · <a href="?privacy">Privacy</a></div></footer>
+<footer><div class="wrap">Breeze v3.8.0 — P2P encrypted messenger. <a href="?terms" data-i18n="navTerms">Terms</a> · <a href="?privacy" data-i18n="navPrivacy">Privacy</a></div></footer>
 
 <script type="module">
 // Stage-3 step 3 (docs/PQ_STAGE3_PLAN.md): load the PQ prekey helper
@@ -1487,7 +1487,7 @@ window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set(
 // inline mirror of src/app/icons.js — the classic script cannot import the ESM module
 // before first paint. Keep the copies logically identical; tests/ui-icons.test.js pins them.
 const _ICON_SHAPES = Object.freeze({
-  "settings":"<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z\"/>", "arrow-left":"<line x1=\"19\" y1=\"12\" x2=\"5\" y2=\"12\"/><polyline points=\"12 19 5 12 12 5\"/>", "phone":"<path d=\"M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z\"/>", "video":"<polygon points=\"23 7 16 12 23 17 23 7\"/><rect x=\"1\" y=\"5\" width=\"15\" height=\"14\" rx=\"2\"/>", "clock":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/>", "trash":"<polyline points=\"3 6 5 6 21 6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/><line x1=\"10\" y1=\"11\" x2=\"10\" y2=\"17\"/><line x1=\"14\" y1=\"11\" x2=\"14\" y2=\"17\"/>",
+  "settings":"<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z\"/>", "arrow-left":"<line x1=\"19\" y1=\"12\" x2=\"5\" y2=\"12\"/><polyline points=\"12 19 5 12 12 5\"/>", "arrow-right":"<line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"/><polyline points=\"12 5 19 12 12 19\"/>", "wave":"<path d=\"M2 8c1.7-2.7 3.3-2.7 5 0s3.3 2.7 5 0 3.3-2.7 5 0 3.3 2.7 5 0\"/><path d=\"M2 15c1.7-2.7 3.3-2.7 5 0s3.3 2.7 5 0 3.3-2.7 5 0 3.3 2.7 5 0\"/>", "phone":"<path d=\"M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z\"/>", "video":"<polygon points=\"23 7 16 12 23 17 23 7\"/><rect x=\"1\" y=\"5\" width=\"15\" height=\"14\" rx=\"2\"/>", "clock":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/>", "trash":"<polyline points=\"3 6 5 6 21 6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/><line x1=\"10\" y1=\"11\" x2=\"10\" y2=\"17\"/><line x1=\"14\" y1=\"11\" x2=\"14\" y2=\"17\"/>",
   "search":"<circle cx=\"11\" cy=\"11\" r=\"8\"/><line x1=\"21\" y1=\"21\" x2=\"16.65\" y2=\"16.65\"/>", "more-vertical":"<circle cx=\"12\" cy=\"5\" r=\"1\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"12\" cy=\"19\" r=\"1\"/>", "paperclip":"<path d=\"M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48\"/>", "mic":"<path d=\"M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><line x1=\"12\" y1=\"19\" x2=\"12\" y2=\"23\"/><line x1=\"8\" y1=\"23\" x2=\"16\" y2=\"23\"/>", "stop":"<rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"/>", "message-text":"<path d=\"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z\"/><line x1=\"8\" y1=\"9\" x2=\"16\" y2=\"9\"/><line x1=\"8\" y1=\"12.5\" x2=\"13\" y2=\"12.5\"/>",
   "record":"<circle cx=\"12\" cy=\"12\" r=\"6\"/>", "map-pin":"<path d=\"M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z\"/><circle cx=\"12\" cy=\"10\" r=\"3\"/>", "star":"<polygon points=\"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2\"/>", "message-check":"<path d=\"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z\"/><polyline points=\"8.5 11.5 11 14 15.5 9.5\"/>", "plus":"<line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"/><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"/>", "smile":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M8 14s1.5 2 4 2 4-2 4-2\"/><line x1=\"9\" y1=\"9\" x2=\"9.01\" y2=\"9\"/><line x1=\"15\" y1=\"9\" x2=\"15.01\" y2=\"9\"/>",
   "send":"<line x1=\"22\" y1=\"2\" x2=\"11\" y2=\"13\"/><path d=\"M22 2l-7 20-4-9-9-4 22-7z\"/>", "message":"<path d=\"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z\"/>", "users":"<path d=\"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M23 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/>", "user":"<path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/>", "sun":"<circle cx=\"12\" cy=\"12\" r=\"5\"/><line x1=\"12\" y1=\"1\" x2=\"12\" y2=\"3\"/><line x1=\"12\" y1=\"21\" x2=\"12\" y2=\"23\"/><line x1=\"4.22\" y1=\"4.22\" x2=\"5.64\" y2=\"5.64\"/><line x1=\"18.36\" y1=\"18.36\" x2=\"19.78\" y2=\"19.78\"/><line x1=\"1\" y1=\"12\" x2=\"3\" y2=\"12\"/><line x1=\"21\" y1=\"12\" x2=\"23\" y2=\"12\"/><line x1=\"4.22\" y1=\"19.78\" x2=\"5.64\" y2=\"18.36\"/><line x1=\"18.36\" y1=\"5.64\" x2=\"19.78\" y2=\"4.22\"/>", "moon":"<path d=\"M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z\"/>",
@@ -1921,8 +1921,8 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     ariaFolderUnread: 'Unread contacts',
     ariaFolderGroups: 'Group chats',
     ariaFolderLabels: 'Labeled contacts',
-    ariaContacts: 'Contacts',
-    tabChats: 'Chats', tabCalls: 'Calls', tabSelf: 'My card', ariaMainNav: 'Main navigation', tabBarSection: 'Bottom tabs', tabChatsAlways: 'Chats is always shown', tabShowCalls: 'Show the Calls tab', helpSetTabVisCalls: "Shows or hides the Calls tab in the bottom tab bar. Hiding it does not delete call history or disable calling.", tabShowContacts: 'Show the Contacts tab', helpSetTabVisContacts: "Shows or hides the Contacts tab in the bottom tab bar. Hiding it does not delete your contacts or chats.", tabShowSelf: 'Show the My card tab', helpSetTabVisSelf: "Shows or hides the My card tab in the bottom tab bar. Your profile remains available, and this does not change whether it is shared.", tabShowSettings: 'Show the Settings tab', helpSetTabVisSettings: "Shows or hides the Settings tab in the bottom tab bar. If you hide it while using Settings, Breeze returns to Chats; Settings remains available from the settings button or commands.", callOutgoing: 'Outgoing', callIncoming: 'Incoming', callMissed: 'Missed', callVideoLabel: 'Video', callHistoryEmpty: 'No call history yet', callHistoryClear: 'Clear call history', callHistoryClearConfirm: 'Delete all call history?', callHistoryCleared: 'Call history cleared', callHistoryLogLabel: 'Keep a call history on this device', helpSetCallHistoryLog: "Keeps a local list of outgoing, incoming, and missed calls on this device. Turn it off to stop new call records here; it does not delete history already saved.",
+    ariaContacts: 'Contacts', navTerms: 'Terms', navPrivacy: 'Privacy',
+    tabChats: 'Chats', tabCalls: 'Calls', tabSelf: 'Profile', ariaMainNav: 'Main navigation', tabBarSection: 'Bottom tabs', tabChatsAlways: 'Chats is always shown', tabOrderSection: 'Tab order', tabMoveLeft: 'Move tab left', tabMoveRight: 'Move tab right', helpSetTabOrder: 'Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.', tabShowCalls: 'Show the Calls tab', helpSetTabVisCalls: "Shows or hides the Calls tab in the bottom tab bar. Hiding it does not delete call history or disable calling.", tabShowContacts: 'Show the Contacts tab', helpSetTabVisContacts: "Shows or hides the Contacts tab in the bottom tab bar. Hiding it does not delete your contacts or chats.", tabShowSelf: 'Show the Profile tab', helpSetTabVisSelf: "Shows or hides the Profile tab in the bottom tab bar. Your profile remains available, and this does not change whether it is shared.", tabShowSettings: 'Show the Settings tab', helpSetTabVisSettings: "Shows or hides the Settings tab in the bottom tab bar. If you hide it while using Settings, Breeze returns to Chats; Settings remains available from the settings button or commands.", callOutgoing: 'Outgoing', callIncoming: 'Incoming', callMissed: 'Missed', callVideoLabel: 'Video', callHistoryEmpty: 'No call history yet', callHistoryClear: 'Clear call history', callHistoryClearConfirm: 'Delete all call history?', callHistoryCleared: 'Call history cleared', callHistoryLogLabel: 'Keep a call history on this device', helpSetCallHistoryLog: "Keeps a local list of outgoing, incoming, and missed calls on this device. Turn it off to stop new call records here; it does not delete history already saved.",
     ariaBack: 'Back',
     ariaCall: 'Start voice call',
     ariaVideoCall: 'Start video call',
@@ -2543,7 +2543,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     btnInviteFriend: 'Invite a friend', helpSetInviteFriend: "Creates a link or message someone can use to add you on Breeze. Anyone who has the link may be able to use it, so share it only with the person you intend to invite.",
     btnMigrateApps: 'Migrate from LINE / WhatsApp / Telegram', helpSetMigrateApps: "Opens a guide for moving contacts or groups from LINE, WhatsApp, or Telegram to Breeze, including optional chat-history import. Imported history contains only what the other app exported.",
     btnCopyInvite: 'Copy invite message',
-    btnInviteQr: 'Show invite QR code',
+    btnInviteQr: 'Show invite QR code', addInviteQrHint: 'Have a friend scan this code to add you',
     btnGroupInvite: 'Create a group invite link',
     btnImportHistory: 'Import a chat history file',
     settingsShare: 'Invite & migrate',
@@ -3315,7 +3315,7 @@ _appModulesReady.then(() => {
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
   const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input|label|select|option|section)$/i;
-  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|selected|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
+  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|selected|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex|draggable)$/i;
 
   // DOMParser.parseFromString(str,'text/html') is ITSELF TT-guarded: the browser auto-
   // invokes 'default's createHTML (= this function) on the string first, which calls
@@ -7689,7 +7689,7 @@ async function initMessenger(dbName) {
     }
     await renderContacts();
     // v3.3: Enterprise features
-    await loadSettings();
+    await loadSettings(); _applyTabOrder();
     await checkRelayPin(); // stage-2 step 4: TOFU-pin / re-verify the serving relay's identity key for this account
     _updateFocusBanner(); // focus mode survives a reload — show it, or silence looks like "no messages"
     await _refreshDeviceRole();
@@ -8423,7 +8423,7 @@ async function initMessenger(dbName) {
     let prof = null;
     try { prof = _profileUI ? await _profileUI.myProfile() : null; } catch(e) { _dbg(e, 'self-card'); }
     const name = prof?.name || myName || '';
-    const face = prof?.img ? `<img class="avatar-img" src="${esc(prof.img)}" alt="">` : esc(prof?.emoji || (name || '?')[0].toUpperCase());
+    const face = prof?.img ? `<img class="avatar-img" src="${esc(prof.img)}" alt="">` : (prof?.emoji === '🌊' ? _iconSlot('wave') : esc(prof?.emoji || (name || '?')[0].toUpperCase()));
     safeSetHTML(card, `<div class="avatar">${face}</div><div class="info"><div class="name">${esc(name)}</div><div class="preview">${esc(myAlias ? '@' + myAlias : myShortId)}</div></div>`);
     card.classList.remove('hidden');
     card.onclick = () => { _profileUI?.showPanel().catch(e => _dbg(e, 'self-card-panel')); };
@@ -10947,7 +10947,13 @@ async function initMessenger(dbName) {
   (async () => {
     const stored = await dbGet('identity', 'keys');
     if (stored?.avatar) {
-      _DOM.get('msg-my-name').textContent = stored.avatar + ' ' + myName;
+      const nameEl = _DOM.get('msg-my-name');
+      if (stored.avatar === '🌊') {
+        nameEl.replaceChildren();
+        const wave = _createIcon('wave', 'avatar-wave');
+        if (wave) nameEl.appendChild(wave); else nameEl.textContent = '🌊';
+        nameEl.appendChild(document.createTextNode(' ' + myName));
+      } else nameEl.textContent = stored.avatar + ' ' + myName;
     }
   })();
   // v3: PreKey auto-replenish (check every 5 minutes)
@@ -12919,30 +12925,14 @@ async function initMessenger(dbName) {
   function _showAddContactPanel() {
     const initial = arguments[0];
     const [dlg, titleId] = _makeDialog();
+    const invite = generateInviteMessage();
     safeSetHTML(dlg, `
       <h3 id="${titleId}" class="i-m-0-12">${esc(t('addContactTitle'))}</h3>
-      <div class="add-choice-list">
-        <button type="button" class="btn btn-g add-choice" data-choice="add">${esc(t('addOptionContact'))}</button>
-        <button type="button" class="btn btn-o add-choice" data-choice="invite">${esc(t('btnInviteFriend'))}</button>
-        <button type="button" class="btn btn-o add-choice" data-choice="group">${esc(t('addOptionGroup'))}</button>
-      </div>
-      <div class="add-form add-form-contact hidden">
-        <span class="i-tiny-meta">${esc(t('addContact')).replace(/\n/g, '<br>')}</span>
-        <input type="text" class="field modal-input add-input" placeholder="${esc(t('addContactPh'))}">
-        <div class="nudge-actions">
-          <button type="button" class="btn btn-g btn-sm add-submit">${esc(t('addBtn'))}</button>
-        </div>
-        <div class="add-scan"></div>
-      </div>
-      <div class="add-form add-form-group hidden">
-        <input type="text" class="field modal-input group-input" placeholder="${esc(t('groupNamePrompt'))}">
-        <div class="nudge-actions">
-          <button type="button" class="btn btn-g btn-sm group-submit">${esc(t('addOptionGroup'))}</button>
-        </div>
-      </div>
-      <div class="dlg-btns">
-        <button class="btn btn-o btn-sm" value="cancel">${esc(t('cancel'))}</button>
-      </div>`);
+      <div class="add-choice-list"><button type="button" class="btn btn-g add-choice" data-choice="add">${esc(t('addOptionContact'))}</button><button type="button" class="btn btn-o add-choice" data-choice="invite">${esc(t('btnInviteFriend'))}</button><button type="button" class="btn btn-o add-choice" data-choice="group">${esc(t('addOptionGroup'))}</button></div>
+      <div class="qr-modal add-invite-qr"><div class="i-tiny-meta">${esc(t('addInviteQrHint'))}</div><div class="qr-slot"></div><div class="qr-url">${esc(invite.url)}</div></div>
+      <div class="add-form add-form-contact hidden"><span class="i-tiny-meta">${esc(t('addContact')).replace(/\n/g, '<br>')}</span><input type="text" class="field modal-input add-input" placeholder="${esc(t('addContactPh'))}"><div class="nudge-actions"><button type="button" class="btn btn-g btn-sm add-submit">${esc(t('addBtn'))}</button></div><div class="add-scan"></div></div>
+      <div class="add-form add-form-group hidden"><input type="text" class="field modal-input group-input" placeholder="${esc(t('groupNamePrompt'))}"><div class="nudge-actions"><button type="button" class="btn btn-g btn-sm group-submit">${esc(t('addOptionGroup'))}</button></div></div>
+      <div class="dlg-btns"><button class="btn btn-o btn-sm" value="cancel">${esc(t('cancel'))}</button></div>`);
     _showDialog(dlg);
     const close = () => { dlg.close(); dlg.remove(); };
     _wireDialogDismiss(dlg, close);
@@ -12952,6 +12942,11 @@ async function initMessenger(dbName) {
     const groupInput = dlg.querySelector('.group-input');
     const done = (v) => { close(); _dispatchAddInput(v); };
     dlg.querySelector('.add-scan').appendChild(_deviceScanButton('scanQR', done));
+    if (globalThis.__breezeQR?.generateQR) {
+      let qr; try { qr = globalThis.__breezeQR.generateQR(invite.url); }
+      catch(e) { _dbg(e, 'add-invite-qr'); qr = document.createElement('p'); qr.textContent = t('rvQRTooLarge'); }
+      qr.className = 'qr-code'; dlg.querySelector('.qr-slot').appendChild(qr);
+    }
     dlg.querySelector('[data-choice="add"]').onclick = () => { groupForm.classList.add('hidden'); contactForm.classList.remove('hidden'); addInput.focus(); };
     dlg.querySelector('[data-choice="group"]').onclick = () => { contactForm.classList.add('hidden'); groupForm.classList.remove('hidden'); groupInput.focus(); };
     dlg.querySelector('[data-choice="invite"]').onclick = () => { close(); shareInvite(); };
@@ -13806,7 +13801,7 @@ async function initMessenger(dbName) {
   }
   // Bottom tab bar: page navigation over the EXISTING views — no new
   // router. Chats, Contacts and Calls are the three faces of the one sidebar list
-  // (_listTab: recency + folder filters, vs friends by name, vs the on-device call history from src/app/call-history.js); My card opens
+  // (_listTab: recency + folder filters, vs friends by name, vs the on-device call history from src/app/call-history.js); Profile opens
   // the profile panel; Settings opens the settings view. Bar visibility is
   // CSS-derived from .sidebar.hidden; which optional tabs exist is a
   // setting (_applyTabVisibility) — the Chats tab is always there.
@@ -13814,6 +13809,14 @@ async function initMessenger(dbName) {
   function _setActiveTab(which) {
     _activeTab = which;
     for (const k in _TAB_IDS) { const el = _DOM.get(_TAB_IDS[k]); if (!el) continue; const on = k === which; el.classList.toggle('active', on); if (on) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current'); }
+  }
+  function _validTabOrder() {
+    const keys = Object.keys(_TAB_IDS), order = _settings?.tabOrder;
+    return Array.isArray(order) && order.length === keys.length && keys.every(k => order.includes(k)) ? order.slice() : keys;
+  }
+  function _applyTabOrder() {
+    const bar = _DOM.get('msg-tabbar'); if (!bar) return;
+    for (const k of _validTabOrder()) { const el = _DOM.get(_TAB_IDS[k]); if (el) bar.appendChild(el); }
   }
   function _applyTabVisibility() {
     const vis = { calls: _settings.tabCalls, contacts: _settings.tabContacts, self: _settings.tabSelf, settings: _settings.tabSettings };
@@ -13850,7 +13853,7 @@ async function initMessenger(dbName) {
   // Returning to the list (back button / browser back) re-selects the list tab that is showing.
   _DOM.get('b-msg-back')?.addEventListener('click', () => _setActiveTab(_listTab), { signal: _ac.signal });
   window.addEventListener('popstate', () => { if (window.innerWidth <= 640) _setActiveTab(_listTab); }, { signal: _ac.signal });
-  _applyTabVisibility();
+  _applyTabOrder(); _applyTabVisibility();
   // Input bar "+" panel: show/hide only — the controls inside keep their own
   // handlers (voice-input.js, stickers, nrn, the file input). Closes on an
   // outside tap, on Escape, on send, and after a one-shot item is used.
@@ -14031,7 +14034,7 @@ async function initMessenger(dbName) {
         fanout: _fanoutCount(), powerMode: ['auto', 'normal', 'saver', 'emergency'].includes(_settings.powerMode) ? _settings.powerMode : 'auto',
         relays: homeRelays().map(r => ({ label: r.label || r.url, url: r.url, origin: isOriginRelay(r), blocked: _relayBlockedUrls.has(r.url) })),
         tabCalls: _settings.tabCalls !== false, tabContacts: _settings.tabContacts !== false,
-        tabSelf: _settings.tabSelf !== false, tabSettings: _settings.tabSettings !== false,
+        tabSelf: _settings.tabSelf !== false, tabSettings: _settings.tabSettings !== false, tabOrder: _validTabOrder(),
       }));
       // (The add-account door is the account tab bar — renderAccountTabs
       // renders it for a single account too, so Settings needs no button.)
@@ -14053,6 +14056,50 @@ async function initMessenger(dbName) {
         const name = input?.value.trim() || '';
         if (!name) { input?.focus(); return; }
         if (await _profileUI?.setDisplayName(name)) showToast(t('profileSaved'), 'success');
+      });
+      const syncTabOrderRows = () => {
+        const list = d.querySelector('[data-tab-order-list]'); if (!list) return;
+        const order = _validTabOrder();
+        for (const k of order) { const row = list.querySelector(`[data-order-tab="${k}"]`); if (row) list.appendChild(row); }
+        order.forEach((k, i) => list.querySelector(`[data-order-tab="${k}"]`)?.querySelectorAll('[data-action="tab-move"]').forEach(btn => { btn.disabled = btn.dataset.dir === '-1' ? i === 0 : i === order.length - 1; }));
+      };
+      const saveTabOrder = (order) => { _settings.tabOrder = order.slice(); saveSettings(); _applyTabOrder(); syncTabOrderRows(); };
+      const moveTab = (key, dir) => {
+        const order = _validTabOrder(), from = order.indexOf(key), to = from + dir;
+        if (from < 0 || to < 0 || to >= order.length) return;
+        [order[from], order[to]] = [order[to], order[from]];
+        saveTabOrder(order);
+      };
+      d.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-action="tab-move"]'); if (!btn) return;
+        haptic.tap(); moveTab(btn.dataset.tab, parseInt(btn.dataset.dir, 10));
+      });
+      let dragTab = '';
+      const clearTabDrag = () => { dragTab = ''; d.querySelectorAll('.dragging,.drag-over').forEach(row => row.classList.remove('dragging', 'drag-over')); };
+      d.addEventListener('dragstart', (ev) => {
+        const row = ev.target.closest('[data-order-tab]'); if (!row) return;
+        dragTab = row.dataset.orderTab; row.classList.add('dragging');
+        if (ev.dataTransfer) { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', dragTab); }
+      });
+      d.addEventListener('dragend', clearTabDrag);
+      d.addEventListener('dragover', (ev) => {
+        const row = ev.target.closest('[data-order-tab]'); if (!dragTab || !row) return;
+        ev.preventDefault();
+        if (row.dataset.orderTab === dragTab) return;
+        if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
+        d.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        row.classList.add('drag-over');
+      });
+      d.addEventListener('drop', (ev) => {
+        const row = ev.target.closest('[data-order-tab]'); if (!dragTab || !row) return;
+        ev.preventDefault();
+        const order = _validTabOrder(), from = order.indexOf(dragTab);
+        if (from < 0 || !order.includes(row.dataset.orderTab)) { clearTabDrag(); return; }
+        const rect = row.getBoundingClientRect();
+        let to = order.indexOf(row.dataset.orderTab) + ((ev.clientY - rect.top) > rect.height / 2 ? 1 : 0);
+        const [moved] = order.splice(from, 1); if (from < to) to--;
+        order.splice(Math.max(0, Math.min(to, order.length)), 0, moved);
+        saveTabOrder(order); clearTabDrag();
       });
       // Stage-2 step 5: home-relay management. Adding a relay is the
       // step-4 pin ceremony pointed at a second relay (attest, show
