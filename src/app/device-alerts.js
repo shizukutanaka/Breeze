@@ -3,7 +3,7 @@ import { verifyBinding } from './device-keys.js';
 const utf8 = new TextEncoder();
 export const activityText = e => 'BreezeAccountActivity/v1:' + JSON.stringify([e.userId, e.pub, e.ed, e.kind, e.id, e.ts]);
 export const activityHash = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', utf8.encode(value))), b => b.toString(16).padStart(2, '0')).join('');
-const labels = { linked: 'daLinked', binding: 'dkBound', removed: 'dkRemoved', session: 'daSession', push: 'daPush', relayKeys: 'daRelayKeys' };
+const labels = { linked: 'daLinked', binding: 'dkBound', removed: 'dkRemoved', revoked: 'dkRevoked', checkpoint: 'dkCheckpoint', session: 'daSession', push: 'daPush', relayKeys: 'daRelayKeys' };
 
 export function createDeviceAlerts(D) {
   let busy = false, panel = null, unavailable = false, chain = Promise.resolve();
@@ -161,5 +161,9 @@ export function createDeviceAlerts(D) {
     const note = document.createElement('p'); note.textContent = D.t('daRecovery'); modal.appendChild(note);
     const close = document.createElement('button'); close.className = 'btn btn-o btn-sm'; close.textContent = D.t('close'); close.onclick = () => overlay.remove(); modal.appendChild(close); document.body.appendChild(overlay);
   }
-  return { registry, observeRegistry, observeActivities, observeKeys, announce, check, acknowledge, security, review, paint };
+  async function notice(kind, root, epoch) {
+    await serial(async () => { const s = await load(); record(s, kind + ':' + root + ':' + epoch, kind, root, Date.now()); await save(s); });
+    await paint();
+  }
+  return { registry, observeRegistry, observeActivities, observeKeys, announce, check, acknowledge, security, review, paint, notice };
 }
