@@ -176,7 +176,7 @@ export function createRendezvous(D) {
       for (const name of ['output', 'input']) {
         const label = document.createElement('label'), field = document.createElement('textarea');
         label.textContent = D.t(name === 'output' ? 'rvOutput' : 'rvInput');
-        field.className = 'modal-input'; field.dataset.rv = name; field.rows = 3;
+        field.className = 'field modal-input'; field.dataset.rv = name; field.rows = 3;
         field.readOnly = name === 'output'; field.maxLength = MAX_CODE_SIZE;
         label.appendChild(field); el(name + '-wrap').appendChild(label);
       }

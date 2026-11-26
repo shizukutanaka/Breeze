@@ -309,7 +309,27 @@ WCAG contrast in the 2026-11 UI pass: light `--g` #046c4e, `--gd` #065f46,
 | --ease | Transition | .3s cubic-bezier(.175,.885,.32,1.275) |
 | --touch | Touch min-size | 48px |
 
-**62 CSS Utility Classes** (`.i-*` prefix, counted 2026-11-26).
+**71 CSS Utility Classes** (`.i-*` prefix, counted 2026-11-26).
+
+**Component primitives** (UI/UX unification phase 2):
+
+- **Badges** are one component, `.bdg`. Folder tabs, bottom tabs, folder-entry counts,
+  contact-row unread counts and account-tab alerts all carry it;
+  `.bdg-row`, `.bdg-count` and `.bdg-acc` carry only the placement,
+  spacing and colour deltas. The former `.badge` / `.cbadge` / `.acc-badge` split
+  is removed.
+- **Text inputs** carry `.field` as the common base. Context modifiers
+  (`.setup-input`, `.setup-input-alt`, `.contact-filter`, `.modal-input`,
+  `.settings-name-input`) layer only the screen-specific presentation
+  deltas (layout, spacing, border or type size). Off-scale legacy measurements are written as `calc()`
+  offsets from the spacing, font and radius tokens so their computed
+  values stay unchanged.
+- **Buttons** use `.btn` as the base system. The purpose-specific
+  variants `.tool`, `.send`, `.tab-btn` and `.folder-tab` keep their
+  class names but share the same tokenised foundation: touch dimensions
+  derive from `--touch`, radii from the `--rad-*` scale and typography
+  from the `--fs-*` scale (`calc()` only where a legacy value sits
+  between scale steps).
 
 ### 4.5 UI Structure (2026-11 UI pass)
 
