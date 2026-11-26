@@ -8764,6 +8764,9 @@ async function initMessenger(dbName) {
     if (navigator.setAppBadge) {
       try { totalUnread > 0 ? navigator.setAppBadge(totalUnread) : navigator.clearAppBadge(); } catch(e) {}
     }
+    if (window.breeze?.setBadge) {
+      try { window.breeze.setBadge(totalUnread); } catch(e) {}
+    }
   }
 
   function updateFaviconBadge(count) {
@@ -15717,25 +15720,6 @@ if (PLATFORM === 'electron' && window.breeze) {
     static get permission() { return 'granted'; }
     static requestPermission() { return Promise.resolve('granted'); }
   };
-
-  // Badge: count total unread across all contacts
-  const _origRenderContacts = window._breezeRenderForBadge;
-  // Page-level interval: created once on load, not per account switch, so it is NOT
-  // tracked in initMessenger's _intervals (that array exists to cancel PER-ACCOUNT
-  // timers on switch, and is out of scope here — referencing it threw a ReferenceError
-  // the moment this block stopped being dead code).
-  setInterval(async () => {
-    if (_powerPresenceOff()) return;
-    try {
-      // Simple approach: read unread count from contact list DOM
-      const badges = document.querySelectorAll('.bdg-row');
-      let total = 0;
-      badges.forEach(b => { total += parseInt(b.textContent) || 0; });
-      window.breeze.setBadge(total);
-      // Update window title
-      _updateTitle(total);
-    } catch(e) { _dbg(e); }
-  }, 5000);
 
   // Auto-update UI
   window.breeze.onUpdateAvailable((info) => {

@@ -12,13 +12,11 @@ function renderContactsBlock() {
   return html.slice(start, end);
 }
 
-function electronBadgeBlock() {
-  const marker = '// ELECTRON NATIVE INTEGRATION';
-  const markerAt = html.indexOf(marker);
-  const start = html.indexOf('  setInterval(async () => {', markerAt);
-  const endMarker = '  }, 5000);';
+function electronBlock() {
+  const start = html.indexOf('// ELECTRON NATIVE INTEGRATION');
+  const endMarker = '} // ← END of the Electron-only block.';
   const end = html.indexOf(endMarker, start);
-  if (markerAt < 0 || start < 0 || end < 0) throw Error('electron badge interval moved');
+  if (start < 0 || end < 0) throw Error('electron integration markers moved');
   return html.slice(start, end + endMarker.length);
 }
 
@@ -47,10 +45,15 @@ describe('tab title unread counter', () => {
     expect(badgeAt).toBeGreaterThan(faviconAt);
   });
 
-  it('keeps the Electron native badge interval on its existing DOM recount path', () => {
-    const block = electronBadgeBlock();
-    expect(block).toContain("document.querySelectorAll('.bdg-row')");
-    expect(block).toContain('window.breeze.setBadge(total)');
-    expect(block).toContain('_updateTitle(total)');
+  it('drives the Electron native badge from renderContacts instead of a DOM recount interval', () => {
+    const electron = electronBlock();
+    expect(electron).not.toContain('  setInterval(async () => {');
+    expect(electron).not.toContain("querySelectorAll('.bdg-row')");
+    expect(electron).not.toContain('window.breeze.setBadge(total)');
+    expect(electron).not.toContain('_origRenderContacts');
+
+    const render = renderContactsBlock();
+    expect(render).toContain('window.breeze.setBadge(totalUnread)');
+    expect(render.indexOf('window.breeze.setBadge(totalUnread)')).toBeGreaterThan(render.indexOf('navigator.setAppBadge(totalUnread)'));
   });
 });
