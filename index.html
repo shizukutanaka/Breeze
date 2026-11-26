@@ -6472,7 +6472,7 @@ async function initMessenger(dbName) {
   }
 
   // UNIFIED RELAY SEND (v3)
-  // Sends via Sealed Sender first, falls back to standard relay
+  // Capable peers stay sealed across delivery failures and retries.
   // v3.1: Message retry queue — auto-retry failed sends
   const _retryQueue = [];
   let _retryTimer = null;
@@ -6682,7 +6682,7 @@ async function initMessenger(dbName) {
   // AAD binding to+ts. The relay sees only {to, ts, ratchet ciphertext, sealed blob}.
   // Capability-gated ('seal-v2' in prekey-bundle caps, read via /prekey/status, which
   // consumes NO one-time prekey); un-upgraded peers get the legacy envelope, and the
-  // /msg fallback + offline retry queue stay legacy (SECURITY.md).
+  // retries and relay fallbacks use the same capability-gated wire builder.
   const SEAL_INFO = 'breeze-seal-v2';
   // Metadata padding frame (mirror of src/crypto/seal.js): without it, se.ct's length
   // revealed the exact metadata byte length to the relay. The frame lives inside the
@@ -6740,18 +6740,26 @@ async function initMessenger(dbName) {
   // cached 5 min — the cache TTL IS the downgrade window: a peer that stops advertising
   // seal-v2 (version rollback, identity re-registration) receives sealed envelopes it
   // ack+skips until the cache expires, so keep the window as short as the other caches.
-  // Any failure answers "no" — the message still delivers, just legacy-shaped.
+  // An unavailable or malformed capability answer is unknown, never legacy.
   const _sealCapsCache = new Map();
   async function _peerSealV2(peerId) {
-    try {
-      const c = _sealCapsCache.get(peerId);
-      if (c && Date.now() - c.ts < 5 * MS.MIN) return c.ok;
-      const resp = await postAPIRaw('/prekey/status', { userId: peerId });
-      const data = resp?.ok ? await resp.json() : null;
-      const ok = Array.isArray(data?.caps) && data.caps.includes(CAPS_SEAL_V2);
-      _sealCapsCache.set(peerId, { ok, ts: Date.now() });
-      return ok;
-    } catch { return false; }
+    const c = _sealCapsCache.get(peerId);
+    if (c && Date.now() - c.ts < 5 * MS.MIN) return c.ok;
+    const contact = await dbGet('contacts', peerId).catch(() => null);
+    const homes = sanitizeHomeList(contact?.home);
+    if (!homes.some(isOriginRelay)) homes.push({ url: _servingRelayUrl(), pin: '' });
+    for (const entry of homes) {
+      try {
+        const resp = isOriginRelay(entry) ? await postAPIRaw('/prekey/status', { userId: peerId }) : await _contactRelayPost(entry, '/prekey/status', { userId: peerId });
+        const data = resp?.ok ? await resp.json() : null;
+        if (typeof data?.identityKey !== 'string' || data.identityKey.slice(0, 12) !== peerId || (data.caps !== undefined && !Array.isArray(data.caps))) continue;
+        const ok = data.caps?.includes(CAPS_SEAL_V2) || false;
+        _sealCapsCache.set(peerId, { ok, pub: data.identityKey, ts: Date.now() });
+        return ok;
+      } catch(e) { _dbg(e, 'seal-cap'); }
+    }
+    if (c?.ok) return true;
+    throw new Error('Sealed sender capability unavailable');
   }
 
   // ONE fan-out for every kind of outgoing content. Three near-identical copies of this loop
@@ -6996,9 +7004,12 @@ async function initMessenger(dbName) {
   // the identical sealed envelope (the fan-out's whole premise).
   // Extracted verbatim from relaySend's legacy path, which now calls
   // this too — one seal, however many deposits.
-  async function _buildWire(to, payload, sealPub, msgTs) {
+  async function _buildWire(to, payload, sealPub, msgTs, previous) {
+    if (previous?.sv === 2 && previous.se && previous.to === to && previous.ts === msgTs) return { to, ts: msgTs, payload: previous.payload, sv: 2, se: previous.se };
     let wire = payload;
-    if (sealPub && CONFIG.SEAL_V2_ENABLED && await _peerSealV2(to)) {
+    if (await _peerSealV2(to)) {
+      sealPub ||= (await dbGet('contacts', to).catch(() => null))?.pubB64 || _sealCapsCache.get(to)?.pub;
+      if (!CONFIG.SEAL_V2_ENABLED || !sealPub || sealPub.slice(0, 12) !== to) throw new Error('Sealed sender key unavailable');
       const { to: _t, ts: _ts, payload: _p, ...meta } = payload;
       // Session-bootstrap leak: the first message of a session wraps the ratchet ciphertext
       // in a plaintext X3DH header whose `ik` IS the sender's identity key — so a sealed
@@ -7007,17 +7018,13 @@ async function initMessenger(dbName) {
       let wirePayload = payload.payload;
       try { const pkm = JSON.parse(wirePayload); if (pkm?.t === 'pkm' && pkm.ik) { meta._pkik = pkm.ik; delete pkm.ik; wirePayload = JSON.stringify(pkm); } } catch {}
       const se = await sealMeta(sealPub, meta, to, msgTs);
-      if (se) wire = { to, ts: msgTs, payload: wirePayload, sv: 2, se };
+      if (!se) throw new Error('Sealed sender encryption failed');
+      wire = { to, ts: msgTs, payload: wirePayload, sv: 2, se };
     }
     return wire;
   }
 
-  // One copy at one relay, sealed first with the plain fallback —
-  // relaySend's per-relay discipline. A 429 carrying the per-mailbox
-  // gate's code defers THIS relay's copy only: the plain queue would
-  // be a different mailbox path, and the plan's rule is that one
-  // relay's limit never touches the others. Any other sealed failure
-  // falls through to plain exactly like the legacy path.
+  // Only a legacy wire may fall back to the sender-visible mailbox.
   // SHARE_PLAN stage 6, client side of the cost model: when a relay
   // refuses a deposit because the free quota is spent, say so once per
   // episode — details to the audit log, the user gets the way out
@@ -7028,6 +7035,10 @@ async function initMessenger(dbName) {
     showToast(t('toastQuotaExceeded'), 'error');
   } }) || null;
   function _noteQuota(r) { if (r && r.quota) _quotaNotice?.note(r.quota); }
+
+  function _queueRelaySend(to, payload, sealPub, extra = {}) {
+    if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, sealPub, attempts: 0, ...extra }); _saveRetryQueue(); scheduleRetry(); }
+  }
 
   async function _depositCopy(entry, to, wire, payload) {
     // A pin mismatch is conclusive for the session: the copy is
@@ -7054,6 +7065,7 @@ async function initMessenger(dbName) {
         if (rej?.kind === 'limited') return { ok: false, limited: true };
       }
     } catch(e) { _dbg(e, 'fanout-sealed'); }
+    if (wire.sv === 2) return { ok: false };
     try {
       const resp = await post('/msg/send', payload);
       if (resp?.ok) { const d = await resp.json().catch(() => ({})); return { ok: true, ack: !!d.ack }; }
@@ -7109,15 +7121,9 @@ async function initMessenger(dbName) {
     // Stage 6 step 2: a multi-relay account asserts its home list in
     // the envelope (sealed for v2 peers); default-only stays identical.
     if (payload && !payload.groupId && !payload.isGroupSK && Array.isArray(_settings.relays) && _settings.relays.length) payload = { ...payload, fromRelays: _myHomeWire() };
-    if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
+    if (_isOffline) { _queueRelaySend(to, payload, sealPub); registerBackgroundSync(); return; }
     const msgTs = payload.ts;
-    // Stage-2 step 6: redundant deposit at the contact's home relays.
-    // Resolved per send (stored home outranks the bundle hint; the
-    // caps gate lives in _resolveSendTargets). The fan-out engages
-    // only when the resolution names something beyond "primary only"
-    // — including the single non-primary home of a legacy contact —
-    // and the legacy body below then runs VERBATIM, so an account
-    // whose contacts have no homes sees byte-identical behaviour.
+    // Stored homes outrank bundle hints; one wire is shared by all copies.
     let fanTargets = [];
     let homeCandidates = [];
     try {
@@ -7126,8 +7132,10 @@ async function initMessenger(dbName) {
       homeCandidates = resolved.homes;
       fanTargets = homeCandidates.slice(0, resolved.fan);
     } catch(e) { _dbg(e, 'relay-targets'); fanTargets = []; homeCandidates = []; }
+    let wire;
+    try { wire = await _buildWire(to, payload, sealPub, msgTs); }
+    catch(e) { _dbg(e, 'seal-wire'); _queueRelaySend(to, payload, sealPub); return; }
     if (!(fanTargets.length === 0 || (fanTargets.length === 1 && isOriginRelay(fanTargets[0])))) {
-      const wire = await _buildWire(to, payload, sealPub, msgTs);
       let anyAck = false;
       let anyDeposited = false;
       const owed = [];
@@ -7168,15 +7176,13 @@ async function initMessenger(dbName) {
       // wire bytes, so the copies stay identical.
       if (anyAck && msgTs) updateMsgStatus(msgTs, 'deposited');
       if (owed.length) {
-        if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, wire: JSON.stringify(wire), relays: owed, attempts: 0 }); _saveRetryQueue(); }
+        _queueRelaySend(to, payload, sealPub, { wire: JSON.stringify(wire), relays: owed });
         scheduleRetry();
       }
       return;
     }
     // Sealed Sender (preferred — and with v2, actually sealed: see sealMeta above).
-    // The sealing itself lives in _buildWire (step 6) so the fan-out path
-    // deposits the identical bytes at every relay; behaviour here is unchanged.
-    const wire = await _buildWire(to, payload, sealPub, msgTs);
+    // Every relay receives the identical capability-gated wire bytes.
     try {
       const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
       if (resp.ok) {
@@ -7193,12 +7199,21 @@ async function initMessenger(dbName) {
           // exhausted quota. Queue the message as owed instead and
           // tell the user once why delivery is waiting.
           _quotaNotice?.note(rej);
-          if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+          _queueRelaySend(to, payload, sealPub, { wire: JSON.stringify(wire) });
           scheduleRetry();
           return;
         }
       }
     } catch(e) { _dbg(e, 'sealed'); }
+
+    if (wire.sv === 2) {
+      for (const entry of homeCandidates.slice(fanTargets.length)) {
+        const r = await _depositCopy(entry, to, wire, payload);
+        _noteQuota(r);
+        if (r.ok && !r.withheld) { if (r.ack && msgTs) updateMsgStatus(msgTs, 'deposited'); _noteRelayFailover(fanTargets[0], entry); return; }
+      }
+      _queueRelaySend(to, payload, sealPub, { wire: JSON.stringify(wire) }); return;
+    }
     // Standard relay fallback (DEPRECATED path — servers announce it via the
     // Deprecation response header and can disable it with PLAIN_PATH_DISABLED)
     try {
@@ -7226,13 +7241,13 @@ async function initMessenger(dbName) {
           // promise a retry in seconds for a window that resets in
           // hours. Queue as owed and surface the quota notice instead.
           _quotaNotice?.note(rej);
-          if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+          _queueRelaySend(to, payload, sealPub);
           scheduleRetry();
           return;
         }
         const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
         showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/MS.SEC) + 's', 'info');
-        setTimeout(() => { if (_retryQueue.length < 50) { _retryQueue.unshift({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } }, retryAfter);
+        setTimeout(() => _queueRelaySend(to, payload, sealPub), retryAfter);
         return;
       }
       throw new Error('relay-' + resp.status);
@@ -7254,7 +7269,7 @@ async function initMessenger(dbName) {
           return;
         }
       }
-      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+      _queueRelaySend(to, payload, sealPub);
       scheduleRetry();
     }
   }
@@ -7278,41 +7293,23 @@ async function initMessenger(dbName) {
         showToast(t('toastDeliveryFailed'), 'error');
         _updateOutboxBadge(); _saveRetryQueue(); return;
       }
-      item.attempts++;
-      // Stage-2 step 6: a fan-out item owes copies to specific relays
-      // (item.relays) and carries the exact wire bytes (item.wire) so
-      // the retried copies stay identical to the ones already placed.
-      // Each relay succeeds or stays owed independently; the item
-      // leaves the queue when no relay is owed, and the shared
-      // dead-letter path above bounds it at 3 attempts like any item.
-      if (item.wire && Array.isArray(item.relays) && item.relays.length) {
+      try {
+        let previous;
+        try { previous = JSON.parse(item.wire); } catch {}
+        const wireObj = await _buildWire(item.to, item.payload, item.sealPub, item.payload.ts, previous);
+        item.wire = JSON.stringify(wireObj);
+        item.attempts++;
+        const targets = Array.isArray(item.relays) && item.relays.length ? item.relays : [{ url: _servingRelayUrl(), pin: '' }];
         let anyAck = false;
         const still = [];
-        const wireObj = (() => { try { return JSON.parse(item.wire); } catch { return null; } })();
-        if (wireObj) {
-          for (const entry of item.relays) {
-            const r = await _depositCopy(entry, item.to, wireObj, item.payload);
-            _noteQuota(r);
-            if (r.ok) { if (r.ack) anyAck = true; }
-            else still.push(entry);
-          }
-        } else {
-          still.push(...item.relays); // unparseable wire: keep owing rather than drop a copy
+        for (const entry of targets) {
+          const r = await _depositCopy(entry, item.to, wireObj, item.payload);
+          _noteQuota(r);
+          if (r.ok) { if (r.ack) anyAck = true; }
+          else still.push(entry);
         }
         if (anyAck && item.payload?.ts) updateMsgStatus(item.payload.ts, 'deposited');
         if (still.length) { item.relays = still; _retryQueue.push(item); }
-        _updateOutboxBadge(); _saveRetryQueue();
-        if (_retryQueue.length > 0) scheduleRetry();
-        return;
-      }
-      try {
-        // v3.6: Retry via sealed sender first (privacy-preserving), fall back to standard relay
-        let sent = false;
-        try {
-          const resp = await postAPIRaw('/sealed/send', { to: item.to, envelope: JSON.stringify(item.payload) });
-          if (resp.ok) sent = true;
-        } catch {}
-        if (!sent) await postAPIRaw('/msg/send', item.payload);
       } catch(e) { _retryQueue.push(item); _saveRetryQueue(); }
       _updateOutboxBadge(); _saveRetryQueue();
       if (_retryQueue.length > 0) scheduleRetry();
