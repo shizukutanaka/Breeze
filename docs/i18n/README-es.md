@@ -18,7 +18,6 @@ Breeze no tiene «servidor de una empresa operadora». **Para usarlo, tú mismo 
 
 - La instalación estándar usa Cloudflare, así que **se requiere una cuenta de Cloudflare**. Los pasos están en la [guía de instalación en tu propio servidor](SELF_HOSTING-es.md) (puedes elegir otros idiomas desde el principio de la guía).
 - Las aplicaciones (Windows / Mac / Linux / Android / iPhone) se obtienen en la [página de descargas](https://github.com/shizukutanaka/Breeze/releases/latest) y se usan conectadas a tu propio servidor.
-- **Sobre la instalación de muestra (un aviso honesto)**: hay una muestra para comprobar el funcionamiento (https://breeze-469.pages.dev/). Lo que hay alojado es el mismo software, pero para un uso real utiliza tu propio servidor, por favor. La muestra puede cambiar o detenerse sin aviso. Lo que hayas instalado en tu propio servidor no se ve afectado si la muestra se detiene.
 
 Para un uso detallado, consulta el [manual](MANUAL-es.md) (puedes elegir otros idiomas desde el principio del manual).
 

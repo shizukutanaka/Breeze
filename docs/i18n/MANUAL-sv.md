@@ -24,8 +24,6 @@ Välj den fil som passar din enhet på [nedladdningssidan](https://github.com/sh
 
 Varje fil levereras med en kontrollsumma (SHA256SUMS.txt). Om du är orolig kan du kontrollera att summan för den fil du laddade ner stämmer.
 
-> **Om exempelsidan**: Ett exempel för att kontrollera hur det fungerar (https://breeze-469.pages.dev/) tillhandahålls. Det som finns där är samma programvara, men exemplet kan ändras eller stoppas utan förvarning. Använd en kopia som du har placerat på din egen server för verklig användning. En kopia på din egen server påverkas inte om exemplet stoppas.
-
 ### Första inställningarna
 
 1. Öppna appen.
@@ -233,7 +231,6 @@ Om något går fel under uppdateringen (till exempel att filkontrollen inte stä
 | Samtalets bekräftelsekod stämmer inte | Lägg på och ring igen. Fortsätt inte medan den inte stämmer. |
 | Glömt lösenfrasen | Återställning är omöjlig. Skapa en ny identitet och meddela dina kontakter igen. |
 | Tappat enheten | Om du har en säkerhetskopia kan du återställa på en ny enhet. Annars blir det en ny identitet. |
-| Exempelsidan öppnas inte | Exemplet kan stoppas utan förvarning. Använd en kopia som du har placerat på din egen server. |
 
 Rapportera buggar på [issuesidan](https://github.com/shizukutanaka/Breeze/issues), tack.
 

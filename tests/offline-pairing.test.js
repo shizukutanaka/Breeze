@@ -5,6 +5,7 @@ import { canonical } from '../src/app/rendezvous.js';
 import { pairingPreKeyMatches, padBucketSize } from '../src/crypto/ratchet.js';
 import { createPQSessionHelper } from '../src/crypto/pqxdh.js';
 
+globalThis._deviceRevocation = { allowed: async () => null, admit: async () => true, wrap: async body => body, unwrap: async body => body, targets: async () => null };
 const MS = { MIN: 60000, WEEK: 604800000 };
 const b64 = b => Buffer.from(b).toString('base64');
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');

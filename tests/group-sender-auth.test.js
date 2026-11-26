@@ -4,6 +4,7 @@ import { padBucketSize } from '../src/crypto/ratchet.js';
 import { createGroupAuthor, groupAuthorTranscript, forwardedGroupFields } from '../src/app/group-author.js';
 import { negotiateGroup } from '../src/crypto/negotiate.js';
 
+globalThis._deviceRevocation = { allowed: async () => null, admit: async () => true, wrap: async body => body, unwrap: async body => body, targets: async () => null };
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 function slice(start, end) {
   const s = html.indexOf(start), e = html.indexOf(end, s);

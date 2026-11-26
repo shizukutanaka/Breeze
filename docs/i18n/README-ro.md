@@ -18,7 +18,6 @@ Breeze nu are un „server al unei companii operatoare”. **Pentru a-l folosi, 
 
 - Instalarea standard folosește Cloudflare, așa că **este necesar un cont Cloudflare**. Procedura se află în [ghidul de instalare](SELF_HOSTING-ro.md) (versiunile în alte limbi pot fi alese la începutul ghidului).
 - Aplicația (Windows / Mac / Linux / Android / iPhone) se obține de pe [pagina de descărcare](https://github.com/shizukutanaka/Breeze/releases/latest) și se folosește conectată la propriul server.
-- **Despre instalarea demonstrativă (o precizare onestă)**: Am pus la dispoziție un exemplar demonstrativ, pentru verificarea funcționării (https://breeze-469.pages.dev/). Rulează același software, dar pentru utilizarea reală vă rugăm să folosiți propriul server. Exemplarul demonstrativ se poate schimba sau se poate opri fără preaviz. O copie instalată pe propriul server nu este afectată de oprirea exemplarului demonstrativ.
 
 Instrucțiunile detaliate de utilizare se află în [manual](MANUAL-ro.md) (versiunile în alte limbi pot fi alese la începutul manualului).
 

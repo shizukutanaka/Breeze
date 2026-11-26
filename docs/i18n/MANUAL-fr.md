@@ -24,8 +24,6 @@ Choisissez sur la [page de téléchargement](https://github.com/shizukutanaka/Br
 
 Chaque fichier est accompagné d'une valeur de contrôle (SHA256SUMS.txt). Si cela vous inquiète, vous pouvez vérifier que la valeur du fichier que vous avez téléchargé correspond.
 
-> **À propos de la page d'essai** : une page d'exemple pour vérifier le fonctionnement (https://breeze-469.pages.dev/) est fournie. Ce qui y est hébergé est le même logiciel, mais l'exemple peut changer ou s'arrêter sans préavis. Pour un usage réel, veuillez utiliser ce qui est hébergé sur votre propre serveur. Ce qui est hébergé sur votre propre serveur n'est pas affecté si l'exemple s'arrête.
-
 ### Première configuration
 
 1. Ouvrez l'application.
@@ -233,7 +231,6 @@ Si quelque chose échoue pendant la mise à jour (par exemple, la vérification 
 | Les codes de vérification de l'appel ne correspondent pas | Raccrochez et rappelez. Ne continuez pas tant qu'ils ne correspondent pas. |
 | Vous avez oublié la phrase secrète | La récupération est impossible. Créez une nouvelle identité et prévenez à nouveau vos correspondants. |
 | Vous avez perdu votre appareil | Si vous avez une sauvegarde, vous pouvez récupérer sur un nouvel appareil. Sinon, ce sera une nouvelle identité. |
-| La page d'essai ne s'ouvre pas | L'exemple peut s'arrêter sans préavis. Veuillez utiliser ce qui est hébergé sur votre propre serveur. |
 
 Les signalements de dysfonctionnements sont à adresser à la [page des Issues](https://github.com/shizukutanaka/Breeze/issues), s'il vous plaît.
 

@@ -18,7 +18,6 @@ Breeze ba shi da "sabar kamfani". **Don amfani da shi, kai da kanka za ka samar 
 
 - Saitin na yau da kullum yana amfani da Cloudflare, don haka **ana buƙatar asusun Cloudflare**. Matakan suna cikin [littafin jagora na girkawa](SELF_HOSTING-ha.md) (za ka iya zaɓar wasu harsuna daga farkon jagorar).
 - Ɗauki manhajar (Windows / Mac / Linux / Android / iPhone) daga [shafin saukewa](https://github.com/shizukutanaka/Breeze/releases/latest), ka haɗa ta da sabarka, ka yi amfani da ita.
-- **Game da samfurin nunawa (sanarwa ta gaskiya)**: Mun sa samfurin nunawa (https://breeze-469.pages.dev/) don gwajin aiki. Abin da ke ciki manhaja ɗaya ce, amma don amfani na gaske, don Allah ka yi amfani da sabarka. Samfurin na iya canzawa ko tsayawa ba tare da sanarwa ba. Abin da ka sa a sabarka ba zai shafi tsayawar samfurin ba.
 
 Cikakken bayanin amfani yana cikin [littafin bayani](MANUAL-ha.md) (za ka iya zaɓar wasu harsuna daga farkon littafin).
 

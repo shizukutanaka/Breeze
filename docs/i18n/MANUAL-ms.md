@@ -24,8 +24,6 @@ Dari [halaman muat turun](https://github.com/shizukutanaka/Breeze/releases/lates
 
 Setiap fail disertakan dengan nilai semakan (SHA256SUMS.txt). Jika anda bimbang, anda boleh menyemak sama ada nilai fail yang dimuat turun sepadan.
 
-> **Tentang halaman contoh**: Sebuah halaman contoh untuk memeriksa cara ia berfungsi (https://breeze-469.pages.dev/) disediakan. Perisian yang diletakkan di sana adalah sama, tetapi contoh tersebut mungkin berubah atau berhenti tanpa notis. Untuk penggunaan sebenar, sila gunakan salinan yang diletakkan pada pelayan anda sendiri. Salinan pada pelayan anda sendiri tidak terjejas jika contoh tersebut berhenti.
-
 ### Persediaan pertama
 
 1. Buka aplikasi.
@@ -233,7 +231,6 @@ Jika kemas kini gagal di tengah jalan (seperti nilai semakan fail tidak sepadan)
 | Kod pengesahan panggilan tidak sepadan | Tamatkan panggilan dan buat panggilan semula. Jangan teruskan dalam keadaan tidak sepadan. |
 | Lupa frasa laluan | Pemulihan tidak boleh dilakukan. Buat identiti baharu dan beritahu semula kepada pihak lain. |
 | Kehilangan peranti | Jika ada sandaran, anda boleh memulihkan pada peranti baharu. Jika tiada, ia menjadi identiti baharu. |
-| Halaman contoh tidak boleh dibuka | Contoh mungkin berhenti tanpa notis. Sila gunakan salinan yang diletakkan pada pelayan anda sendiri. |
 
 Laporan pepijat boleh dibuat ke [halaman Issue](https://github.com/shizukutanaka/Breeze/issues).
 

@@ -24,8 +24,6 @@ Wählen Sie auf der [Download-Seite](https://github.com/shizukutanaka/Breeze/rel
 
 Zu jeder Datei gibt es einen Prüfwert (SHA256SUMS.txt). Wenn Sie besorgt sind, können Sie prüfen, ob der Wert der heruntergeladenen Datei übereinstimmt.
 
-> **Zur Beispielseite**: Ein Beispiel zum Ausprobieren (https://breeze-469.pages.dev/) wird bereitgestellt. Was dort installiert ist, ist dieselbe Software, aber das Beispiel kann sich ohne Ankündigung ändern oder eingestellt werden. Verwenden Sie für den echten Gebrauch bitte das, was auf Ihrem eigenen Server installiert ist. Was auf Ihrem eigenen Server installiert ist, ist nicht betroffen, wenn das Beispiel eingestellt wird.
-
 ### Erste Einrichtung
 
 1. Öffnen Sie die App.
@@ -233,7 +231,6 @@ Wenn während der Aktualisierung etwas fehlschlägt (z. B. die Dateiprüfung sti
 | Die Prüfnummern des Anrufs stimmen nicht überein | Legen Sie auf und rufen Sie erneut an. Fahren Sie nicht fort, solange sie nicht übereinstimmen. |
 | Die Passphrase vergessen | Eine Wiederherstellung ist unmöglich. Erstellen Sie eine neue Identität und teilen Sie sie Ihren Gegenübern erneut mit. |
 | Das Gerät verloren | Wenn Sie eine Sicherung haben, können Sie auf einem neuen Gerät wiederherstellen. Wenn nicht, wird es eine neue Identität. |
-| Die Beispielseite öffnet sich nicht | Das Beispiel kann ohne Ankündigung eingestellt werden. Bitte verwenden Sie das, was auf Ihrem eigenen Server installiert ist. |
 
 Fehlermeldungen bitte an die [Issues-Seite](https://github.com/shizukutanaka/Breeze/issues).
 

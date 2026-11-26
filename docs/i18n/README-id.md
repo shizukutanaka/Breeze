@@ -18,7 +18,6 @@ Breeze tidak memiliki "server perusahaan". **Untuk menggunakannya, Anda sendiri 
 
 - Penyiapan standar menggunakan Cloudflare, jadi **akun Cloudflare diperlukan**. Langkah-langkahnya ada di [panduan pemasangan](SELF_HOSTING-id.md) (bahasa lain dapat dipilih dari bagian atas panduan).
 - Ambil aplikasinya (Windows / Mac / Linux / Android / iPhone) dari [halaman unduhan](https://github.com/shizukutanaka/Breeze/releases/latest), lalu hubungkan ke server Anda sendiri untuk menggunakannya.
-- **Tentang host demo (catatan yang jujur)**: Sebuah demo (https://breeze-469.pages.dev/) tersedia untuk dicoba. Perangkat lunaknya sama, tetapi untuk penggunaan sebenarnya silakan gunakan server Anda sendiri. Demo dapat berubah atau berhenti tanpa pemberitahuan. Breeze yang dihosting di server Anda sendiri tidak terpengaruh oleh penghentian demo.
 
 Untuk petunjuk penggunaan yang terperinci, lihat [manual](MANUAL-id.md) (bahasa lain dapat dipilih dari bagian atas manual).
 

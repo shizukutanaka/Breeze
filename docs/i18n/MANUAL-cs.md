@@ -24,8 +24,6 @@ Na [stránce ke stažení](https://github.com/shizukutanaka/Breeze/releases/late
 
 Ke každému souboru je přiložen kontrolní součet (SHA256SUMS.txt). Pokud máte obavy, můžete ověřit, že součet staženého souboru souhlasí.
 
-> **O ukázkové stránce**: Ukázka pro ověření, jak to funguje (https://breeze-469.pages.dev/), je k dispozici. To, co tam je umístěno, je stejný software, ale ukázka se může bez upozornění změnit nebo zastavit. Pro skutečné použití používejte verzi umístěnou na vašem vlastním serveru. Na verzi na vašem vlastním serveru zastavení ukázky nemá vliv.
-
 ### První nastavení
 
 1. Otevřete aplikaci.
@@ -233,7 +231,6 @@ Pokud během aktualizace dojde k chybě (například nesouhlasí kontrola soubor
 | Potvrzovací kód hovoru se neshoduje | Zavěste a zavolejte znovu. Nepokračujte, dokud se neshoduje. |
 | Zapomenutá přístupová fráze | Obnova není možná. Vytvořte novou identitu a znovu informujte své kontakty. |
 | Ztracené zařízení | Pokud máte zálohu, můžete obnovit na novém zařízení. Pokud ne, bude to nová identita. |
-| Ukázková stránka se neotevře | Ukázka se může bez upozornění zastavit. Použijte verzi umístěnou na vašem vlastním serveru. |
 
 Chyby prosím hlaste na [stránce Issues](https://github.com/shizukutanaka/Breeze/issues).
 

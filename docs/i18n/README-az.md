@@ -18,7 +18,6 @@ Breeze-in «operator şirkət serveri» yoxdur. **İstifadə etmək üçün yerl
 
 - Standart quraşdırma Cloudflare-dan istifadə edir, buna görə **Cloudflare hesabı tələb olunur**. Addımlar [yerləşdirmə təlimatında](SELF_HOSTING-az.md) (digər dilləri təlimatın əvvəlindən seçə bilərsiniz) verilib.
 - Tətbiqləri (Windows / Mac / Linux / Android / iPhone) [yükləmə səhifəsindən](https://github.com/shizukutanaka/Breeze/releases/latest) götürüb öz serverinizə qoşularaq istifadə edirsiniz.
-- **Nümunə yerləşdirmə haqqında (dürüst bildiriş)**: İşləkliyini yoxlamaq üçün bir nümunə (https://breeze-469.pages.dev/) yerləşdirilib. Orada da eyni proqram təminatıdır, lakin real istifadə üçün öz serverinizdən istifadə edin. Nümunə xəbərdarlıq edilmədən dəyişə və ya dayana bilər. Öz serverinizə yerləşdirdiyiniz, nümunənin dayanmasından təsirlənmir.
 
 Ətraflı istifadə qaydası [təlimatda](MANUAL-az.md) (digər dilləri təlimatın əvvəlindən seçə bilərsiniz) verilib.
 

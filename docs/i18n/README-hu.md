@@ -18,7 +18,6 @@ A Breeze-nek nincs „üzemeltető vállalati szervere”. **A használatához �
 
 - A szokásos beállítás a Cloudflare-t használja, ezért **Cloudflare-fiók szükséges hozzá**. Az eljárás a [telepítési útmutatóban](SELF_HOSTING-hu.md) található (a többnyelvű változatok az útmutató elején választhatók).
 - Az alkalmazást (Windows / Mac / Linux / Android / iPhone) a [letöltési oldalról](https://github.com/shizukutanaka/Breeze/releases/latest) szerezheti be, és a saját szerveréhez csatlakozva használhatja.
-- **A mintatelepítésről (őszinte tájékoztatás)**: Működés-ellenőrzés céljából elhelyeztünk egy mintát (https://breeze-469.pages.dev/). Ugyanaz a szoftver fut rajta, de valós használatra kérjük, használja a saját szerverét. A minta előzetes értesítés nélkül megváltozhat vagy leállhat. A saját szerverére telepített példányt a minta leállása nem érinti.
 
 A részletes használati leírás a [kézikönyvben](MANUAL-hu.md) található (a többnyelvű változatok a kézikönyv elején választhatók).
 

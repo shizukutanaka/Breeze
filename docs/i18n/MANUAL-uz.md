@@ -24,8 +24,6 @@ Bu qo'llanma foydalanishni boshlayotganlar uchun yo'riqnomadir.
 
 Har bir faylga tekshirish raqami (SHA256SUMS.txt) ilova qilingan. Xohlasangiz, yuklab olgan faylingizning raqami mos kelishini tekshirishingiz mumkin.
 
-> **Namuna sahifasi haqida**: Qanday ishlashini tekshirish uchun namuna (https://breeze-469.pages.dev/) taqdim etiladi. U yerda joylashtirilgani xuddi shu dastur, lekin namuna ogohlantirishsiz o'zgarishi yoki to'xtashi mumkin. Haqiqiy foydalanish uchun o'z serveringizga joylashtirgan nusxadan foydalaning. Namuna to'xtasa ham, o'z serveringizga joylashtirganingizga ta'sir qilmaydi.
-
 ### Dastlabki sozlash
 
 1. Ilovani oching.
@@ -233,7 +231,6 @@ Yangilash paytida xato yuz bersa (fayl tekshiruvi mos kelmasa va h.k.), **yangil
 | Qo'ng'iroq tekshirish kodi mos kelmaydi | Qo'ng'iroqni uzib, qayta qo'ng'iroq qiling. Mos kelmagan holda davom ettirmang. |
 | Parol iborasini unutdingiz | Tiklash mumkin emas. Yangi shaxs yaratib, ikkinchi tomonga qayta xabar bering. |
 | Qurilmani yo'qotdingiz | Zaxira nusxangiz bo'lsa, yangi qurilmada tiklashingiz mumkin. Bo'lmasa, yangi shaxs bo'ladi. |
-| Namuna sahifasi ochilmaydi | Namuna ogohlantirishsiz to'xtashi mumkin. Iltimos, o'z serveringizga joylashtirgan nusxadan foydalaning. |
 
 Xatoliklar haqida xabarlarni [Issue sahifasiga](https://github.com/shizukutanaka/Breeze/issues) yuboring.
 
