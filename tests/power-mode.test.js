@@ -790,3 +790,81 @@ describe('power mode — electron badge recount', () => {
     expect(h.updateTitle).toHaveBeenNthCalledWith(2, 5);
   });
 });
+
+// The per-message disappearing countdown is display-only — expiry is enforced by
+// the gated DB sweep above — but each rendered message owns a self-rescheduling
+// timer chain. Extract the deployed updateCountdown closure verbatim and drive it
+// with controlled clocks, timers, DOM nodes, and power floors.
+const countdownBlock = slice('        const updateCountdown = () => {', '\n        requestAnimationFrame(() => setTimeout(updateCountdown, MS.SEC));');
+const createCountdown = new Function(
+  '_DOM', 'CONFIG', 'MS', 'setTimeout', 'requestAnimationFrame', 'timerId', 'disappearAt', 'Date', '_powerPollFloorMs',
+  countdownBlock + '\nreturn { updateCountdown };');
+
+function countdownHarness(floor, remainingMs) {
+  const now = 1000000;
+  const timeouts = [];
+  const msgEl = { classList: { add: vi.fn() }, remove: vi.fn() };
+  const badge = {
+    textContent: '',
+    classList: { add: vi.fn() },
+    closest: vi.fn(() => msgEl),
+  };
+  const { updateCountdown } = createCountdown(
+    { get: vi.fn(() => badge) },
+    { FADE_OUT_MS: 250 },
+    { SEC: 1000, MIN: 60000 },
+    (fn, ms) => { timeouts.push({ fn, ms }); return timeouts.length; },
+    () => 1,
+    'ttl-test',
+    now + remainingMs,
+    { now: () => now },
+    () => floor,
+  );
+  updateCountdown();
+  return { timeouts, badge, msgEl };
+}
+
+describe('power mode — disappearing message countdown floor', () => {
+  it('keeps the 30-second reschedule in normal mode while more than a minute remains', () => {
+    const h = countdownHarness(0, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(30000);
+  });
+
+  it('keeps the one-second reschedule in normal mode during the final minute', () => {
+    const h = countdownHarness(0, 60000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(1000);
+  });
+
+  it('stretches the reschedule to one minute in saver mode', () => {
+    const h = countdownHarness(60000, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(60000);
+  });
+
+  it('stretches the reschedule to ten minutes in emergency mode', () => {
+    const h = countdownHarness(600000, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(600000);
+  });
+
+  it('keeps the chain alive in emergency mode — each tick reschedules rather than stopping', () => {
+    const h = countdownHarness(600000, 120000);
+    expect(h.timeouts).toHaveLength(1);
+    expect(typeof h.timeouts[0].fn).toBe('function');
+    h.timeouts[0].fn();
+    expect(h.timeouts).toHaveLength(2);
+    expect(h.timeouts[1].ms).toBe(600000);
+  });
+
+  it('still takes the expiry fade-out path when no time remains', () => {
+    const h = countdownHarness(600000, -1);
+    expect(h.badge.closest).toHaveBeenCalledWith('.msg');
+    expect(h.msgEl.classList.add).toHaveBeenCalledWith('fade-out');
+    expect(h.timeouts).toHaveLength(1);
+    expect(h.timeouts[0].ms).toBe(250);
+    h.timeouts[0].fn();
+    expect(h.msgEl.remove).toHaveBeenCalledTimes(1);
+  });
+});
