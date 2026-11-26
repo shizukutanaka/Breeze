@@ -120,7 +120,7 @@ describe('setup copy — plain language, no key jargon', () => {
 describe('settings view — display name editing shares the profile save path', () => {
   it('the settings panel renders a name field and a save button', () => {
     const panel = sliceBetween('function _renderSettingsPanel(d)', 'function openSettingsView()');
-    expect(panel).toContain('class="settings-name-input"');
+    expect(panel).toContain('class="field settings-name-input"');
     expect(panel).toContain('data-action="save-display-name"');
     expect(panel).toContain("t('yourDisplayName')");
     expect(panel).toContain("value=\"${esc(myName)}\"");

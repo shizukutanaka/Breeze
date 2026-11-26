@@ -74,7 +74,7 @@ describe('listTime — LINE-style calendar buckets', () => {
 describe('unread rows are emphasised, not only badged', () => {
   it('the row carries an unread class while unread > 0', () => {
     expect(html).toContain("(c.unread > 0 ? ' unread' : '')");
-    expect(html).toContain("${c.unread > 0 ? `<span class=\"cbadge\">${c.unread}</span>` : ''}");
+    expect(html).toContain("${c.unread > 0 ? `<span class=\"bdg bdg-row\">${c.unread}</span>` : ''}");
   });
   it('CSS bolds the name/preview and accents the time for unread rows', () => {
     expect(html).toContain('.contact.unread .info .name { font-weight: 700 }');

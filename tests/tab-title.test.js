@@ -15,7 +15,7 @@ function tabTitleBlock() {
 describe('tab title unread counter', () => {
   it('counts the rendered unread badges instead of the impossible descendant selector', () => {
     const block = tabTitleBlock();
-    expect(block).toContain("querySelectorAll('.cbadge')");
+    expect(block).toContain("querySelectorAll('.bdg-row')");
     expect(block).not.toContain("'.contact .unread'");
   });
 
@@ -30,10 +30,10 @@ describe('tab title unread counter', () => {
     const block = tabTitleBlock();
     const match = block.match(/querySelectorAll\('([^']+)'\)/);
     expect(match).not.toBeNull();
-    expect(match[1]).toBe('.cbadge');
+    expect(match[1]).toBe('.bdg-row');
 
     const outsideBlock = html.replace(block, '');
-    const otherOccurrences = outsideBlock.match(/querySelectorAll\('\.cbadge'\)/g) || [];
+    const otherOccurrences = outsideBlock.match(/querySelectorAll\('\.bdg-row'\)/g) || [];
     expect(otherOccurrences.length).toBeGreaterThanOrEqual(2);
   });
 });

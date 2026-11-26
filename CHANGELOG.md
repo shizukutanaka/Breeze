@@ -6,6 +6,13 @@
 
 - **Negotiated safety-number v2.** Supporting contacts compare the single-sourced, identifier-bound 5200-round SHA-512 reference's 60 digits; mixed or unknown capabilities retain the 96-bit legacy number. Versioned verification QRs include the separate both-key comparison; display upgrades preserve verification. The v1 in-person QR/transcript bootstrap remains compatible, with contact verification available afterwards. Includes EN/JA/fallback text, ESM/SW/CSP deployment and negotiation/persistence/browser tests.
 
+- **Sealed Sender retries fail closed.** Capable-peer delivery retries, redundant copies
+  and alternate-home fallbacks keep Sealed Sender v2, including the first-contact identity
+  header. Only a successful legacy capability answer permits sender-visible fallback;
+  unavailable capabilities or failed sealing keep the message queued. Persisted pre-change
+  queues are resealed at send time; existing v2 wires stay byte-identical across retries.
+  Added deployed-path leak/migration/failure tests and browser retry wiretap coverage.
+
 - **Certified device revocation and group authors.** Root-signed monotonic checkpoints,
   consent-backed device ownership, bounded E2EE checkpoint/head gossip and persistent
   stale-view alerts. Capable contacts reject revoked device sessions and group authors;

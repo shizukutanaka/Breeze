@@ -182,8 +182,11 @@ describe('(h) touch targets meet the size floor', () => {
 
   it('the send button is 44px and .msg-copy has a wider hit area', () => {
     const send = ruleBody('.input-bar .send');
-    expect(send).toContain('width: 44px');
-    expect(send).toContain('height: 44px');
+    expect(send).toContain('width: calc(var(--touch) - 4px)');
+    expect(send).toContain('height: calc(var(--touch) - 4px)');
+    const touch = html.match(/--touch:\s*(\d+)px/);
+    expect(touch).not.toBeNull();
+    expect(Number(touch[1]) - 4).toBe(44);
     const copy = ruleBody('.msg-copy');
     expect(copy).toContain('min-width: 32px');
     expect(copy).toContain('min-height: 32px');

@@ -289,7 +289,7 @@ export function createOfflinePairing(D) {
         <button class="btn btn-o btn-sm" data-op="close">${D.esc(D.t('uiClose'))}</button>`);
       const el = key => dlg.querySelector(`[data-op="${key}"]`);
       for (const name of ['output', 'input']) {
-        const area = document.createElement('textarea'); area.dataset.op = name; area.className = 'modal-input';
+        const area = document.createElement('textarea'); area.dataset.op = name; area.className = 'field modal-input';
         area.readOnly = name === 'output'; area.setAttribute('aria-label', D.t(name === 'output' ? 'opOutput' : 'opInput'));
         el(name + '-wrap').appendChild(area);
       }

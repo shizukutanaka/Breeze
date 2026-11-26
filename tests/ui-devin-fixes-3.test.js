@@ -75,15 +75,15 @@ describe('batch 3c: aria-pressed on NRN and visible labels in setup dialogs', ()
     expect(fn).toContain("b.setAttribute('aria-pressed', _noReplyNeeded ? 'true' : 'false')");
   });
   it('the recovery-phrase creation dialog labels its passphrase input visibly', () => {
-    expect(html).toContain('<label class="modal-desc">${esc(t(\'recoveryPassLabel\'))}<input class="modal-input" type="password"');
+    expect(html).toContain('<label class="modal-desc">${esc(t(\'recoveryPassLabel\'))}<input class="field modal-input" type="password"');
   });
   it('the phrase-restore dialog labels the phrase and passphrase fields visibly', () => {
-    expect(html).toContain('<label class="modal-desc">${esc(t(\'recoveryPhraseLabel\'))}<textarea class="modal-input rp-phrase"');
-    expect(html).toContain('<label class="modal-desc">${esc(t(\'recoveryPassLabel\'))}<input class="modal-input rp-pass"');
+    expect(html).toContain('<label class="modal-desc">${esc(t(\'recoveryPhraseLabel\'))}<textarea class="field modal-input rp-phrase"');
+    expect(html).toContain('<label class="modal-desc">${esc(t(\'recoveryPassLabel\'))}<input class="field modal-input rp-pass"');
   });
   it('both simple-recovery dialogs label the account and passphrase fields visibly', () => {
-    expect(html.match(/<label class="modal-desc">\$\{esc\(t\('simpleAccountLabel'\)\)\}<input class="modal-input rp-account"/g)).toHaveLength(2);
-    expect(html.match(/<label class="modal-desc">\$\{esc\(t\('simplePassLabel'\)\)\}<input class="modal-input rp-pass"/g)).toHaveLength(2);
+    expect(html.match(/<label class="modal-desc">\$\{esc\(t\('simpleAccountLabel'\)\)\}<input class="field modal-input rp-account"/g)).toHaveLength(2);
+    expect(html.match(/<label class="modal-desc">\$\{esc\(t\('simplePassLabel'\)\)\}<input class="field modal-input rp-pass"/g)).toHaveLength(2);
   });
 });
 
