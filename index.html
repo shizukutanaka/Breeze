@@ -275,7 +275,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .settings-note, .settings-status { padding: var(--sp-2) var(--sp-3); color: var(--t3); font-size: var(--fs-caption); line-height: 1.5 }
 .settings-danger-row .settings-action-main { color: var(--danger) }
 .settings-row > .settings-help-btn, .settings-profile-card > .settings-help-btn { margin-right: var(--sp-2); flex-shrink: 0 }
-.settings-end { text-align: center } .settings-tab-order-row { cursor: grab } .settings-tab-order-row.dragging { opacity: .45 } .settings-tab-order-row.drag-over { box-shadow: inset 0 2px 0 var(--g) }
+.settings-end { text-align: center } .settings-tab-order-row { cursor: grab } .settings-tab-order-row.dragging { opacity: .45 } .settings-tab-order-row.drag-over { box-shadow: inset 0 0 0 2px var(--g) } [data-tab-order-list] { display: flex; gap: var(--sp-1); padding: var(--sp-2) var(--sp-3) } [data-tab-order-list] .settings-tab-order-row { flex: 1 1 0; min-width: 0; flex-direction: column; justify-content: flex-start; gap: var(--sp-1); padding: var(--sp-2) var(--sp-1); border: 1px solid var(--b1); border-radius: var(--rad-md) } [data-tab-order-list] .settings-row-main { flex-direction: column; min-height: 0; gap: var(--sp-1); font-size: var(--fs-caption); text-align: center } [data-tab-order-list] .settings-row-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap } .tab-order-moves { display: flex; gap: var(--sp-1) } .tab-order-moves .btn-sm { min-width: 22px; height: 24px; padding: 0 var(--sp-1) }
 /* One-time cards in the chat log (keywrap tip, first-contact backup nudge) */
 .nudge-card { display: flex; flex-direction: column; gap: var(--sp-2) }
 .nudge-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap }
@@ -2646,7 +2646,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
 // English table, which t() consults first, and the other 7 are never passed to t() anywhere.
 // It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
 // ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
-const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk', 'sl', 'bs', 'be', 'af', 'eo', 'fy', 'lb', 'mt', 'gd', 'cy'];
+const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk', 'sl', 'bs', 'be', 'af', 'eo', 'fy', 'lb', 'mt', 'gd', 'cy', 'gu', 'kn', 'mr', 'ne', 'or', 'si', 'as', 'lo', 'mn', 'ky'];
 function detectLang() {
   const nav = (navigator.language || 'en');
   const lower = nav.toLowerCase();
@@ -14132,7 +14132,7 @@ async function initMessenger(dbName) {
         const order = _validTabOrder(), from = order.indexOf(dragTab);
         if (from < 0 || !order.includes(row.dataset.orderTab)) { clearTabDrag(); return; }
         const rect = row.getBoundingClientRect();
-        let to = order.indexOf(row.dataset.orderTab) + ((ev.clientY - rect.top) > rect.height / 2 ? 1 : 0);
+        let to = order.indexOf(row.dataset.orderTab) + (((ev.clientX - rect.left) > rect.width / 2) !== (document.dir === 'rtl') ? 1 : 0);
         const [moved] = order.splice(from, 1); if (from < to) to--;
         order.splice(Math.max(0, Math.min(to, order.length)), 0, moved);
         saveTabOrder(order); clearTabDrag();
