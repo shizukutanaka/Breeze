@@ -3863,7 +3863,6 @@ function _updateTitle(unreadCount) {
   document.title = (unreadCount > 0 ? `(${unreadCount}) ` : '') + 'Breeze' + accName;
 }
 
-
 // v3.5: SECURITY — Validate URL scheme for OGP/external content
 
 // v3.5: DRY helpers for slash command output (52x→1x dedup)
@@ -10953,7 +10952,6 @@ async function initMessenger(dbName) {
   const createGroup = name => _groupCreate?.createGroup(name) || Promise.resolve(), createGroupInviteLink = name => _groupCreate?.createGroupInviteLink(name) || Promise.resolve();
   function startGroupMemberPoll(token, groupId) { return _groupCreate?.startGroupMemberPoll(token, groupId); } async function processJoinToken(token) { return _groupCreate?.processJoinToken(token); }
 
-
   // Poll for new members joining the group
   // Auto-start member polling for groups with joinToken
   (async () => {
@@ -11926,7 +11924,6 @@ async function initMessenger(dbName) {
     let text, storedFileData = null;
     const meta = { msgId, replyTo: msg.replyTo, disappearAt: msg.disappearAt, senderName: msg.fromName,
       ...(msg.nrn === true ? { nrn: true } : {}) };
-
 
     if (msg.isFile) {
       try {
@@ -12941,7 +12938,6 @@ async function initMessenger(dbName) {
     await restoreBackup(file);
   });
 
-
   // SHARE_PLAN stage 4 step 4: the one add-contact surface. Every path
   // in — invite link, QR scan, @alias, raw key, group: creation —
   // dispatches through _dispatchAddInput into the SAME resolveAndAdd
@@ -13276,7 +13272,6 @@ async function initMessenger(dbName) {
     delete _peerRelayQueue[targetId];
     _dbg(null, 'Peer relay: delivered ' + queue.length + ' msgs to ' + targetId);
   }
-
 
   // v3 PRO: EPHEMERAL ROOMS — URL = chat
   //
