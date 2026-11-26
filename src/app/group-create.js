@@ -95,6 +95,7 @@ export function createGroupCreate(D) {
   function startGroupMemberPoll(token, groupId) {
     if (!D.hasApi()) return;
     const poll = setInterval(async () => {
+      if (D.powerOff?.()) return;
       try {
         const resp = await D.postAPIRaw('/group/info', { token });
         if (!resp.ok) { clearInterval(poll); return; }

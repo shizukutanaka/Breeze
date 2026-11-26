@@ -1,5 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createGroupCreate } from '../src/app/group-create.js';
 
 // Power saving (emergency design phase 1): the decision logic lives inline in
 // index.html next to _adaptiveConfig. Extract it verbatim and exercise it —
@@ -212,6 +213,79 @@ describe('power mode — network quality probe', () => {
   });
 });
 
+const signalPollBlock = slice('  function startSignalPoll(', '\n  async function connectPeer(');
+function signalPollHarness(floor, poll = vi.fn(async () => false)) {
+  const start = new Function('MS', '_dbg', '_powerPollFloorMs',
+    signalPollBlock + '\nreturn startSignalPoll;')({ SEC: 1000, MIN: 60000 }, () => {}, () => floor);
+  return { controller: start(poll, () => false), poll };
+}
+
+describe('power mode — signal poll discovery floor', () => {
+  it('holds the not-connected discovery loop at the floor instead of the backoff cadence', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = signalPollHarness(600000);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(58000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(541999);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.poll).toHaveBeenCalledTimes(2);
+      h.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps the two-second active discovery cadence when the floor is zero', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = signalPollHarness(0, vi.fn(async () => true));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(h.poll).toHaveBeenCalledTimes(2);
+      h.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('keeps wake immediate while a floor is set', async () => {
+    vi.useFakeTimers();
+    try {
+      const h = signalPollHarness(600000);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(h.poll).toHaveBeenCalledTimes(1);
+      h.controller.wake();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(h.poll).toHaveBeenCalledTimes(2);
+      h.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('applies the floor to a failed not-connected retry but not to a connected retry', async () => {
+    vi.useFakeTimers();
+    try {
+      const offline = signalPollHarness(600000, vi.fn().mockRejectedValueOnce(Error('offline')).mockResolvedValue(false));
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(offline.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(58000);
+      expect(offline.poll).toHaveBeenCalledTimes(1);
+      offline.controller.stop();
+
+      const connected = signalPollHarness(600000, vi.fn().mockRejectedValueOnce(Error('offline')).mockResolvedValue(false));
+      connected.controller.setConnected(true);
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(connected.poll).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(connected.poll).toHaveBeenCalledTimes(2);
+      connected.controller.stop();
+    } finally { vi.useRealTimers(); }
+  });
+});
+
+
 function lineContaining(needle) {
   const at = html.indexOf(needle);
   if (at < 0) throw Error('device-alerts registration moved');
@@ -271,5 +345,158 @@ describe('power mode — device alerts check', () => {
 
     const h = deviceAlertsHarness({ powerMode: 'emergency' });
     expect(h.check).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The disappearing-message cleanup is local periodic work, but it still wakes the
+// CPU and scans the whole message store. Slice the deployed registration verbatim
+// and drive its ticks with the real power-mode helpers.
+const disappearBlock = slice('  // Disappearing message cleanup: run every 10s', '\n\n  // GROUP CHAT');
+const runDisappearRegistration = new Function(
+  '_intervals', 'setInterval', 'db', 'activeContact', '_DOM', '_dbg', 'CONFIG', '_powerPresenceOff',
+  disappearBlock + '\nreturn true;');
+
+function disappearHarness(settings, rows = []) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const timers = [];
+  const intervals = [];
+  const store = {
+    getAll: vi.fn(() => {
+      const req = {
+        result: rows,
+        set onsuccess(fn) { queueMicrotask(() => fn()); },
+        set onerror(fn) {},
+      };
+      return req;
+    }),
+    delete: vi.fn(),
+  };
+  const db = {
+    transaction: vi.fn(() => ({
+      objectStore: vi.fn(() => store),
+    })),
+  };
+  runDisappearRegistration(
+    intervals,
+    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    db,
+    null,
+    { get: () => null },
+    vi.fn(),
+    { DISAPPEAR_CHECK_MS: 10000, FADE_OUT_MS: 250 },
+    power._powerPresenceOff,
+  );
+  return { timers, intervals, db, store };
+}
+
+describe('power mode — disappearing message cleanup', () => {
+  it('performs no db work in saver mode, even over multiple ticks', async () => {
+    const h = disappearHarness({ powerMode: 'saver' });
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(10000);
+    expect(h.intervals).toEqual([1]);
+
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    await flushMicrotasks();
+
+    expect(h.db.transaction).not.toHaveBeenCalled();
+    expect(h.store.getAll).not.toHaveBeenCalled();
+    expect(h.store.delete).not.toHaveBeenCalled();
+  });
+
+  it('performs no db work in emergency mode, even over multiple ticks', async () => {
+    const h = disappearHarness({ powerMode: 'emergency' });
+
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    await flushMicrotasks();
+
+    expect(h.db.transaction).not.toHaveBeenCalled();
+    expect(h.store.getAll).not.toHaveBeenCalled();
+    expect(h.store.delete).not.toHaveBeenCalled();
+  });
+
+  it('re-evaluates the gate every tick and scans on the next tick after switching to normal', async () => {
+    const settings = { powerMode: 'saver' };
+    const h = disappearHarness(settings);
+
+    await h.timers[0].fn();
+    expect(h.db.transaction).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    await h.timers[0].fn();
+
+    expect(h.db.transaction).toHaveBeenCalledTimes(1);
+    expect(h.db.transaction).toHaveBeenLastCalledWith('messages', 'readwrite');
+  });
+
+  it('still deletes only expired messages in normal mode', async () => {
+    const now = Date.now();
+    const h = disappearHarness({ powerMode: 'normal' }, [
+      { msgId: 'expired', disappearAt: now - 1 },
+      { msgId: 'unexpired', disappearAt: now + 60000 },
+      { msgId: 'plain' },
+    ]);
+
+    await h.timers[0].fn();
+
+    expect(h.db.transaction).toHaveBeenCalledTimes(1);
+    expect(h.db.transaction).toHaveBeenLastCalledWith('messages', 'readwrite');
+    expect(h.store.getAll).toHaveBeenCalledTimes(1);
+    expect(h.store.delete).toHaveBeenCalledTimes(1);
+    expect(h.store.delete).toHaveBeenLastCalledWith('expired');
+  });
+});
+
+
+describe('power mode — group member poll', () => {
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  function groupPollHarness(powerOff) {
+    const groupId = 'g_test';
+    const postAPIRaw = vi.fn(() => ({ ok: true, json: async () => ({ members: [] }) }));
+    const deps = {
+      hasApi: () => true,
+      postAPIRaw,
+      dbGet: async () => ({ id: groupId, members: [{ id: 'me' }] }),
+      pushInterval: () => {},
+      minMs: () => 60000,
+      myId: () => 'me',
+      dbg: () => {},
+    };
+    if (powerOff) deps.powerOff = powerOff;
+    createGroupCreate(deps).startGroupMemberPoll('token123', groupId);
+    return { postAPIRaw };
+  }
+
+  it('never calls /group/info while power mode keeps background presence off', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => true);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+  });
+
+  it('calls /group/info on the normal tick when power is on', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('keeps polling when the optional powerOff dep is absent', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('wires the deployed power-presence gate into the group-create deps', () => {
+    const depsBlock = slice('globalThis.__breezeGroupCreate?.createGroupCreate({', '\n  });');
+    expect(depsBlock).toContain('powerOff: () => _powerPresenceOff()');
   });
 });
