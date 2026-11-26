@@ -24,8 +24,6 @@ Bu kılavuz, kullanmaya başlayanlar için bir rehberdir.
 
 Her dosyaya bir doğrulama değeri (SHA256SUMS.txt) eşlik eder. Endişe edenler, indirdiği dosyanın değerinin uyuşup uyuşmadığını denetleyebilir.
 
-> **Örnek sayfa hakkında**: Nasıl çalıştığını denetlemek için bir örnek (https://breeze-469.pages.dev/) sunulmaktadır. Orada barındırılan aynı yazılımdır, ancak örnek önceden bildirilmeden değişebilir veya durabilir. Gerçek kullanım için, kendi sunucunuza kurduğunuz bir kopyayı kullanın. Kendi sunucunuzdaki bir kopya, örnek dursa da etkilenmez.
-
 ### İlk kurulum
 
 1. Uygulamayı açın.
@@ -233,7 +231,6 @@ Güncelleme sırasında bir hata olursa (dosya doğrulamasının uyuşmaması vb
 | Aramanın doğrulama kodu uyuşmuyor | Aramayı kapatıp yeniden arayın. Uyuşmadan sürdürmeyin. |
 | Parolayı unuttunuz | Geri yükleme yapılamaz. Yeni bir kimlik oluşturup karşı tarafa yeniden bildirin. |
 | Cihazı kaybettiniz | Yedek varsa, yeni bir cihazda geri getirebilirsiniz. Yoksa, yeni bir kimlik olur. |
-| Örnek sayfa açılmıyor | Örnek önceden bildirilmeden durabilir. Kendi sunucunuza kurduğunuz bir kopyayı kullanın. |
 
 Hata bildirimlerini, lütfen, [Issues sayfasına](https://github.com/shizukutanaka/Breeze/issues) yapın.
 

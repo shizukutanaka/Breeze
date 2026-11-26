@@ -4,6 +4,7 @@ import { createMessageRequests, installNotificationActions, REQUEST_LIMITS, requ
 import worker from '../_worker.js';
 import { makeEnv } from './helpers/mockKV.js';
 
+globalThis._deviceRevocation = { allowed: async () => null, admit: async () => true, wrap: async body => body, unwrap: async body => body, targets: async () => null };
 const MS = { DAY: 24 * 60 * 60 * 1000 };
 const pub = n => Buffer.alloc(32, n).toString('base64');
 const envelope = (n = 1, extra = {}) => ({ from: pub(n).slice(0, 12), fromPub: pub(n), fromName: 'Sender', ts: 100, payload: 'opaque ciphertext', ...extra });

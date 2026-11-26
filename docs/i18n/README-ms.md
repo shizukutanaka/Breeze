@@ -18,7 +18,6 @@ Breeze tiada "pelayan syarikat pengendali". **Untuk menggunakannya, anda sendiri
 
 - Persediaan standard menggunakan Cloudflare, jadi **akaun Cloudflare diperlukan**. Langkah-langkahnya ada dalam [panduan pemasangan](SELF_HOSTING-ms.md) (bahasa lain boleh dipilih di bahagian atas panduan).
 - Aplikasi (Windows / Mac / Linux / Android / iPhone) boleh diperoleh dari [halaman muat turun](https://github.com/shizukutanaka/Breeze/releases/latest), dan digunakan dengan menyambung ke pelayan anda sendiri.
-- **Tentang pemasangan contoh (makluman jujur)**: Sebuah contoh untuk pengesahan operasi (https://breeze-469.pages.dev/) telah disediakan. Perisian yang diletakkan di sana adalah sama, tetapi untuk penggunaan sebenar, sila gunakan pelayan anda sendiri. Contoh tersebut mungkin berubah atau berhenti tanpa notis. Apa yang anda letakkan pada pelayan anda sendiri tidak terjejas oleh pemberhentian contoh tersebut.
 
 Cara penggunaan yang terperinci ada dalam [manual](MANUAL-ms.md) (bahasa lain boleh dipilih di bahagian atas manual).
 

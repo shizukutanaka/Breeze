@@ -24,8 +24,6 @@ Từ [trang tải xuống](https://github.com/shizukutanaka/Breeze/releases/late
 
 Mỗi tệp đều kèm theo giá trị đối chiếu (SHA256SUMS.txt). Nếu lo lắng, bạn có thể kiểm tra xem giá trị của tệp đã tải xuống có khớp hay không.
 
-> **Về trang mẫu**: Một trang mẫu để kiểm tra cách hoạt động (https://breeze-469.pages.dev/) được cung cấp. Phần mềm đặt ở đó là cùng một phần mềm, nhưng trang mẫu có thể thay đổi hoặc dừng mà không báo trước. Để sử dụng thực tế, vui lòng dùng bản đặt trên máy chủ của riêng bạn. Bản trên máy chủ của riêng bạn sẽ không bị ảnh hưởng nếu trang mẫu dừng hoạt động.
-
 ### Thiết lập lần đầu
 
 1. Mở ứng dụng.
@@ -233,7 +231,6 @@ Nếu cập nhật thất bại giữa chừng (chẳng hạn giá trị đối 
 | Mã xác nhận cuộc gọi không khớp | Hãy kết thúc cuộc gọi và gọi lại. Đừng tiếp tục trong trạng thái không khớp. |
 | Quên mật khẩu | Không thể khôi phục. Hãy tạo danh tính mới và cho người kia biết lại. |
 | Làm mất thiết bị | Nếu có bản sao lưu, bạn có thể khôi phục trên thiết bị mới. Nếu không có, sẽ thành danh tính mới. |
-| Trang mẫu không mở được | Trang mẫu có thể dừng mà không báo trước. Vui lòng dùng bản đặt trên máy chủ của riêng bạn. |
 
 Báo cáo lỗi xin gửi tới [trang Issue](https://github.com/shizukutanaka/Breeze/issues).
 

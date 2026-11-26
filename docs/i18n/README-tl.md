@@ -18,7 +18,6 @@ Walang "server ng kumpanya" ang Breeze. **Para magamit ito, ikaw mismo ang magha
 
 - Ang karaniwang setup ay gumagamit ng Cloudflare, kaya **kailangan ng Cloudflare account**. Nasa [gabay sa pag-install](SELF_HOSTING-tl.md) ang mga hakbang (maaaring piliin ang ibang wika mula sa simula ng gabay).
 - Ang mga app (Windows / Mac / Linux / Android / iPhone) ay kukunin mula sa [pahina ng download](https://github.com/shizukutanaka/Breeze/releases/latest), at ikokonekta sa sarili mong server para magamit.
-- **Tungkol sa halimbawang install (isang tapat na paalala)**: May inilagay na halimbawa para sa pagsubok ng paggana (https://breeze-469.pages.dev/). Parehong software ang nakalagay, ngunit para sa tunay na paggamit, mangyaring gamitin ang sarili mong server. Ang halimbawa ay maaaring magbago o huminto nang walang abiso. Ang inilagay mo sa sarili mong server ay hindi maaapektuhan ng paghinto ng halimbawa.
 
 Nasa [manwal](MANUAL-tl.md) ang detalyadong paraan ng paggamit (maaaring piliin ang ibang wika mula sa simula ng manwal).
 

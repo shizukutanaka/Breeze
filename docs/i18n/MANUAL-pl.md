@@ -24,8 +24,6 @@ Wybierz ze [strony pobierania](https://github.com/shizukutanaka/Breeze/releases/
 
 Każdy plik ma dołączone wartości kontrolne (SHA256SUMS.txt). Osoby, które chcą, mogą sprawdzić, czy wartości pobranego pliku się zgadzają.
 
-> **O stronie próbnej**: dostępna jest strona próbna do sprawdzenia działania (https://breeze-469.pages.dev/). Znajduje się tam to samo oprogramowanie, ale strona próbna może się zmienić lub zostać zatrzymana bez zapowiedzi. Do prawdziwego użytku prosimy korzystać z wersji postawionej na własnym serwerze. Zatrzymanie strony próbnej nie dotyczy wersji na własnym serwerze.
-
 ### Pierwsza konfiguracja
 
 1. Otwórz aplikację.
@@ -233,7 +231,6 @@ Jeśli podczas aktualizacji coś się nie powiedzie (np. wartości kontrolne si�
 | Kod potwierdzający połączenie się nie zgadza | Zakończ połączenie i zadzwoń ponownie. Nie kontynuuj przy niezgodności. |
 | Zapomniano hasła | Odzyskanie nie jest możliwe. Utwórz nową tożsamość i poinformuj o niej rozmówców od nowa. |
 | Zgubiono urządzenie | Jeśli masz kopię zapasową, możesz odzyskać na nowym urządzeniu. Jeśli nie, będzie to nowa tożsamość. |
-| Strona próbna się nie otwiera | Strona próbna może zostać zatrzymana bez zapowiedzi. Korzystaj z wersji postawionej na własnym serwerze. |
 
 Zgłoszenia usterek prosimy kierować na [stronę Issue](https://github.com/shizukutanaka/Breeze/issues).
 

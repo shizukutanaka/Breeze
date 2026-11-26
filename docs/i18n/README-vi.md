@@ -18,7 +18,6 @@ Breeze không có "máy chủ của công ty vận hành". **Để sử dụng, 
 
 - Cách cài đặt tiêu chuẩn sử dụng Cloudflare, vì vậy **cần có tài khoản Cloudflare**. Các bước có trong [hướng dẫn cài đặt](SELF_HOSTING-vi.md) (có thể chọn các ngôn ngữ khác ở đầu hướng dẫn).
 - Các ứng dụng (Windows / Mac / Linux / Android / iPhone) lấy từ [trang tải xuống](https://github.com/shizukutanaka/Breeze/releases/latest), và sử dụng bằng cách kết nối tới máy chủ của riêng bạn.
-- **Về bản cài đặt mẫu (thông báo trung thực)**: Có một bản mẫu để kiểm tra hoạt động (https://breeze-469.pages.dev/). Phần mềm đặt ở đó là cùng một phần mềm, nhưng để sử dụng thực tế, vui lòng dùng máy chủ của riêng bạn. Bản mẫu có thể thay đổi hoặc dừng mà không báo trước. Những gì bạn đặt trên máy chủ của mình sẽ không bị ảnh hưởng bởi việc bản mẫu dừng hoạt động.
 
 Cách sử dụng chi tiết có trong [sách hướng dẫn](MANUAL-vi.md) (có thể chọn các ngôn ngữ khác ở đầu sách hướng dẫn).
 

@@ -37,7 +37,7 @@ export function deviceToken(kind, value) {
 }
 export function readDeviceToken(kind, token) {
   const prefix = 'breeze-device-' + kind + ':v1:';
-  if (typeof token !== 'string' || token.length > 2048 || !token.startsWith(prefix)) throw new Error('device token');
+  if (typeof token !== 'string' || token.length > 65536 || !token.startsWith(prefix)) throw new Error('device token');
   return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(token.slice(prefix.length)), c => c.charCodeAt(0))));
 }
 export async function verifyBindingRegistry(rec, binding) {

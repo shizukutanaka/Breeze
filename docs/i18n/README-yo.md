@@ -18,7 +18,6 @@ Breeze kò ní "sáfà ilé-iṣẹ́". **Láti lò ó, ìwọ fúnra rẹ ni y�
 
 - Ìṣètò déédéé ń lo Cloudflare, nítorí náà **a nílò àkáǹtì Cloudflare**. Àwọn ìgbésẹ̀ wà nínú [ìwé ìtọ́ni fífi sílẹ̀](SELF_HOSTING-yo.md) (o lè yan àwọn èdè mìíràn láti ìbẹ̀rẹ̀ ìwé ìtọ́ni náà).
 - Gba àpù náà (Windows / Mac / Linux / Android / iPhone) láti [ojúewé ìgbàsílẹ̀](https://github.com/shizukutanaka/Breeze/releases/latest), so ó pọ̀ mọ́ sáfà tìrẹ, kí o sì lò ó.
-- **Nípa àpẹẹrẹ ìfihàn (ìkéde òtítọ́)**: A ti fi àpẹẹrẹ ìfihàn (https://breeze-469.pages.dev/) sílẹ̀ fún ìdánwò iṣẹ́. Ohun tí ó wà nínú rẹ̀ sófítíwéà kan náà ni, ṣùgbọ́n fún lílò gidi, jọ̀wọ́ lo sáfà tìrẹ. Àpẹẹrẹ náà lè yípadà tàbí dúró láìsí ìkéde ṣáájú. Ohun tí o fi sí orí sáfà tìrẹ kò ní nípa láti ọ̀dọ̀ ìdúró àpẹẹrẹ náà.
 
 Àlàyé lílò kíkún wà nínú [ìwé ìtọ́ni](MANUAL-yo.md) (o lè yan àwọn èdè mìíràn láti ìbẹ̀rẹ̀ ìwé ìtọ́ni náà).
 

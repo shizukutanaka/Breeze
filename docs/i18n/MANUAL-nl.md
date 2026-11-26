@@ -24,8 +24,6 @@ Kies op de [downloadpagina](https://github.com/shizukutanaka/Breeze/releases/lat
 
 Bij elk bestand horen controlewaarden (SHA256SUMS.txt). Wie wil, kan controleren of de waarden van het gedownloade bestand overeenkomen.
 
-> **Over de voorbeeldpagina**: er is een voorbeeld om te controleren hoe het werkt (https://breeze-469.pages.dev/). Daar staat dezelfde software, maar het voorbeeld kan zonder aankondiging veranderen of stoppen. Gebruik voor echt gebruik een versie die op je eigen server staat. Een versie op je eigen server ondervindt geen hinder als het voorbeeld stopt.
-
 ### Eerste instelling
 
 1. Open de app.
@@ -233,7 +231,6 @@ Als er tijdens het bijwerken iets misgaat (de controlewaarden komen niet overeen
 | De bevestigingscode van het gesprek komt niet overeen | Beëindig het gesprek en bel opnieuw. Ga niet verder als hij niet overeenkomt. |
 | Wachtwoordzin vergeten | Herstel is niet mogelijk. Maak een nieuwe identiteit en laat het je contacten opnieuw weten. |
 | Apparaat kwijt | Als je een back-up hebt, kun je op een nieuw apparaat herstellen. Zo niet, dan wordt het een nieuwe identiteit. |
-| De voorbeeldpagina opent niet | Het voorbeeld kan zonder aankondiging stoppen. Gebruik een versie die op je eigen server staat. |
 
 Meldingen van problemen graag via de [Issue-pagina](https://github.com/shizukutanaka/Breeze/issues).
 

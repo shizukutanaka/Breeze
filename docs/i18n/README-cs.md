@@ -18,7 +18,6 @@ Breeze nemá "server provozující společnosti". **Abyste jej mohli používat,
 
 - Standardní nastavení používá Cloudflare, takže **je vyžadován účet Cloudflare**. Postup je v [průvodci instalací](SELF_HOSTING-cs.md) (verze v jiných jazycích lze vybrat na začátku průvodce).
 - Aplikaci (Windows / Mac / Linux / Android / iPhone) si stáhněte ze [stránky ke stažení](https://github.com/shizukutanaka/Breeze/releases/latest) a používejte ji připojenou k vlastnímu serveru.
-- **O ukázkové instalaci (poctivé upozornění)**: Pro ověření funkčnosti je k dispozici ukázka (https://breeze-469.pages.dev/). Je to stejný software, který je tam umístěn, ale pro skutečné používání použijte prosím vlastní server. Ukázka se může bez upozornění změnit nebo zastavit. Na Breeze umístěný na vašem vlastním serveru zastavení ukázky nemá vliv.
 
 Podrobné pokyny k používání jsou v [příručce](MANUAL-cs.md) (verze v jiných jazycích lze vybrat na začátku příručky).
 

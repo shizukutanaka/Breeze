@@ -24,8 +24,6 @@ Láti [ojúewé ìgbàsílẹ̀](https://github.com/shizukutanaka/Breeze/release
 
 Fáìlì kọ̀ọ̀kan ní nọ́mbà ìfìdímúlẹ̀ (SHA256SUMS.txt). Tí o bá ṣe àníyàn, o lè ṣàyẹ̀wò pé nọ́mbà fáìlì tí o gbà sílẹ̀ bá a mu.
 
-> **Nípa ojúewé àpẹẹrẹ**: Àpẹẹrẹ kan wà láti ṣàyẹ̀wò bí ó ṣe ń ṣiṣẹ́ (https://breeze-469.pages.dev/). Ohun tí ó wà níbẹ̀ ni sọ́fìtìwéà kan náà, ṣùgbọ́n àpẹẹrẹ náà lè yí padà tàbí dúró láìsí ìfitónilétí. Fún lílò gidi, jọ̀wọ́ lo èyí tí o fi sí orí sáfà tìrẹ. Ohun tí o fi sí orí sáfà tìrẹ kò ní nípa bí àpẹẹrẹ bá dúró.
-
 ### Ìṣètò àkọ́kọ́
 
 1. Ṣí àpù náà.
@@ -233,7 +231,6 @@ Tí ìkùnà bá ṣẹlẹ̀ láàrin ìmúdójúìwọ̀n (bíi nọ́mbà ìf
 | Kódù ìfìdímúlẹ̀ ìpè kò bá a mu | Gé ìpè náà kúrò, kí o sì tún pè. Má ṣe tẹ̀síwájú nígbà tí kò bá a mu. |
 | O gbàgbé gbólóhùn ìkọ̀kọ̀ náà | A kò lè gbà á padà. Ṣẹ̀dá ìdánimọ̀ tuntun, kí o sì tún sọ fún ẹ̀kejì. |
 | O pàdánù ẹ̀rọ rẹ | Tí ìpamọ́ àfikún bá wà, o lè gbà á padà lórí ẹ̀rọ tuntun. Tí kò bá sí, yóò di ìdánimọ̀ tuntun. |
-| Ojúewé àpẹẹrẹ kò ṣí | Àpẹẹrẹ náà lè dúró láìsí ìfitónilétí. Jọ̀wọ́ lo èyí tí o fi sí orí sáfà tìrẹ. |
 
 Ìròyìn àṣìṣe, jọ̀wọ́ sí [ojúewé Issue](https://github.com/shizukutanaka/Breeze/issues).
 
