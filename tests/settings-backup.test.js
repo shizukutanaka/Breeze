@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { settingsPanelHtml } from '../src/app/settings-panel.js';
 
 // One-tap restore (owner request): backup/restore used to live only in the
 // /backup slash-command panel — undiscoverable for anyone who does not type
@@ -10,11 +11,13 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 describe('settings panel backup section', () => {
-  const start = html.indexOf("${t('settingsPrivacy')}");
-  const panel = html.slice(start, html.indexOf('box.appendChild(d); box.scrollTop', start));
+  const panel = settingsPanelHtml({
+    t: (key) => key, esc: (x) => String(x), myName: 'Name', fanout: 2, powerMode: 'auto',
+    relays: [{ label: 'relay', url: 'https://relay.example', origin: false, blocked: false }],
+  });
 
   it('has a backup section heading', () => {
-    expect(panel).toContain("${t('settingsBackup')}");
+    expect(panel).toContain('<h2>settingsBackup</h2>');
   });
   it('offers cloud backup, one-tap restore and file restore', () => {
     expect(panel).toContain('data-action="backup"');

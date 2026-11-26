@@ -3,12 +3,21 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SETTINGS_HELP_MAP } from '../src/app/settings-help.js';
+import { settingsPanelHtml } from '../src/app/settings-panel.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(root, 'index.html'), 'utf8');
-const panelStart = html.indexOf('function _renderSettingsPanel');
-const panelEnd = html.indexOf('function openSettingsView()', panelStart);
-const panel = html.slice(panelStart, panelEnd);
+// Coverage is measured against the module-rendered panel markup (the
+// stage-4 extraction), not the host wiring in index.html.
+const panel = settingsPanelHtml({
+  t: (key) => key, esc: (x) => String(x), myName: 'Name',
+  hideReadReceipts: true, readReceiptDelay: true, hideTyping: true, relayOnly: true, ktBlock: true,
+  showPeerName: true, callHistoryLog: true, notifSound: true, sendSound: true,
+  focus: true, focusStrict: true, notifPerm: true, autoLock: true, autoBackup: true,
+  fanout: 2, powerMode: 'auto',
+  relays: [{ label: 'relay', url: 'https://relay.example', origin: false, blocked: false }],
+  tabCalls: true, tabContacts: true, tabSelf: true, tabSettings: true,
+});
 
 function inlineEnglish() {
   const start = html.indexOf('const _I = {');
@@ -36,9 +45,11 @@ describe('settings help coverage', () => {
 
   it('is wired as a precached module and installed with the dialog deps', () => {
     expect(html).toContain("import { installSettingsHelp } from './src/app/settings-help.js'; window.__breezeSettingsHelp = { installSettingsHelp };");
+    expect(html).toContain("import { settingsPanelHtml } from './src/app/settings-panel.js'; window.__breezeSettingsPanel = { settingsPanelHtml };");
     expect(html).toContain('globalThis.__breezeSettingsHelp?.installSettingsHelp({ t, esc, safeSetHTML, makeDialog:');
     const sw = readFileSync(join(root, 'sw.js'), 'utf8');
     expect(sw).toContain("'/src/app/settings-help.js'");
+    expect(sw).toContain("'/src/app/settings-panel.js'");
   });
 });
 

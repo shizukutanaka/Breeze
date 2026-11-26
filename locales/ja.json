@@ -1093,5 +1093,9 @@
   "cfGuideText": "「アカウント設定: 読み取り」「Workers スクリプト: 編集」「Workers KV ストレージ: 編集」権限の API トークンを作成し、下に貼り付けてください。",
   "cfCreateTokenLink": "Cloudflare API トークン作成ページを開く ↗",
   "cfQuickSetup": "接続してサーバーを構築",
-  "helpSetCloudflareQuick": "貼り付けた Cloudflare API トークンをこの端末に保存し、アカウント確認・KV 作成・workers.dev サブドメイン登録（未作成時）・Breeze Worker のデプロイ・ヘルスチェックまでをワンクリックで実行します。"
+  "helpSetCloudflareQuick": "貼り付けた Cloudflare API トークンをこの端末に保存し、アカウント確認・KV 作成・workers.dev サブドメイン登録（未作成時）・Breeze Worker のデプロイ・ヘルスチェックまでをワンクリックで実行します。",
+  "emptyClearSearch": "検索をクリア",
+  "emptySearchAgain": "もう一度検索",
+  "emptyNoChats": "まだトークがありません",
+  "emptyShowAllChats": "すべてのトークを表示"
 }

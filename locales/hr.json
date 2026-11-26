@@ -1107,5 +1107,9 @@
   "cfGuideText": "Create an API token with Account Settings: Read, Workers Scripts: Edit, and Workers KV Storage: Edit, then paste it below.",
   "cfCreateTokenLink": "Open Cloudflare API Tokens ↗",
   "cfQuickSetup": "Connect & set up server",
-  "helpSetCloudflareQuick": "Saves the pasted Cloudflare API token on this device, verifies the account, creates the KV namespace and workers.dev subdomain if needed, deploys the Breeze Worker, and checks /api/health in one step."
+  "helpSetCloudflareQuick": "Saves the pasted Cloudflare API token on this device, verifies the account, creates the KV namespace and workers.dev subdomain if needed, deploys the Breeze Worker, and checks /api/health in one step.",
+  "emptyClearSearch": "Clear search",
+  "emptySearchAgain": "Search again",
+  "emptyNoChats": "No conversations yet.",
+  "emptyShowAllChats": "Show all chats"
 }
