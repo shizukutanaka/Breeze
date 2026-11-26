@@ -96,16 +96,28 @@ export function createGroupCreate(D) {
 
   function startGroupMemberPoll(token, groupId) {
     if (!D.hasApi()) return;
-    let polling = false;
-    const poll = setInterval(async () => {
-      if (D.powerOff?.() || polling) return;
+    let polling = false, stopped = false, timer = null;
+    const floor = () => (typeof D.powerFloorMs === 'function' ? (D.powerFloorMs() || 0) : 0);
+    function schedule() {
+      if (stopped) return;
+      timer = setTimeout(tick, Math.max(5000, floor()));
+      D.pushInterval?.(timer);
+    }
+    function stop() {
+      stopped = true;
+      if (timer) { clearTimeout(timer); timer = null; }
+    }
+    async function tick() {
+      timer = null;
+      if (stopped) return;
+      if (D.powerOff?.() || polling) { schedule(); return; }
       polling = true;
       try {
         const resp = await D.postAPIRaw('/group/info', { token });
-        if (!resp.ok) { clearInterval(poll); return; }
+        if (!resp.ok) { stop(); return; }
         const data = await resp.json();
         const group = await D.dbGet('contacts', groupId);
-        if (!group) { clearInterval(poll); return; }
+        if (!group) { stop(); return; }
 
         const oldCount = group.members?.length || 0;
         const newMembers = safeMemberList(data.members);
@@ -122,11 +134,12 @@ export function createGroupCreate(D) {
           }
           D.renderContacts();
         }
-      } catch(e) { D.dbg(e); } finally { polling = false; }
-    }, 5000);
-    D.pushInterval(poll);
+      } catch(e) { D.dbg(e); } finally { polling = false; schedule(); }
+    }
+    schedule();
     // Stop after 30 minutes
-    setTimeout(() => clearInterval(poll), 30 * D.minMs());
+    const stopTimer = setTimeout(stop, 30 * D.minMs());
+    D.pushInterval?.(stopTimer);
   }
 
   async function processJoinToken(token) {
