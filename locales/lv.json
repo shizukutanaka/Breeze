@@ -705,6 +705,7 @@
   "toastMin4Chars": "Min. 4 raksturoji",
   "toastLabelsClear": "Marķējumi attīrīti",
   "toastInstalling": "Instalēt...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze uzstādīta!",
   "toastWiped": "Ierīce izdzīvota attālumā",
   "toastDbConflict": "Bāzes versijas konflikts. Lūdzu, atkārtojiet.",
@@ -1137,5 +1138,7 @@
   "mockSeedB2": "Vai varu mēģināt nosūtīt vēstuli?",
   "mockSeedB3": "Jā. Atbildes tiek radītas vietēji pēc īsās kavēšanās.",
   "mockSeedG1": "Laipni laipni atlases grupā.",
-  "mockSeedG2": "Tas palīdz parādīt, kādas grupas sarunas izskatās."
+  "mockSeedG2": "Tas palīdz parādīt, kādas grupas sarunas izskatās.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

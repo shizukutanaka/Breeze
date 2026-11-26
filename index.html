@@ -2053,7 +2053,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     installBannerDesktopSub: 'Native app with system tray + notifications',
     installBannerDownload: 'Download',
     installPlatformPhone: 'phone',
-    installPlatformDevice: 'device',
+    installPlatformDevice: 'device', settingsInstallApp: 'Install the app', helpSetInstallApp: 'Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead.',
     read: 'Read',
     typing: 'typing...',
     newMessages: 'New Messages',
@@ -2268,6 +2268,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     toastMin4Chars: 'Min 4 characters',
     toastLabelsClear: 'Labels cleared',
     toastInstalling: 'Installing...',
+    toastInstallManual: 'To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.',
     toastInstalled: 'Breeze installed!',
     toastWiped: 'Device wiped remotely',
     toastDbConflict: 'Database version conflict. Please reload.',
@@ -3314,7 +3315,7 @@ const _appModulesReady = new Promise(resolve => {
   else document.addEventListener('DOMContentLoaded', () => resolve(), { once: true });
 });
 _appModulesReady.then(() => {
-  globalThis.__breezeInstallBanner?.initInstallBanner({ DOM: _DOM, MS, t, esc, safeSetHTML, showToast });
+  globalThis.__breezeInstallBanner?.initInstallBanner({ DOM: _DOM, MS, t, esc, safeSetHTML, showToast, dbg: _dbg });
 });
 
 // v3.6: Trusted Types — 'breeze-sanitizer' (named, via safeSetHTML) + 'default' (safety net sanitizing raw innerHTML/outerHTML under require-trusted-types-for 'script'). Fallback: same API, no TT.

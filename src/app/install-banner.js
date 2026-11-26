@@ -4,7 +4,7 @@
 // Absent module ⇒ no-op in index.html so the rest of the app still boots.
 
 export function initInstallBanner(D) {
-  const { DOM, MS, t, esc, safeSetHTML, showToast } = D;
+  const { DOM, MS, t, esc, safeSetHTML, showToast, dbg } = D;
 
   let _installPrompt = null;
   let _installBannerDismissed = false;
@@ -14,16 +14,48 @@ export function initInstallBanner(D) {
   localStorage.setItem('brz-visit-count', String(_visits));
   const _isEngagedVisitor = _visits >= 2 || parseInt(localStorage.getItem('brz-msgs-sent') || '0') >= 3;
 
-  function showInstallBanner() {
-    if (document.querySelector('.install-banner')) return;
+  function isInstalledRuntime() {
+    if (typeof window === 'undefined') return false;
+    const isStandalone = (typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) || window.navigator?.standalone;
+    const isElectron = window.process?.versions?.electron;
+    return !!(isStandalone || isElectron);
+  }
+
+  async function runInstallPrompt() {
+    const installPrompt = _installPrompt;
+    if (!installPrompt) return false;
+    document.querySelector('.install-banner')?.remove();
+    try {
+      installPrompt.prompt();
+      const result = await installPrompt.userChoice;
+      if (result?.outcome === 'accepted') showToast(t('toastInstalling'), 'success');
+    } catch (e) { dbg?.(e, 'install-prompt'); }
+    if (_installPrompt === installPrompt) _installPrompt = null;
+    return true;
+  }
+
+  function requestInstall() {
+    if (isInstalledRuntime()) return Promise.resolve(false);
+    if (_installPrompt) return runInstallPrompt();
+    if (showInstallBanner(true)) return Promise.resolve(true);
+    showToast(t('toastInstallManual'));
+    return Promise.resolve(false);
+  }
+
+  function hideSettingsInstallButtons() {
+    document.querySelectorAll?.('#settings-install-btn')?.forEach((btn) => {
+      (btn.closest?.('.settings-action-row') || btn).classList?.add('hidden');
+    });
+  }
+
+  function showInstallBanner(force = false) {
+    if (document.querySelector('.install-banner')) return true;
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     const isAndroid = /Android/.test(navigator.userAgent);
     const isMac = /Macintosh|Mac OS/.test(navigator.userAgent);
     const isWin = /Windows/.test(navigator.userAgent);
     const isLinux = /Linux/.test(navigator.userAgent) && !isAndroid;
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
-    const isElectron = typeof window !== 'undefined' && window.process?.versions?.electron;
-    if (isStandalone || isElectron) return;
+    if (isInstalledRuntime()) return false;
 
     const banner = document.createElement('div');
     banner.className = 'install-banner';
@@ -39,13 +71,7 @@ export function initInstallBanner(D) {
         <button class="dismiss">&times;</button>
       `);
       banner.querySelector('.dismiss').setAttribute('aria-label', t('dismiss'));
-      banner.querySelector('#install-btn').onclick = async () => {
-        banner.remove();
-        _installPrompt.prompt();
-        const result = await _installPrompt.userChoice;
-        _installPrompt = null;
-        if (result.outcome === 'accepted') showToast(t('toastInstalling'), 'success');
-      };
+      banner.querySelector('#install-btn').onclick = () => { runInstallPrompt(); };
     } else if (isIOS) {
       safeSetHTML(banner, `
         <div class="icon"><img src="icon-192.png" alt="" width="44" height="44"></div>
@@ -71,7 +97,7 @@ export function initInstallBanner(D) {
         banner.remove();
       };
     } else {
-      return;
+      return false;
     }
 
     banner.querySelector('.dismiss').onclick = () => {
@@ -81,11 +107,12 @@ export function initInstallBanner(D) {
     };
 
     // v3.6: Check cooldown (7 days) instead of session-only
-    try {
+    if (!force) try {
       const dismissed = parseInt(localStorage.getItem('brz-install-dismissed') || '0');
-      if (dismissed && Date.now() - dismissed < MS.WEEK) return;
+      if (dismissed && Date.now() - dismissed < MS.WEEK) return false;
     } catch {}
     document.body.appendChild(banner);
+    return true;
   }
 
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -94,32 +121,33 @@ export function initInstallBanner(D) {
     const setupBtn = DOM.get('setup-install-btn');
     if (setupBtn) {
       setupBtn.classList.remove('hidden');
-      setupBtn.onclick = async () => {
-        _installPrompt.prompt();
-        const r = await _installPrompt.userChoice;
-        _installPrompt = null;
-        if (r.outcome === 'accepted') showToast(t('toastInstalling'), 'success');
-        setupBtn.classList.add('hidden');
-      };
+      setupBtn.onclick = () => runInstallPrompt().then(() => setupBtn.classList.add('hidden'));
     }
-    if (!window.matchMedia('(display-mode: standalone)').matches && !_installBannerDismissed && _isEngagedVisitor) {
+    if (!isInstalledRuntime() && !_installBannerDismissed && _isEngagedVisitor) {
       setTimeout(() => showInstallBanner(), 5 * MS.SEC);
     }
   });
 
   // Fallback for iOS/Safari/Firefox (no beforeinstallprompt); also gated on _isEngagedVisitor.
-  if (!window.matchMedia('(display-mode: standalone)').matches && !window.navigator.standalone && _isEngagedVisitor) {
+  if (!isInstalledRuntime() && _isEngagedVisitor) {
     setTimeout(() => {
       if (!_installBannerDismissed && !_installPrompt) showInstallBanner();
     }, 3000);
   }
 
+  document.addEventListener?.('click', (ev) => {
+    if (!ev.target?.closest?.('#settings-install-btn')) return;
+    ev.preventDefault?.();
+    return requestInstall();
+  });
+
   // Listen for successful install
   window.addEventListener('appinstalled', () => {
     _installPrompt = null;
     document.querySelector('.install-banner')?.remove();
+    hideSettingsInstallButtons();
     showToast(t('toastInstalled'), 'success');
   });
 
-  return { showInstallBanner };
+  return { showInstallBanner, requestInstall };
 }
