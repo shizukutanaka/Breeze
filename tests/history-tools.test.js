@@ -43,6 +43,16 @@ beforeEach(() => {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe('history tools factory', () => {
+  it('routes history and GDPR exports to ciphertext vault backups without reading plaintext', async () => {
+    const ciphertext = { vaultBackupV: 1, accounts: [{ snapshot: { marker: { ct: 'ciphertext' } } }] };
+    D.vault = { enabled: () => true, backup: vi.fn(async () => ciphertext) };
+    expect(await tools.gdprExport()).toEqual(ciphertext);
+    await tools.exportChat('/export html'); await tools.exportGdpr();
+    expect(downloads).toHaveLength(2);
+    expect(await downloads[0].blob.text()).toBe(JSON.stringify(ciphertext));
+    expect(D.dbGetAll).not.toHaveBeenCalled();
+    expect(D.dbGet).not.toHaveBeenCalled();
+  });
   it('exposes an inert-until-called factory contract', () => {
     expect(Object.keys(createHistoryTools({})).sort()).toEqual(['exportChat', 'exportGdpr', 'gdprExport', 'importChat']);
     expect(D.dbGet).not.toHaveBeenCalled();

@@ -1,3 +1,6 @@
+import { stageHistory, snapshotHistory, inspectHistory, commitHistory, historyDatabase } from './vault-history.js';
+import { createBrowserVault, commitBrowserVault } from './vault-browser.js';
+
 const VERSION = 1, ITERATIONS = 600000;
 const CONTROL = 'breeze-vault', MANIFEST = 'vault:manifest';
 const utf8 = new TextEncoder(), text = new TextDecoder('utf-8', { fatal: true });
@@ -90,30 +93,43 @@ export async function openVaultRecord(key, manifest, db, store, recordKey, value
   if (value?.vaultV !== VERSION || value.vaultId !== manifest.id) throw new Error('vault plaintext/version rejected');
   return decodeVaultValue(await open(key, value, aad(manifest.id, db, store, recordKey)));
 }
+const historyCodec = (key, manifest) => ({
+  seal: (...args) => sealVaultRecord(key, manifest, ...args),
+  open: (...args) => openVaultRecord(key, manifest, ...args),
+});
 export async function sealVaultState(key, manifest, stages = []) {
   const state = { phase: manifest.phase, accounts: manifest.accounts || [], accountIndex: manifest.accountIndex || null, inventories: stages.map(([name, rows]) => [name, rows.map(([slot]) => slot)]) };
+  if (manifest.historyV !== undefined) state.historyV = manifest.historyV;
+  if (manifest.storageV !== undefined) state.storageV = manifest.storageV;
+  if (manifest.browser !== undefined) state.browser = manifest.browser;
   return { ...manifest, auth: await sealVaultRecord(key, manifest, CONTROL, 'meta', 'state', state) };
 }
 export async function openVaultState(key, manifest) {
   const state = await openVaultRecord(key, manifest, CONTROL, 'meta', 'state', manifest.auth);
-  if (state.phase !== manifest.phase || JSON.stringify(state.accounts) !== JSON.stringify(manifest.accounts || []) || JSON.stringify(state.accountIndex) !== JSON.stringify(manifest.accountIndex || null)) throw new Error('vault journal authentication');
+  if (state.storageV !== manifest.storageV || JSON.stringify(state.browser) !== JSON.stringify(manifest.browser)) throw new Error('vault browser journal authentication');
+  if (state.phase !== manifest.phase || state.historyV !== manifest.historyV || JSON.stringify(state.accounts) !== JSON.stringify(manifest.accounts || []) || JSON.stringify(state.accountIndex) !== JSON.stringify(manifest.accountIndex || null)) throw new Error('vault journal authentication');
   return state;
 }
 
 const request = req => new Promise((resolve, reject) => { req.onsuccess = () => resolve(req.result); req.onerror = () => reject(req.error); });
 const complete = tx => new Promise((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onabort = tx.onerror = () => reject(tx.error || new Error('vault transaction aborted')); });
-async function connect(name) {
+async function connect(name, stores) {
   const existing = name === CONTROL ? null : (await indexedDB.databases()).find(db => db.name === name);
   const req = indexedDB.open(name, name === CONTROL ? 1 : existing?.version || 6);
   req.onupgradeneeded = () => {
     const db = req.result;
     if (name === CONTROL) { db.createObjectStore('meta'); return; }
     if (db.objectStoreNames.contains('identity')) throw new Error('open account in current client before migration');
-    db.createObjectStore('identity'); db.createObjectStore('settings'); db.createObjectStore('contacts', { keyPath: 'id' });
-    const messages = db.createObjectStore('messages', { keyPath: 'msgId' });
-    messages.createIndex('contact', 'contactId'); messages.createIndex('ts', 'ts'); messages.createIndex('contact_ts', ['contactId', 'ts']);
-    const audit = db.createObjectStore('audit', { keyPath: 'id', autoIncrement: true }); audit.createIndex('ts', 'ts'); audit.createIndex('type', 'type');
-    const calls = db.createObjectStore('calls', { keyPath: 'id', autoIncrement: true }); calls.createIndex('ts', 'ts'); calls.createIndex('contact', 'contactId');
+    const include = store => !stores || stores.includes(store);
+    db.createObjectStore('identity');
+    if (include('settings')) db.createObjectStore('settings');
+    if (include('contacts')) db.createObjectStore('contacts', { keyPath: 'id' });
+    if (include('messages')) {
+      const messages = db.createObjectStore('messages', { keyPath: 'msgId' });
+      messages.createIndex('contact', 'contactId'); messages.createIndex('ts', 'ts'); messages.createIndex('contact_ts', ['contactId', 'ts']);
+    }
+    if (include('audit')) { const audit = db.createObjectStore('audit', { keyPath: 'id', autoIncrement: true }); audit.createIndex('ts', 'ts'); audit.createIndex('type', 'type'); }
+    if (include('calls')) { const calls = db.createObjectStore('calls', { keyPath: 'id', autoIncrement: true }); calls.createIndex('ts', 'ts'); calls.createIndex('contact', 'contactId'); }
   };
   return request(req);
 }
@@ -224,6 +240,8 @@ export function vaultDatabase(db, runtime) {
 let singleton;
 export function getVault(D) { return singleton ||= createVaultRuntime(D); }
 export function createVaultRuntime(D) {
+  const bootstrap = D.browser || globalThis.__breezeBrowser;
+  let browser;
   let control, manifest = null, key = null, blocked = false, generation = 0, release, lease, quiesce = D.quiesce || (() => {});
   const transactions = new Set(), aborters = new Set(), expected = new Map(), timers = new Set();
   let cancelTimer;
@@ -238,15 +256,20 @@ export function createVaultRuntime(D) {
     await done; manifest = state;
   };
   const read = () => request(control.transaction('meta').objectStore('meta').get('state'));
-  async function freeze(reload = false) {
+  async function freeze(reload = false, keepBrowser = false) {
     blocked = true; generation++; key = null;
     for (const tx of transactions) { try { tx.abort(); } catch { /* completed */ } }
     for (const ac of aborters) ac.abort();
     for (const timer of timers) cancelTimer?.(timer);
     timers.clear();
     try { quiesce(); } catch (e) { D.dbg(e, 'vault-quiesce'); }
-    release?.(); release = null; lease = null;
-    if (reload) D.reload();
+    try { return await browser?.freeze(keepBrowser); }
+    finally {
+      for (const cache of caches) { try { cache.clear(); } catch (e) { D.dbg(e, 'vault-cache'); } }
+      caches.clear(); expected.clear();
+      release?.(); release = null; lease = null;
+      if (reload) D.reload();
+    }
   }
   if (channel) channel.onmessage = e => { if (e.data?.type === 'freeze') freeze(true); };
   async function hold() {
@@ -264,12 +287,15 @@ export function createVaultRuntime(D) {
     const clients = new Set(locks.held.filter(l => l.name === 'breeze-vault-runtime').map(l => l.clientId));
     if ([...locks.held, ...locks.pending].some(l => l.name === 'breeze-leader' && !clients.has(l.clientId))) throw new Error(D.t('vaultOldTabs'));
     const epoch = generation + 1;
-    const result = navigator.locks.request('breeze-vault-runtime', () => {
+    let freezing;
+    const result = navigator.locks.request('breeze-vault-runtime', async () => {
+      const snapshot = await freezing;
       if (generation !== epoch) throw new Error('vault changed concurrently');
-      return work();
+      return work(snapshot);
     });
     channel.postMessage({ type: 'freeze' });
-    await freeze();
+    freezing = freeze(false, true);
+    await freezing;
     return result;
   }
   async function names() {
@@ -298,6 +324,41 @@ export function createVaultRuntime(D) {
     const { wrapped: _wrapped, priv: _priv, seed: _seed, ...rest } = value;
     return { ...rest, ...(slot === 'pq-priv' ? payload : { priv: payload }) };
   }
+  async function historyStage(db, next, current, pass) {
+    if (current?.historyV === 2) return snapshotHistory(db, historyCodec(key, current));
+    if (current) {
+      const rows = await entries(db), marker = rows.find(([slot]) => slot === MANIFEST)?.[1];
+      const metadata = await openVaultRecord(key, current, db.name, 'identity', MANIFEST, marker);
+      if (!Array.isArray(metadata.slots) || new Set(metadata.slots).size !== metadata.slots.length || rows.filter(([s]) => vaultSlot('identity', s)).length !== metadata.slots.length || metadata.slots.some(s => !vaultSlot('identity', s) || !rows.some(([slot]) => slot === s))) throw new Error('vault upgrade inventory');
+    }
+    return stageHistory(db, historyCodec(key, next), async (store, slot, value) => {
+      if (store !== 'identity') return value;
+      if (current && vaultSlot(store, slot)) return openVaultRecord(key, current, db.name, store, slot, value);
+      if (value?.vaultV) throw new Error('unexpected encrypted account');
+      try { return await legacy(value, slot, pass); }
+      catch (e) {
+        if (!D.prompt) throw e;
+        pass = await D.prompt(D.t('vaultLegacy') + ' (' + db.name + ')');
+        if (!pass) throw e;
+        return legacy(value, slot, pass);
+      }
+    });
+  }
+  async function upgradeHistory() {
+    const current = manifest, unlocked = key;
+    await exclusive(async snapshot => {
+      key = unlocked;
+      const next = { ...current, historyV: 2, storageV: 1 }, stages = [];
+      for (const name of await names()) {
+        const db = await connect(name);
+        try {
+          if (db.objectStoreNames.contains('identity')) stages.push([name, [['history:v2', await historyStage(db, next, current, '')]]]);
+        } finally { db.close(); }
+      }
+      await save({ ...next, phase: 'enabling', accounts: stages.map(([name]) => name), ...(snapshot ? { browser: await sealVaultRecord(key, next, CONTROL, 'meta', 'browser-journal', snapshot) } : {}) }, stages);
+      await resume();
+    });
+  }
   async function resume() {
     if (manifest.phase === 'ready') return;
     if (!['enabling', 'disabling', 'restoring'].includes(manifest.phase) || !Array.isArray(manifest.accounts)) throw new Error('vault journal/version');
@@ -310,6 +371,11 @@ export function createVaultRuntime(D) {
       const db = await connect(name);
       try {
         if (!db.objectStoreNames.contains('identity')) throw new Error('vault account schema missing');
+        if (manifest.historyV === 2) {
+          if (rows.length !== 1 || rows[0][0] !== 'history:v2') throw new Error('history journal format');
+          await commitHistory(db, rows[0][1], historyCodec(key, manifest), manifest.phase === 'disabling');
+          continue;
+        }
         const output = [];
         for (const [slot, value] of rows) {
           const plain = await openVaultRecord(key, manifest, name, 'identity', slot, value);
@@ -319,7 +385,8 @@ export function createVaultRuntime(D) {
         await atomicVaultRows(db, output, marker);
       } finally { db.close(); }
     }
-    const next = manifest.phase === 'disabling' ? null : await sealVaultState(key, { v: VERSION, id: manifest.id, wrapped: manifest.wrapped, phase: 'ready' });
+    if (manifest.browser) await commitBrowserVault(bootstrap, await openVaultRecord(key, manifest, CONTROL, 'meta', 'browser-journal', manifest.browser), manifest.phase === 'disabling' ? null : historyCodec(key, manifest));
+    const next = manifest.phase === 'disabling' ? null : await sealVaultState(key, { v: VERSION, id: manifest.id, wrapped: manifest.wrapped, phase: 'ready', ...(manifest.historyV === 2 ? { historyV: 2 } : {}), ...(manifest.storageV === 1 ? { storageV: 1 } : {}) });
     if (manifest.phase === 'restoring' && manifest.accountIndex) D.restoreAccounts?.(manifest.accountIndex);
     const tx = control.transaction('meta', 'readwrite'), done = complete(tx), os = tx.objectStore('meta');
     for (const name of manifest.accounts) os.delete('stage:' + name);
@@ -332,12 +399,17 @@ export function createVaultRuntime(D) {
       if (manifest.v !== VERSION) throw new Error('unsupported vault version');
       await gate();
       await openVaultState(key, manifest);
+      if (manifest.historyV !== undefined && manifest.historyV !== 2) throw new Error('unsupported history format');
+      if (manifest.storageV !== undefined && manifest.storageV !== 1) throw new Error('unsupported browser format');
       if (manifest.phase !== 'ready') {
         const unlocked = key;
         await exclusive(async () => { key = unlocked; await resume(); });
         D.reload(); return new Promise(() => {});
       }
+      browser = await createBrowserVault(bootstrap, manifest.storageV === 1 ? historyCodec(key, manifest) : null, e => { D.dbg(e, 'vault-browser'); channel?.postMessage({ type: 'freeze' }); freeze(true).catch(error => D.dbg(error, 'vault-freeze')); });
+      if (manifest.historyV !== 2 || manifest.storageV !== 1) { await upgradeHistory(); D.reload(); return new Promise(() => {}); }
     } else {
+      browser = await createBrowserVault(bootstrap, null);
       for (const name of await names()) {
         const db = await connect(name);
         let old = false;
@@ -348,8 +420,9 @@ export function createVaultRuntime(D) {
     }
   }
   let ready;
+  const caches = new Set();
   const runtime = {
-    assert, enabled, epoch: () => generation, transactions,
+    assert, enabled, epoch: () => generation, transactions, caches,
     expected: (db, slot) => expected.get(db)?.has(slot),
     async metadata(os, db, slot, add) {
       if (!vaultSlot('identity', slot)) return;
@@ -362,9 +435,22 @@ export function createVaultRuntime(D) {
     open: async (db, slot, value) => { const epoch = generation; assert(epoch); if (!key) throw new Error('vault unavailable'); const plain = await openVaultRecord(key, manifest, db, 'identity', slot, value); assert(epoch); return plain; },
     seal: async (db, slot, value) => { const epoch = generation; assert(epoch); if (!key) throw new Error('vault unavailable'); const sealed = await sealVaultRecord(key, manifest, db, 'identity', slot, value); assert(epoch); return sealed; },
     async boot() { await (ready ||= initialize()); assert(); return runtime; },
+    async flushBrowser() { await browser?.flush(); },
     async database(db) {
       assert();
       const marker = await request(db.transaction('identity').objectStore('identity').get(MANIFEST));
+      if (manifest?.historyV === 2) {
+        const codec = historyCodec(key, manifest);
+        if (!marker) {
+          for (const store of db.objectStoreNames) if ((await entries(db, store)).length) throw new Error('unmigrated history account');
+          await commitHistory(db, await stageHistory(db, codec), codec);
+        } else await snapshotHistory(db, codec);
+        const guarded = Object.fromEntries(Object.entries(codec).map(([method, operation]) => [method, async (...args) => {
+          const epoch = generation; assert(epoch);
+          const value = await operation(...args); assert(epoch); return value;
+        }]));
+        return historyDatabase(db, guarded, runtime);
+      }
       if (manifest && !marker) {
         const rows = await entries(db);
         if (rows.some(([k]) => vaultSlot('identity', k))) throw new Error('unmigrated vault account');
@@ -387,15 +473,19 @@ export function createVaultRuntime(D) {
       if (!control) await runtime.boot();
       const current = manifest;
       let nextKey, next;
-      if (enable) { if (current) throw new Error('vault already enabled'); ({ key: nextKey, manifest: next } = await newVault(pass)); }
+      if (enable) { if (current) throw new Error('vault already enabled'); ({ key: nextKey, manifest: next } = await newVault(pass)); next.historyV = 2; next.storageV = 1; }
       else { if (!current) return; nextKey = await unlockVault(current, pass); next = current; }
-      return exclusive(async () => {
+      return exclusive(async snapshot => {
         key = nextKey;
         const stages = [];
         for (const name of await names()) {
           const db = await connect(name);
           try {
             if (!db.objectStoreNames.contains('identity')) continue;
+            if (next.historyV === 2) {
+              stages.push([name, [['history:v2', await historyStage(db, next, current, oldPass)]]]);
+              continue;
+            }
             const stage = [];
             let legacyPass = oldPass;
             for (const [slot, value] of await entries(db)) {
@@ -415,7 +505,7 @@ export function createVaultRuntime(D) {
             stages.push([name, stage]);
           } finally { db.close(); }
         }
-        await save({ ...next, phase: enable ? 'enabling' : 'disabling', accounts: stages.map(([n]) => n) }, stages);
+        await save({ ...next, phase: enable ? 'enabling' : 'disabling', accounts: stages.map(([n]) => n), ...(snapshot ? { browser: await sealVaultRecord(key, next, CONTROL, 'meta', 'browser-journal', snapshot) } : {}) }, stages);
         await resume(); key = null; D.reload();
       });
     },
@@ -449,6 +539,14 @@ export function createVaultRuntime(D) {
         const db = await connect(name);
         try {
           if (!db.objectStoreNames.contains('identity')) continue;
+          if (manifest.historyV === 2) {
+            const snapshot = await snapshotHistory(db, historyCodec(key, manifest));
+            const opened = await inspectHistory(db, snapshot, historyCodec(key, manifest));
+            const identity = [...opened.stores.get('identity').values()].find(r => r.key === 'keys')?.value;
+            if (identity?.recoveryMode === 'none') throw new Error('disposable identity cannot be backed up');
+            accounts.push({ name, snapshot });
+            continue;
+          }
           const snapshot = await entries(db), rows = snapshot.filter(([k]) => vaultSlot('identity', k));
           for (const [slot, value] of rows) {
             const plain = await runtime.open(name, slot, value);
@@ -461,7 +559,7 @@ export function createVaultRuntime(D) {
         }
         finally { db.close(); }
       }
-      const catalog = await sealVaultRecord(key, manifest, CONTROL, 'meta', 'backup:accounts', { accounts: accounts.map(a => a.name), accountIndex: D.accounts() });
+      const catalog = await sealVaultRecord(key, manifest, CONTROL, 'meta', 'backup:accounts', { accounts: accounts.map(a => a.name), accountIndex: D.accounts(), ...(browser ? { browser: await browser.snapshot() } : {}) });
       return { vaultBackupV: VERSION, manifest, accounts, catalog };
     },
     async restore(data, pass) {
@@ -473,6 +571,16 @@ export function createVaultRuntime(D) {
       if (data.manifest.phase !== 'ready' || !Array.isArray(catalog.accounts) || new Set(catalog.accounts).size !== data.accounts.length || catalog.accounts.length !== data.accounts.length || data.accounts.some(a => !catalog.accounts.includes(a.name)) || new Set(data.accounts.map(a => a.name)).size !== data.accounts.length) throw new Error('vault backup catalog');
       if (!Array.isArray(catalog.accountIndex) || catalog.accountIndex.some(a => typeof a.id !== 'string' || !catalog.accounts.includes(a.dbName || 'breeze-acc-' + a.id))) throw new Error('vault backup account index');
       for (const account of data.accounts) {
+        if (data.manifest.historyV === 2) {
+          if (!(account.name === 'breeze-messenger' || /^breeze-acc-[a-zA-Z0-9_-]+$/.test(account.name)) || !Array.isArray(account.snapshot?.stores)) throw new Error('history backup account');
+          const db = await connect(account.name, account.snapshot.stores.map(([name]) => name));
+          try {
+            await inspectHistory(db, account.snapshot, historyCodec(restored, data.manifest));
+            for (const store of db.objectStoreNames) if ((await entries(db, store)).length) throw new Error('vault restore requires empty accounts');
+          } finally { db.close(); }
+          stages.push([account.name, [['history:v2', account.snapshot]]]);
+          continue;
+        }
         if (!(account.name === 'breeze-messenger' || /^breeze-acc-[a-zA-Z0-9_-]+$/.test(account.name)) || !Array.isArray(account.rows)) throw new Error('vault backup account');
         const inventory = await openVaultRecord(restored, data.manifest, account.name, 'identity', MANIFEST, account.inventory);
         if (!Array.isArray(inventory.slots) || inventory.slots.length !== account.rows.length || new Set(account.rows.map(([s]) => s)).size !== account.rows.length || account.rows.some(([s]) => !inventory.slots.includes(s))) throw new Error('vault backup inventory');
@@ -490,10 +598,17 @@ export function createVaultRuntime(D) {
       await exclusive(async () => {
         for (const [name] of stages) {
           const db = await connect(name);
-          try { if ((await entries(db)).some(([slot]) => vaultSlot('identity', slot))) throw new Error('vault restore requires empty accounts'); }
+          try {
+            if (data.manifest.historyV === 2) {
+              for (const store of db.objectStoreNames) if ((await entries(db, store)).length) throw new Error('vault restore requires empty accounts');
+            } else if ((await entries(db)).some(([slot]) => vaultSlot('identity', slot))) throw new Error('vault restore requires empty accounts');
+          }
           finally { db.close(); }
         }
-        key = restored; await save({ ...data.manifest, phase: 'restoring', accounts: stages.map(([n]) => n), accountIndex: catalog.accountIndex }, stages); await resume(); D.reload();
+        key = restored;
+        const snapshot = catalog.browser || [[], []];
+        snapshot[0] = snapshot[0].filter(([k]) => k !== 'brz-accounts'); snapshot[0].push(['brz-accounts', JSON.stringify(catalog.accountIndex)]);
+        await save({ ...data.manifest, storageV: 1, phase: 'restoring', accounts: stages.map(([n]) => n), browser: await sealVaultRecord(key, data.manifest, CONTROL, 'meta', 'browser-journal', snapshot) }, stages); await resume(); D.reload();
       });
     },
     async command(value) {
@@ -568,12 +683,14 @@ export function createVaultRuntime(D) {
 export function vaultGate(D, unlock) {
   return new Promise(resolve => {
     const overlay = document.createElement('dialog'); overlay.id = 'vault-gate'; overlay.className = 'lock-overlay i-flex-col';
-    const title = document.createElement('h2'); title.textContent = D.t('vaultTitle');
-    const hint = document.createElement('p'); hint.textContent = D.t('vaultRecovery');
-    const input = document.createElement('input'); input.type = 'password'; input.className = 'lock-input'; input.autocomplete = 'current-password'; input.setAttribute('aria-label', D.t('vaultUnlock'));
+    overlay.setAttribute('aria-label', D.t('vaultTitle'));
+    const panel = document.createElement('div'); panel.className = 'modal i-max-popup i-flex-col';
+    const title = document.createElement('h2'); title.className = 'modal-title'; title.textContent = D.t('vaultTitle');
+    const hint = document.createElement('p'); hint.className = 'modal-desc'; hint.textContent = D.t('vaultRecovery');
+    const input = document.createElement('input'); input.type = 'password'; input.className = 'modal-input'; input.autocomplete = 'current-password'; input.setAttribute('aria-label', D.t('vaultUnlock'));
     const button = document.createElement('button'); button.className = 'btn btn-g'; button.textContent = D.t('uiUnlock');
-    const error = document.createElement('p'); error.setAttribute('role', 'alert');
-    overlay.append(title, hint, input, button, error); document.body.appendChild(overlay);
+    const error = document.createElement('p'); error.className = 'modal-desc'; error.setAttribute('role', 'alert');
+    panel.append(title, hint, input, button, error); overlay.append(panel); document.body.appendChild(overlay);
     overlay.addEventListener('cancel', e => e.preventDefault()); overlay.showModal(); input.focus();
     const submit = async () => {
       if (button.disabled) return; button.disabled = true;
