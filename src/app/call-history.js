@@ -1,3 +1,5 @@
+import { createIcon } from './icons.js';
+
 // ============================================================================
 // CALL HISTORY — an on-device log of 1:1 calls (src/app/call.js emits the
 // lifecycle events; this module turns them into records), plus the Calls
@@ -79,7 +81,6 @@ export function formatCallDuration(sec) {
   return (h > 0 ? h + ':' + String(m).padStart(2, '0') : String(m)) + ':' + String(ss).padStart(2, '0');
 }
 
-const PHONE_SVG = '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
 
 export function createCallHistory(D) {
   const { dbPut, dbGetAll, dbDel } = D;
@@ -186,7 +187,7 @@ export function createCallHistory(D) {
           const cb = document.createElement('button');
           cb.className = 'btn btn-o btn-sm call-back-btn';
           cb.setAttribute('aria-label', t('ariaCall'));
-          safeSetHTML(cb, PHONE_SVG);
+          cb.replaceChildren(createIcon('phone'));
           cb.onclick = (ev) => { ev.stopPropagation(); D.startCall(c, r.video); };
           div.appendChild(cb);
           div.onclick = () => D.openConversation(c);

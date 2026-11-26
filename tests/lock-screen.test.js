@@ -45,7 +45,7 @@ let env;
 function boot() {
   const created = [];
   const fn = new Function(
-    'document', 'localStorage', '_DOM', '_showDialog', 'safeSetHTML', 'esc', 't', 'crypto',
+    'document', 'localStorage', '_DOM', '_showDialog', 'safeSetHTML', '_iconSlot', 'esc', 't', 'crypto',
     'CONFIG', 'MS', 'auditLog', '_dbg', 'setTimeout', 'TextEncoder', 'btoa', 'atob',
     `${SRC}\n return showLockScreen;`
   );
@@ -54,7 +54,7 @@ function boot() {
     env.storage,
     { get: (id) => (id === 'lock-screen' ? env.shown : null) },
     (dlg) => { dlg.isConnected = true; dlg.showModal(); env.shown = dlg; },
-    () => {}, (s) => s, (k) => k, webcrypto,
+    () => {}, () => '', (s) => s, (k) => k, webcrypto,
     { PBKDF2_ITERATIONS: ITERATIONS, FOCUS_DELAY_MS: 0 }, { SEC: 1000, MIN: 60000 },
     () => {}, () => {}, () => 0, TextEncoder, btoa, atob
   );

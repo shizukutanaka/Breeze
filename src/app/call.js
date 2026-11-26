@@ -1,4 +1,5 @@
 import { safeName } from './lookalike-names.js';
+import { createIcon } from './icons.js';
 
 // ============================================================================
 // 1:1 VOICE / VIDEO CALLS — the call state machine (idle / calling / ringing
@@ -463,12 +464,12 @@ export function createCallManager(D) {
     actions.className = 'call-actions';
     if (state === 'ringing') {
       const acceptBtn = document.createElement('button');
-      acceptBtn.className = 'call-btn-accept'; acceptBtn.textContent = '📞'; acceptBtn.setAttribute('aria-label', t('incoming'));
+      acceptBtn.className = 'call-btn-accept'; acceptBtn.replaceChildren(createIcon('phone')); acceptBtn.setAttribute('aria-label', t('incoming'));
       acceptBtn.onclick = () => acceptCall();
       actions.appendChild(acceptBtn);
     }
     const endBtn = document.createElement('button');
-    endBtn.className = 'call-btn-end'; endBtn.textContent = '✕'; endBtn.setAttribute('aria-label', t('close'));
+    endBtn.className = 'call-btn-end'; endBtn.replaceChildren(createIcon('x')); endBtn.setAttribute('aria-label', t('close'));
     endBtn.onclick = () => endCall();
     actions.appendChild(endBtn);
 

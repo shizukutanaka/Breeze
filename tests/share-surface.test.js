@@ -212,12 +212,12 @@ describe('surfacing wiring (index.html / sw.js / locales)', () => {
   });
 
   it('the contacts empty state offers the invite and migrate doors', () => {
-    expect(html).toContain("invBtn.textContent = t('btnInviteFriend')");
-    expect(html).toContain('invBtn.onclick = () => { shareInvite(); }');
-    expect(html).toContain("migBtn.textContent = t('btnMigrateApps')");
-    expect(html).toContain('migBtn.onclick = () => { showMigratePanel(); }');
+    expect(html).toContain("label: t('btnInviteFriend')");
+    expect(html).toContain('onClick: () => shareInvite()');
+    expect(html).toContain("label: t('btnMigrateApps')");
+    expect(html).toContain('onClick: () => showMigratePanel()');
     // …and only in the zero-contacts state, not on every empty folder.
-    expect(html).toContain('if (contacts.length === 0) {');
+    expect(html).toContain('if (contacts.length === 0) actions = [');
   });
 
   it('the settings panel offers the same two doors', () => {

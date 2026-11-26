@@ -10,6 +10,7 @@ import { createRatchet, padBucketSize } from '../src/crypto/ratchet.js';
 import { sealMeta, unsealMeta } from '../src/crypto/seal.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
 const subtle = globalThis.crypto.subtle;
 const LOCALES = ['es', 'id', 'ja', 'ko', 'pt-BR', 'th', 'zh-TW'];
 const locale = (l) => JSON.parse(readFileSync(new URL(`../locales/${l}.json`, import.meta.url), 'utf8'));
@@ -113,7 +114,7 @@ describe('D05 — KT chain-head pin + opt-in session block on tampered', () => {
   it('the block is an opt-in setting, default off, wired through the settings panel', () => {
     expect(html).toContain('ktBlockOnTamper: false');
     expect(html).toContain('if (_settings.ktBlockOnTamper) return false;');
-    expect(html).toContain('data-setting="kt-block"');
+    expect(settingsPanelSrc).toContain("check('kt-block'");
     expect(html).toContain("s === 'kt-block') { _settings.ktBlockOnTamper = cb.checked; saveSettings(); }");
     expect(html).toContain("ktBlockLabel: 'Block new sessions when the key-transparency log looks tampered'");
     for (const l of LOCALES) expect(locale(l).ktBlockLabel, l).toBeTruthy();

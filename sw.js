@@ -18,8 +18,8 @@ const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-51
   // (calls, backup/restore, QR, import parsers, notification sound) —
   // precached so a first offline boot keeps those features instead of
   // degrading to their inert fallbacks.
-  '/src/app/mock.js', '/src/app/call.js', '/src/app/backup.js', '/src/app/history-tools.js', '/src/app/qr.js',
-  '/src/app/import-parsers.js', '/src/app/sound.js', '/src/app/share.js',
+  '/src/app/mock.js', '/src/app/account-tabs.js', '/src/app/icons.js', '/src/app/call.js', '/src/app/backup.js', '/src/app/history-tools.js', '/src/app/qr.js',
+  '/src/app/import-parsers.js', '/src/app/sound.js', '/src/app/share.js', '/src/app/settings-panel.js',
   '/src/app/direct-ack.js', '/src/app/p2p-stats.js', '/src/app/rendezvous.js', '/src/app/offline-pairing.js', '/src/app/quota.js', '/src/app/history-sync.js', '/src/app/group-call.js', '/src/app/profile.js', '/src/app/group-create.js', '/src/app/device-link.js', '/src/app/stickers.js', '/src/app/info-panels.js', '/src/app/location.js', '/src/app/address.js', '/src/app/turn.js', '/src/app/data-lifecycle.js', '/src/app/group-file.js', '/src/app/group-live.js', '/src/app/voice-input.js', '/src/app/emoji-picker.js', '/src/app/install-banner.js', '/src/app/context-menu.js', '/src/app/lightbox.js', '/src/app/smart-replies.js', '/src/app/chat-search.js', '/src/app/call-history.js', '/src/app/settings-help.js', '/src/app/cloudflare.js', '/src/crypto/msgstore.js',
   // D17 modal-a11y bridge (wave-6 R01): index.html statically imports it
   // in the same single module block as every bridge above, so a first

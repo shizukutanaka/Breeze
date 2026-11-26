@@ -1,4 +1,5 @@
 import { safeName } from './lookalike-names.js';
+import { createIcon } from './icons.js';
 
 // ============================================================================
 // GROUP VOICE CALLS — small-scale full mesh (SHARE_PLAN stage 5 step 2).
@@ -114,18 +115,18 @@ export function createGroupCallManager(D) {
     const actions = document.createElement('div'); actions.className = 'call-actions';
     if (mode === 'ringing') {
       const join = document.createElement('button');
-      join.className = 'call-btn-accept'; join.textContent = '📞'; join.setAttribute('aria-label', t('gcallJoin'));
+      join.className = 'call-btn-accept'; join.replaceChildren(createIcon('phone')); join.setAttribute('aria-label', t('gcallJoin'));
       join.onclick = () => { joinPending(); };
       const dec = document.createElement('button');
-      dec.className = 'call-btn-end'; dec.textContent = '✕'; dec.setAttribute('aria-label', t('close'));
+      dec.className = 'call-btn-end'; dec.replaceChildren(createIcon('x')); dec.setAttribute('aria-label', t('close'));
       dec.onclick = () => { _pending = null; _state = 'idle'; _hideOverlay(); };
       actions.append(join, dec);
     } else {
       const mute = document.createElement('button');
-      mute.className = 'call-btn-mute'; mute.textContent = '🎤'; mute.setAttribute('aria-label', t('mute'));
+      mute.className = 'call-btn-mute'; mute.replaceChildren(createIcon('mic')); mute.setAttribute('aria-label', t('mute'));
       mute.onclick = () => { if (_stream) for (const tr of _stream.getAudioTracks()) tr.enabled = !tr.enabled; mute.classList.toggle('muted'); };
       const leave = document.createElement('button');
-      leave.className = 'call-btn-end'; leave.textContent = '✕'; leave.setAttribute('aria-label', t('gcallLeave'));
+      leave.className = 'call-btn-end'; leave.replaceChildren(createIcon('x')); leave.setAttribute('aria-label', t('gcallLeave'));
       leave.onclick = () => endCall(true);
       actions.append(mute, leave);
     }

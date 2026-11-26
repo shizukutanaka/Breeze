@@ -87,8 +87,8 @@ const pollingBlock = slice('  function startPresencePolling() {', '\n  startPres
 const createPolling = new Function(
   'API', 'dbGetAll', 'peers', '_presenceCache', '_lastSeenCache', 'renderContacts', 'postAPIRaw', '_dbg', '_devRegTs',
   '_attribDevCache', 'deliverPeerRelayQueue', 'connectPeer', 'CONFIG', '_intervals',
-  'setInterval', '_powerPresenceOff',
-  pollingBlock + '\nreturn startPresencePolling;');
+  'setInterval', 'setTimeout', '_powerPresenceOff', '_powerPollFloorMs',
+  'let _presencePollTimer = null;\n' + pollingBlock + '\nreturn startPresencePolling;');
 
 function presenceHarness(settings) {
   const power = create({ MIN: 60000 }, settings, {}, () => {});
@@ -111,8 +111,10 @@ function presenceHarness(settings) {
     () => {},
     { PRESENCE_INTERVAL_MS: 30000 },
     [],
-    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    (fn, ms) => { timers.push({ fn, ms, type: 'interval' }); return timers.length; },
+    (fn, ms) => { timers.push({ fn, ms, type: 'timeout' }); return timers.length; },
     power._powerPresenceOff,
+    power._powerPollFloorMs,
   );
   start();
   return { postAPIRaw, dbGetAll, renderContacts, timers };
@@ -127,7 +129,7 @@ describe('power mode — presence checks', () => {
     const h = presenceHarness(settings);
     await flushMicrotasks();
     expect(h.timers).toHaveLength(1);
-    expect(h.timers[0].ms).toBe(30000);
+    expect(h.timers[0].ms).toBe(60000);
     // The pre-fix request-only gate still read IndexedDB and re-rendered in saver;
     // presence polling must now return before every one of those side effects.
     expect(h.dbGetAll).not.toHaveBeenCalled();
@@ -140,14 +142,14 @@ describe('power mode — presence checks', () => {
     expect(h.postAPIRaw).not.toHaveBeenCalled();
 
     settings.powerMode = 'normal';
-    await h.timers[0].fn();
+    await h.timers.at(-1).fn();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
     expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
     const dbCallsInNormal = h.dbGetAll.mock.calls.length;
     const renderCallsInNormal = h.renderContacts.mock.calls.length;
 
     settings.powerMode = 'emergency';
-    await h.timers[0].fn();
+    await h.timers.at(-1).fn();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
     expect(h.dbGetAll).toHaveBeenCalledTimes(dbCallsInNormal);
     expect(h.renderContacts).toHaveBeenCalledTimes(renderCallsInNormal);
@@ -158,6 +160,50 @@ describe('power mode — presence checks', () => {
     await flushMicrotasks();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
     expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
+  });
+
+  it.each([
+    ['normal', 30000],
+    ['saver', 60000],
+    ['emergency', 600000],
+  ])('schedules the first tick in %s mode at %i ms', async (mode, ms) => {
+    const h = presenceHarness({ powerMode: mode });
+    await flushMicrotasks();
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(ms);
+    expect(h.timers[0].type).toBe('timeout');
+  });
+
+  it('reschedules through emergency and re-evaluates back down to normal', async () => {
+    const settings = { powerMode: 'emergency' };
+    const h = presenceHarness(settings);
+    await flushMicrotasks();
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(600000);
+
+    await h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    await h.timers[1].fn();
+    expect(h.timers).toHaveLength(3);
+    expect(h.timers[2].ms).toBe(30000);
+  });
+
+  it('keeps the chain alive when a poll tick throws', async () => {
+    const h = presenceHarness({ powerMode: 'normal' });
+    await flushMicrotasks();
+    h.dbGetAll.mockRejectedValueOnce(Error('idb unavailable'));
+    await h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(30000);
+  });
+
+  it('clears the chain timer explicitly on account switch', () => {
+    const cleanup = slice('_messengerCleanup = () => {', '\n      // Discard this account');
+    expect(cleanup).toContain('if (_presencePollTimer) { clearTimeout(_presencePollTimer); _presencePollTimer = null; }');
   });
 });
 
@@ -458,9 +504,10 @@ describe('power mode — group member poll', () => {
     vi.useRealTimers();
   });
 
-  function groupPollHarness(powerOff) {
+  function groupPollHarness(powerOff, powerFloorMs) {
     const groupId = 'g_test';
     const postAPIRaw = vi.fn(() => ({ ok: true, json: async () => ({ members: [] }) }));
+    const delays = [];
     const deps = {
       hasApi: () => true,
       postAPIRaw,
@@ -471,8 +518,18 @@ describe('power mode — group member poll', () => {
       dbg: () => {},
     };
     if (powerOff) deps.powerOff = powerOff;
-    createGroupCreate(deps).startGroupMemberPoll('token123', groupId);
-    return { postAPIRaw };
+    if (powerFloorMs) deps.powerFloorMs = powerFloorMs;
+    const originalSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms, ...args) => {
+      delays.push(ms);
+      return originalSetTimeout(fn, ms, ...args);
+    };
+    try {
+      createGroupCreate(deps).startGroupMemberPoll('token123', groupId);
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
+    return { postAPIRaw, delays };
   }
 
   it('never calls /group/info while power mode keeps background presence off', async () => {
@@ -496,9 +553,44 @@ describe('power mode — group member poll', () => {
     expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
   });
 
-  it('wires the deployed power-presence gate into the group-create deps', () => {
+  it('schedules the first wake at the saver floor while the power gate stays on', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => true, () => 60000);
+    expect(h.delays[0]).toBe(60000);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(40000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+  });
+
+  it('waits for the saver floor before the first /group/info call when power is on', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => false, () => 60000);
+    expect(h.delays[0]).toBe(60000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(40000);
+    expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('waits for the emergency floor before the first /group/info call', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => false, () => 600000);
+    expect(h.delays[0]).toBe(600000);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(540000);
+    expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('wires the deployed power-presence gate and poll floor into the group-create deps', () => {
     const depsBlock = slice('globalThis.__breezeGroupCreate?.createGroupCreate({', '\n  });');
     expect(depsBlock).toContain('powerOff: () => _powerPresenceOff()');
+    expect(depsBlock).toContain('hasApi: () => !!API, powerOff: () => _powerPresenceOff(), powerFloorMs: () => _powerPollFloorMs(),');
   });
 });
 
@@ -709,6 +801,87 @@ describe('power mode — presence tick conversation status', () => {
     expect(h.updateConvStatus).toHaveBeenNthCalledWith(2, h.activeContact);
     expect(h.updateConvStatus).toHaveBeenNthCalledWith(3, h.activeContact);
     expect(h.schedulePresence).toHaveBeenCalledTimes(3);
+  });
+});
+
+// The heartbeat interval itself is wake-up cost: even when the tick body is
+// power-gated, a short self-rescheduling chain still wakes the CPU just to check
+// the gate. Extract the deployed schedulePresence verbatim and drive it with the
+// real power helpers, mutable visibility, and controllable timers.
+const presenceScheduleBlock = slice('    function schedulePresence() {', '\n    schedulePresence();');
+const createPresenceSchedule = new Function(
+  'document', 'CONFIG', 'setTimeout', 'clearTimeout', '_powerPresenceOff', '_powerPollFloorMs', 'beat', 'activeContact', 'updateConvStatus',
+  'let _presenceTimer = null;\n' + presenceScheduleBlock + '\nreturn schedulePresence;');
+
+function presenceScheduleHarness(settings, hidden = false) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const timers = [];
+  let nextTimer = 0;
+  const beat = vi.fn();
+  const updateConvStatus = vi.fn();
+  const schedule = createPresenceSchedule(
+    { hidden },
+    { PRESENCE_INTERVAL_MS: 30000, PRESENCE_BG_INTERVAL_MS: 120000 },
+    (fn, ms) => { timers.push({ fn, ms }); return ++nextTimer; },
+    vi.fn(),
+    power._powerPresenceOff,
+    power._powerPollFloorMs,
+    beat,
+    null,
+    updateConvStatus,
+  );
+  schedule();
+  return { beat, updateConvStatus, timers };
+}
+
+describe('power mode — presence heartbeat schedule floor', () => {
+  it('keeps the 30-second foreground and 120-second background intervals in normal mode', () => {
+    const foreground = presenceScheduleHarness({ powerMode: 'normal' });
+    expect(foreground.timers).toHaveLength(1);
+    expect(foreground.timers[0].ms).toBe(30000);
+
+    const background = presenceScheduleHarness({ powerMode: 'normal' }, true);
+    expect(background.timers).toHaveLength(1);
+    expect(background.timers[0].ms).toBe(120000);
+  });
+
+  it('floors the foreground interval at one minute in saver mode while background stays at two minutes', () => {
+    const foreground = presenceScheduleHarness({ powerMode: 'saver' });
+    expect(foreground.timers).toHaveLength(1);
+    expect(foreground.timers[0].ms).toBe(60000);
+
+    const background = presenceScheduleHarness({ powerMode: 'saver' }, true);
+    expect(background.timers).toHaveLength(1);
+    expect(background.timers[0].ms).toBe(120000);
+  });
+
+  it('floors foreground and background intervals at ten minutes in emergency mode', () => {
+    const foreground = presenceScheduleHarness({ powerMode: 'emergency' });
+    expect(foreground.timers).toHaveLength(1);
+    expect(foreground.timers[0].ms).toBe(600000);
+
+    const background = presenceScheduleHarness({ powerMode: 'emergency' }, true);
+    expect(background.timers).toHaveLength(1);
+    expect(background.timers[0].ms).toBe(600000);
+  });
+
+  it('keeps the chain alive outside normal mode and re-evaluates the interval after returning to normal', () => {
+    const settings = { powerMode: 'emergency' };
+    const h = presenceScheduleHarness(settings);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(600000);
+
+    h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
+    expect(h.beat).not.toHaveBeenCalled();
+    expect(h.updateConvStatus).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    h.timers[1].fn();
+    expect(h.timers).toHaveLength(3);
+    expect(h.timers[2].ms).toBe(30000);
+    expect(h.beat).toHaveBeenCalledTimes(1);
   });
 });
 

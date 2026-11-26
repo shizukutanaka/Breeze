@@ -15,7 +15,7 @@ beforeAll(() => {
   globalThis.showToast = () => {};
   const el = () => ({
     children: [], classList: { toggle() {}, add() {}, remove() {} },
-    setAttribute() {}, append(...k) { this.children.push(...k); }, remove() {},
+    setAttribute() {}, append(...k) { this.children.push(...k); }, replaceChildren() {}, remove() {},
     set textContent(v) {}, get textContent() { return ''; },
   });
   globalThis.document = { createElement: el, getElementById: () => null, body: { appendChild() {} } };
