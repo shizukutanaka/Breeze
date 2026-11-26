@@ -7659,7 +7659,7 @@ async function initMessenger(dbName) {
   // first session (until an account switch ran _boot()'s `if (hasId)` branch). Found by
   // diffing _boot() against the setup-completion handler line-by-line.
   async function _startLiveSession() {
-    _deviceAlerts?.check(); _intervals.push(setInterval(() => _deviceAlerts?.check(), MS.MIN));
+    _deviceAlerts?.check(); _intervals.push(setInterval(() => { if (!_powerPresenceOff()) _deviceAlerts?.check(); }, MS.MIN));
     await _contactVerify.migrate();
     // v3.3: Show human-readable short ID
     const shortIdEl = _DOM.get('msg-short-id');
@@ -10758,6 +10758,7 @@ async function initMessenger(dbName) {
 
   // Disappearing message cleanup: run every 10s
   _intervals.push(setInterval(async () => {
+    if (_powerPresenceOff()) return;
     if (!db) return;
     const now = Date.now();
     try {
@@ -11966,6 +11967,7 @@ async function initMessenger(dbName) {
   // this conversation is open (isActive), else a 5-min recovery poll.
   function startSignalPoll(poll, canPause = () => false, isActive = () => true) {
     const base = 2 * MS.SEC, maxBackoff = 8 * MS.SEC, connectedInterval = 15 * MS.SEC, slowInterval = 5 * MS.MIN;
+    const _powerFloor = () => (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0);
     let timer, running = false, stopped = false, connected = false, phaseChanged = false;
     let delay = base;
     let wakePending = false, retryPending = false, scheduledFor = -1;
@@ -11977,7 +11979,7 @@ async function initMessenger(dbName) {
       if (!wakePending && !retryPending && connected && canPause()) {
         clearTimeout(timer);
         timer = null;
-      } else if (!timer) schedule(wakePending ? 0 : retryPending ? base : connected ? (isActive() ? connectedInterval : slowInterval) : delay);
+      } else if (!timer) schedule(wakePending ? 0 : retryPending ? base : connected ? (isActive() ? connectedInterval : slowInterval) : Math.max(delay, _powerFloor()));
       else if (connected && !wakePending && !retryPending) { const want = isActive() ? connectedInterval : slowInterval; if (scheduledFor !== want) schedule(want); } // D12: a cadence flip (conversation opened/closed) re-arms at the new interval
     }
 
@@ -11994,7 +11996,7 @@ async function initMessenger(dbName) {
         retryPending = failed;
         if (!stopped) {
           if (!connected) delay = activity || phaseChanged ? base : Math.min(delay * 2, maxBackoff);
-          if (failed) schedule(base);
+          if (failed) schedule(connected ? base : Math.max(base, _powerFloor()));
           else refresh();
         }
       }
