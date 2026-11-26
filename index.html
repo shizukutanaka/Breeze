@@ -1479,6 +1479,7 @@ import { createSmartReplies } from './src/app/smart-replies.js'; window.__breeze
 import { createChatSearch } from './src/app/chat-search.js'; window.__breezeChatSearch = { createChatSearch };
 import { createMock, createMockApi, mockEnabled, mockApi } from './src/app/mock.js'; window.__breezeMock = { createMock, createMockApi, enabled: mockEnabled, api: mockApi };
 import { createAccountTabs } from './src/app/account-tabs.js'; window.__breezeAccountTabs = { createAccountTabs };
+import { createSettingsView } from './src/app/settings-view.js'; window.__breezeSettingsView = { createSettingsView };
 import { createCallHistory } from './src/app/call-history.js'; window.__breezeCallHistory = { createCallHistory }; import { installSettingsHelp } from './src/app/settings-help.js'; window.__breezeSettingsHelp = { installSettingsHelp }; import { createCloudflareLink } from './src/app/cloudflare.js'; window.__breezeCloudflare = { createCloudflareLink }; import { settingsPanelHtml } from './src/app/settings-panel.js'; window.__breezeSettingsPanel = { settingsPanelHtml };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
@@ -14029,210 +14030,30 @@ async function initMessenger(dbName) {
 
   // Slash command: /search query
   // ── Settings view ──────────────────────────────────────────────────
-  // The settings panel used to render into #msg-messages (the chat log,
-  // role="log"): it stacked into the conversation, never entered history,
-  // and on desktop there was no button that reached it at all. It now
-  // renders into the dedicated #settings-view screen; opening pushes a
-  // history entry so Back (browser or the view's own button) returns to
-  // exactly what was on screen before. Every entry point — the /settings
-  // command, the mobile Settings tab, the sidebar-head button, the
-  // ?settings shortcut — funnels through openSettingsView().
-  let _settingsViewOpen = false;
-  // Automatic-backup status line: the module owns the state machine
-  // (src/app/backup.js getAutoBackupStatus); Settings only words it.
-  function _autoBackupStatusText(st) {
-    if (!st) return '';
-    switch (st.state) {
-      case 'off': return t('autoBackupOff');
-      case 'ineligible': return t('toastRecoveryNoneBackup');
-      case 'noserver': return t('autoBackupNoServer');
-      case 'needpass': return t('autoBackupNeedPass');
-      case 'error': return t('autoBackupError');
-      case 'pending': return t('autoBackupPending');
-      case 'ok': return t('autoBackupLast', new Date(st.lastOkAt).toLocaleString());
-      default: return t('autoBackupNever');
-    }
-  }
-  function _renderSettingsPanel(d) {
-      const renderSettings = globalThis.__breezeSettingsPanel?.settingsPanelHtml;
-      if (!renderSettings) return;
-      safeSetHTML(d, renderSettings({
-        t, esc, myName,
-        hideReadReceipts: _privacyHideReadReceipts, readReceiptDelay: !!_settings.readReceiptDelay,
-        hideTyping: _privacyHideTyping, relayOnly: _settings.relayOnly, ktBlock: _settings.ktBlockOnTamper,
-        showPeerName: _settings.showPeerName !== false, callHistoryLog: _settings.callHistoryLog !== false,
-        notifSound: localStorage.getItem('brz-notif-sound') !== '0', sendSound: localStorage.getItem('brz-send-sound') !== '0',
-        focus: _focusActive(), focusStrict: _settings.focusStrict, autoLock: localStorage.getItem('brz-autolock') === '1',
-        notifPerm: typeof Notification !== 'undefined' && Notification.permission === 'granted', autoBackup: _settings.autoBackup !== false,
-        fanout: _fanoutCount(), powerMode: ['auto', 'normal', 'saver', 'emergency'].includes(_settings.powerMode) ? _settings.powerMode : 'auto',
-        relays: homeRelays().map(r => ({ label: r.label || r.url, url: r.url, origin: isOriginRelay(r), blocked: _relayBlockedUrls.has(r.url) })),
-        tabCalls: _settings.tabCalls !== false, tabContacts: _settings.tabContacts !== false,
-        tabSelf: _settings.tabSelf !== false, tabSettings: _settings.tabSettings !== false, tabOrder: _validTabOrder(),
-      }));
-      // (The add-account door is the account tab bar — renderAccountTabs
-      // renders it for a single account too, so Settings needs no button.)
-      // SHARE_PLAN stage 4 step 1: the invite / migrate doors — the same
-      // flows as /invite and /migrate, on buttons (src/app/share.js).
-      d.addEventListener('click', (ev) => {
-        if (ev.target.closest('[data-action="invite-friend"]')) { haptic.tap(); shareInvite(); return; }
-        if (ev.target.closest('[data-action="migrate-apps"]')) { haptic.tap(); showMigratePanel(); }
-      });
-      // Display name: writes through the profile module's own save path
-      // (_profileUI.setDisplayName → the same _saveProfile the /profile
-      // panel's OK button uses) — Settings keeps no name store of its own
-      // and the two editors can never drift apart.
-      d.addEventListener('click', async (ev) => {
-        const btn = ev.target.closest('[data-action="save-display-name"]');
-        if (!btn) return;
-        haptic.tap();
-        const input = d.querySelector('.settings-name-input');
-        const name = input?.value.trim() || '';
-        if (!name) { input?.focus(); return; }
-        if (await _profileUI?.setDisplayName(name)) showToast(t('profileSaved'), 'success');
-      });
-      const syncTabOrderRows = () => {
-        const list = d.querySelector('[data-tab-order-list]'); if (!list) return;
-        const order = _validTabOrder();
-        for (const k of order) { const row = list.querySelector(`[data-order-tab="${k}"]`); if (row) list.appendChild(row); }
-        order.forEach((k, i) => list.querySelector(`[data-order-tab="${k}"]`)?.querySelectorAll('[data-action="tab-move"]').forEach(btn => { btn.disabled = btn.dataset.dir === '-1' ? i === 0 : i === order.length - 1; }));
-      };
-      const saveTabOrder = (order) => { _settings.tabOrder = order.slice(); saveSettings(); _applyTabOrder(); syncTabOrderRows(); };
-      const moveTab = (key, dir) => {
-        const order = _validTabOrder(), from = order.indexOf(key), to = from + dir;
-        if (from < 0 || to < 0 || to >= order.length) return;
-        [order[from], order[to]] = [order[to], order[from]];
-        saveTabOrder(order);
-      };
-      d.addEventListener('click', (ev) => {
-        const btn = ev.target.closest('[data-action="tab-move"]'); if (!btn) return;
-        haptic.tap(); moveTab(btn.dataset.tab, parseInt(btn.dataset.dir, 10));
-      });
-      let dragTab = '';
-      const clearTabDrag = () => { dragTab = ''; d.querySelectorAll('.dragging,.drag-over').forEach(row => row.classList.remove('dragging', 'drag-over')); };
-      d.addEventListener('dragstart', (ev) => {
-        const row = ev.target.closest('[data-order-tab]'); if (!row) return;
-        dragTab = row.dataset.orderTab; row.classList.add('dragging');
-        if (ev.dataTransfer) { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', dragTab); }
-      });
-      d.addEventListener('dragend', clearTabDrag);
-      d.addEventListener('dragover', (ev) => {
-        const row = ev.target.closest('[data-order-tab]'); if (!dragTab || !row) return;
-        ev.preventDefault();
-        if (row.dataset.orderTab === dragTab) return;
-        if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move';
-        d.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
-        row.classList.add('drag-over');
-      });
-      d.addEventListener('drop', (ev) => {
-        const row = ev.target.closest('[data-order-tab]'); if (!dragTab || !row) return;
-        ev.preventDefault();
-        const order = _validTabOrder(), from = order.indexOf(dragTab);
-        if (from < 0 || !order.includes(row.dataset.orderTab)) { clearTabDrag(); return; }
-        const rect = row.getBoundingClientRect();
-        let to = order.indexOf(row.dataset.orderTab) + (((ev.clientX - rect.left) > rect.width / 2) !== (document.dir === 'rtl') ? 1 : 0);
-        const [moved] = order.splice(from, 1); if (from < to) to--;
-        order.splice(Math.max(0, Math.min(to, order.length)), 0, moved);
-        saveTabOrder(order); clearTabDrag();
-      });
-      // Stage-2 step 5: home-relay management. Adding a relay is the
-      // step-4 pin ceremony pointed at a second relay (attest, show
-      // the fingerprint, confirm, then pin); removal is local
-      // bookkeeping — the relay keeps whatever it already holds, it
-      // simply stops being called home.
-      d.addEventListener('click', async (ev) => {
-        const addBtn = ev.target.closest('[data-action="add-relay"]');
-        if (addBtn) { haptic.tap(); await _addRelayFlow(); return; }
-        const rmBtn = ev.target.closest('[data-action="remove-relay"]');
-        if (!rmBtn) return;
-        haptic.tap();
-        const url = rmBtn.dataset.url;
-        if (!await showConfirm(t('relayRemoveConfirm', url), { danger: true, okText: t('relayRemoveBtn') })) return;
-        await removeHomeRelay(url);
-        showToast(t('relayRemoved', url), 'success');
-      });
-      // v3.6: Event delegation for settings toggles (no inline onchange)
-      d.addEventListener('change', (ev) => {
-        const cb = ev.target;
-        const s = cb.dataset.setting;
-        if (!s) return;
-        haptic.tap();
-        // One sensible default each — a menu of durations was a requirement nobody asked for.
-        // `/focus N` still exists for anyone who wants an exact number of minutes.
-        if (s === 'auto-backup') { _settings.autoBackup = cb.checked; saveSettings(); return; }
-        if (s === 'show-peer-name') { _settings.showPeerName = cb.checked; saveSettings(); renderContacts(); if (activeContact) _setConvName(activeContact); return; } if (s === 'call-history-log') { _settings.callHistoryLog = cb.checked; saveSettings(); return; }
-        if (s.startsWith('tab-vis-')) { const k = s.slice(8); _settings[{ calls: 'tabCalls', contacts: 'tabContacts', self: 'tabSelf', settings: 'tabSettings' }[k]] = cb.checked; saveSettings(); _applyTabVisibility(); if (!cb.checked && k === 'contacts' && _listTab === 'contacts') _showChatsTab(); if (!cb.checked && k === 'calls' && _listTab === 'calls') _showChatsTab(); if (!cb.checked && k === 'settings') closeSettingsView(); return; }
-        if (s === 'rr-delay') { _settings.readReceiptDelay = cb.checked ? 120 : 0; saveSettings(); return; }
-        if (s === 'fanout') { const n = parseInt(cb.value, 10); _settings.fanout = [1, 2, 3].includes(n) ? n : 2; saveSettings(); return; }
-        if (s === 'power-mode') { _settings.powerMode = ['auto', 'normal', 'saver', 'emergency'].includes(cb.value) ? cb.value : 'auto'; saveSettings(); return; }
-        if (s === 'focus') {
-          _settings.focusUntil = cb.checked ? Date.now() + 60 * MS.MIN : 0;
-          if (!cb.checked) _settings.focusStrict = false;
-          saveSettings(); _updateFocusBanner();
-          return;
-        }
-        if (s === 'focus-strict') { _settings.focusStrict = cb.checked; saveSettings(); _updateFocusBanner(); return; }
-        if (s === 'hide-rr') { localStorage.setItem('brz-hide-rr', cb.checked ? '1' : '0'); _privacyHideReadReceipts = cb.checked; window._privacyHideReadReceipts = cb.checked; }
-        else if (s === 'hide-typing') { localStorage.setItem('brz-hide-typing', cb.checked ? '1' : '0'); _privacyHideTyping = cb.checked; window._privacyHideTyping = cb.checked; }
-        else if (s === 'relay-only') { localStorage.setItem('brz-relay-only', cb.checked ? '1' : '0'); _settings.relayOnly = cb.checked; } else if (s === 'kt-block') { _settings.ktBlockOnTamper = cb.checked; saveSettings(); }
-        else if (s === 'notif-sound') { localStorage.setItem('brz-notif-sound', cb.checked ? '1' : '0'); }
-        else if (s === 'send-sound') { localStorage.setItem('brz-send-sound', cb.checked ? '1' : '0'); }
-        else if (s === 'notif-perm') { if (cb.checked) { if (typeof Notification === 'undefined') { cb.checked = false; } else Notification.requestPermission().then(p => { if (p !== 'granted') cb.checked = false; }).catch(() => { cb.checked = false; }); } }
-        else if (s === 'auto-lock') { localStorage.setItem('brz-autolock', cb.checked ? '1' : '0'); }
-      });
-      // Relay fingerprints fill in async (a pin is a public key; the
-      // fingerprint is derived from it). A keyless entry — a legacy
-      // origin with no relay identity key — keeps the placeholder.
-      for (const r of homeRelays()) {
-        if (!r.pin) continue;
-        relayFingerprint(r.pin).then(fp => {
-          const el = d.querySelector(`[data-relay-fp="${r.url}"]`);
-          if (el) el.textContent = fp;
-        }).catch(e => _dbg(e, 'relay-fp'));
-      }
-      // Automatic-backup status fills in async (the state record lives
-      // in the settings store). The arm button appears only in the two
-      // states a passphrase entry can fix.
-      const fillAutoBackupStatus = () => {
-        getAutoBackupStatus().then(st => {
-          const el = d.querySelector('[data-autobackup-status]');
-          if (el) el.textContent = _autoBackupStatusText(st);
-          const arm = d.querySelector('[data-action="autobackup-arm"]');
-          if (arm) arm.closest('.settings-action-row')?.classList.toggle('hidden', !(st && (st.state === 'needpass' || st.state === 'error')));
-        }).catch(e => _dbg(e, 'autobackup-status'));
-      };
-      fillAutoBackupStatus();
-      d.addEventListener('click', async (ev) => {
-        if (ev.target.closest('[data-action="migrate-device"]')) { haptic.tap(); showMigrationGuide(); return; }
-        if (ev.target.closest('[data-action="autobackup-arm"]')) { haptic.tap(); if (await armAutoBackup()) fillAutoBackupStatus(); }
-      });
-      }
-  function openSettingsView() {
-    const view = _DOM.get('settings-view');
-    const body = _DOM.get('settings-body');
-    if (!view || !body) return;
-    body.replaceChildren();
-    const d = document.createElement('div');
-    d.className = 'settings-panel';
-    body.appendChild(d);
-    _renderSettingsPanel(d); _setActiveTab('settings');
-    if (!_settingsViewOpen) {
-      _settingsViewOpen = true;
-      view.classList.remove('hidden');
-      history.pushState({ breezeSettings: true }, '');
-    }
-  }
-  function closeSettingsView() {
-    if (!_settingsViewOpen) return;
-    _settingsViewOpen = false;
-    _DOM.get('settings-view')?.classList.add('hidden');
-    _setActiveTab(_listTab);
-  }
+  // The controller lives in src/app/settings-view.js (modularization);
+  // instantiated here where every closure binding it used inline is in
+  // scope. Reassigned values pass as getters; index.html keeps the three
+  // historical wrapper names so every other call site stays unchanged.
+  const _settingsView = globalThis.__breezeSettingsView?.createSettingsView({
+    _DOM, t, esc, safeSetHTML, haptic, MS,
+    settings: () => _settings, myName: () => myName, activeContact: () => activeContact, listTab: () => _listTab,
+    privacyHideReadReceipts: () => _privacyHideReadReceipts, privacyHideTyping: () => _privacyHideTyping,
+    setPrivacyHideReadReceipts: v => { _privacyHideReadReceipts = v; }, setPrivacyHideTyping: v => { _privacyHideTyping = v; },
+    _focusActive, _fanoutCount, homeRelays, isOriginRelay, _relayBlockedUrls,
+    _validTabOrder, saveSettings, _applyTabOrder, _applyTabVisibility, _showChatsTab, _setActiveTab,
+    renderContacts, _setConvName, _updateFocusBanner, _addRelayFlow, removeHomeRelay, relayFingerprint,
+    showConfirm, showToast, shareInvite, showMigratePanel, showMigrationGuide, _profileUI,
+    getAutoBackupStatus, armAutoBackup, closeSettingsView, _renderSettingsPanel, _dbg,
+  }) || null;
+  function _renderSettingsPanel(d) { _settingsView?.renderPanel(d); }
+  function openSettingsView() { _settingsView?.open(); }
+  function closeSettingsView() { _settingsView?.close(); }
   _DOM.get('b-msg-settings')?.addEventListener('click', () => openSettingsView());
   _DOM.get('b-settings-back')?.addEventListener('click', () => {
     if (history.state?.breezeSettings) history.back();
     else closeSettingsView();
   });
-  window.addEventListener('popstate', () => { if (_settingsViewOpen) closeSettingsView(); }, { signal: _ac.signal });
+  window.addEventListener('popstate', () => { if (_settingsView?.isOpen()) closeSettingsView(); }, { signal: _ac.signal });
 
   _DOM.get('msg-input')?.addEventListener('keydown', async (e) => {
     if (e.key !== 'Enter') return;
