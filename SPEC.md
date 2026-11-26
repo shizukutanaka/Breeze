@@ -27,7 +27,7 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 | server/* | — | Node self-host relay (same handler, SQLite state) |
 | sw.js | 11 KB | Service Worker: offline cache + push |
 | manifest.json | 2 KB | PWA manifest |
-| locales/* | — | 50 UI locale files (see §11) |
+| locales/* | — | 61 UI locale files (see §11) |
 | icon-192.png / icon-512.png | — | PWA icons |
 | 404.html | — | Custom 404 page |
 | _headers | — | Cloudflare Pages HTTP headers |
@@ -768,7 +768,7 @@ hooks are used for the following adaptations:
 ## 11. i18n
 
 - **Built-in**: English only — the inline reference table (921 keys, pure data) and runtime fallback
-- **Locale files**: 50 files, `locales/<lang>.json` for am, ar, az, bn, cs, da, de, el, es, fa, fi, fr, ha, he, hi, hr, hu, id, ig, it, ja, ka, kk, km, ko, ml, ms, my, nb, nl, pa, pl, pt-BR, ro, ru, sr, sv, sw, ta, te, th, tl, tr, uk, ur, uz, vi, yo, zh-CN, zh-TW, fetched at boot and merged over English — 51 UI languages in total including English. `node tools/i18n-check.mjs` prints the live key count and per-locale coverage; at 2026-11-25 it reports all 50 locales at 100% (core and total). The active locale is auto-detected from `navigator.language` against `FULL_LOCALES`
+- **Locale files**: 61 files, `locales/<lang>.json` for am, ar, az, bg, bn, ca, cs, da, de, el, es, et, eu, fa, fi, fr, ga, gl, ha, he, hi, hr, hu, id, ig, is, it, ja, ka, kk, km, ko, lt, lv, mk, ml, ms, my, nb, nl, pa, pl, pt-BR, ro, ru, sk, sr, sv, sw, ta, te, th, tl, tr, uk, ur, uz, vi, yo, zh-CN, zh-TW, fetched at boot and merged over English — 62 UI languages in total including English. `node tools/i18n-check.mjs` prints the live key count and per-locale coverage; at 2026-11-26 it reports all 61 locales at 100% (core and total). The active locale is auto-detected from `navigator.language` against `FULL_LOCALES`
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
 - **Toast i18n**: 100%
