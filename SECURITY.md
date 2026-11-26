@@ -42,6 +42,39 @@ cross-device trust/override sync and OS push-name handling are deferred.
 
 ## Account activity and new-device alerts
 
+### Authenticated device-key linking (first slice)
+
+For an authenticated root signing pin, keep both devices under your control:
+run `/link keys` on the secondary, transfer its entire offer directly to the
+primary using `/link <offer>`, then transfer the primary's entire certificate back
+to the same secondary using `/linkto <certificate>`. Do not accept either token
+from an untrusted relay or another person. The physical transfer of the certificate
+authenticates the root signing key; its self-signature alone does not establish trust.
+The certificate binds the root encryption/signing keys, secondary encryption/signing
+keys, outstanding random challenge and issuance time. Malformed/forged certificates,
+wrong device keys, consumed challenges, changed authenticated root pins and signed
+registries predating issuance or omitting either device are rejected.
+
+Protected records use `identity:verify:device-link` and
+`identity:verify:device-binding:<full-device-key>`, covered by the existing key vault's
+`verify:` policy without depending on the full-history vault. The public legacy
+`identity:account` record remains a role cache; it is not the authenticated binding.
+Without the vault, local storage tampering remains outside this protection.
+Boot/reload checks independently verify public binding metadata with the local root
+pin and show persistent binding/removal alerts in the existing review and `/security`
+surfaces. Relay stripping cannot erase an already observed binding. Relays can still
+withhold updates, replay an old view to an observer without a newer checkpoint, or
+suppress all independent paths. A certificate is proof of issuance, not freshness.
+
+**This is not effective peer revocation yet.** There are no revocation epochs or
+new group capabilities in this slice. Linked devices still cannot send into strict
+signed-author groups; unlink still revokes fan-out only and does not rotate group
+Sender Keys. These require the next protocol slice. Legacy raw `/link`/`/linkto`
+remains unchanged, including relay-assisted first-link signing-key TOFU; physically
+carrying only the root encryption key does not authenticate its signing key.
+An authenticated certificate link cannot be downgraded through the raw-key path.
+See [the transcript specification](docs/CRYPTO-SPEC.md#opt-in-device-key-linking-v1-first-slice).
+
 The deployed `src/app/device-alerts.js` verifies the existing root-signed device registry,
 persists its own-account high-water revision and device list, and records previously unseen
 linked keys and alerts in one local IndexedDB transaction. Stale own-account registries cannot
@@ -519,9 +552,9 @@ separate, explicitly-scoped future work if it's wanted.
     fetched the registry recently may fan out to the removed device for up to 5 more minutes.
   - **No history sync** (like Signal): a newly linked device starts empty; `/backup`+restore is
     the migration path. Self-sync copies only messages sent *after* linking.
-  - **Secondary-device trust is anchored at link time**: `/linkto` pins the root's signing key
-    obtained while physically holding both devices (same TOFU gesture as adding a contact by
-    raw key), and the registry must already list the new device before it binds.
+  - **Secondary-device trust:** authenticated certificate linking transfers both root keys
+    directly between devices. Legacy raw-key `/linkto` still uses relay-assisted signing-key
+    TOFU, not an authenticated root signing pin. Both paths require registry membership.
   - **Cloud backups are opt-in, and expire.** A relay stores backups only when its operator
     enables backup storage (`BACKUP_STORAGE_ENABLED=true` — a relay run for the operator's
     own accounts); the shared default relay stores none at all, and clients are told so
@@ -640,8 +673,9 @@ stay legacy-only. Message-at-rest sealing and backup-dirty notifications are pre
 
 **Deferred rollout work:** explicit downgrade/legacy-admission confirmation UI, membership
 consensus, per-message forward-secure signing keys, selective relay ACK redesign, and
-root-signed **device signing-key** bindings. The existing device registry binds device
-encryption keys only. Secondary senders therefore remain unsigned in legacy groups and
+group consumption of root-signed **device signing-key** bindings. Opt-in linking now
+issues both-key certificates, but the group protocol does not consume them yet.
+Secondary senders therefore remain unsigned in legacy groups and
 cannot send into a strict group until they have an authenticated local signing-key pin;
 no message-supplied device key is trusted to work around this. Signed root messages still
 reach linked-device mailboxes. A missing author module fails group sends/receives closed.

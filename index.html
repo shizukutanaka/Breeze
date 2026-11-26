@@ -2043,8 +2043,9 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     unarchived: 'Unarchived',
     select: 'Select',
     report: 'Report',
+    dkOffer: "On this secondary: copy this entire offer directly to your primary and run /link <offer> there. Keep both devices in your control.",     dkReturn: "On the same secondary, run /linkto <certificate> with this entire certificate transferred directly from this primary. Peer revocation and linked-device signed-group sending are not enabled yet.",     dkTrust: "Trust the root signing key transferred directly from primary {0}…? Never use a certificate supplied by a relay or stranger.",     dkLinked: "Device encryption and signing keys bound; root signing pin authenticated",     dkInvalid: "Device-key proof is invalid, mismatched, stale or could not be saved",     dkBound: "Device encryption/signing binding verified (root signature)",     dkRemoved: "Device removed from signed registry — old keys are not yet peer-revoked",
     devLinkTitle: "Link this device",
-    devLinkHint: "Show this code to your PRIMARY device: there, run /link and scan it (or paste this key via /link <key>). Then back here, run /linkto and scan the primary's code (or paste its key).",
+    devLinkHint: "Show this code to your PRIMARY device: there, run /link and scan it (or paste this key via /link <key>). Then back here, run /linkto and scan the primary's code (or paste its key). For authenticated key binding, run /link keys on the secondary first.",
     devScanAdd: "Scan a device code",
     devScanRoot: "Scan the primary's code",
     devLinkToTitle: "Link to your primary device",
@@ -6542,10 +6543,9 @@ async function initMessenger(dbName) {
   const _sendHistoryTo = (devPub) => globalThis.__breezeHistory?.createHistorySender
     ? globalThis.__breezeHistory.createHistorySender({ collect: _collectHistory, dbGetAll, encryptFor, relaySend, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName }).sendHistoryTo(devPub)
     : Promise.resolve({ sent: 0, skipped: 0 });
-  // Device linking lives in src/app/device-link.js (stage 5 step 5
-  // line-budget move); the dispatcher delegates the four commands to it.
+  // Device linking lives in src/app/device-link.js.
   const _deviceLink = globalThis.__breezeDeviceLink?.createDeviceLink({
-    dbGet, dbPut, postAPIRaw, signMessage, showToast, showConfirm, t, esc, safeSetHTML,
+    dbGet, dbPut, postAPIRaw, signMessage, sigPub: () => _signingPubB64, showToast, showConfirm, t, esc, safeSetHTML,
     cmdPanel: (id) => _cmdPanelEl(id), deviceScanButton: _deviceScanButton,
     fetchDeviceList: async (a, r) => (await _fetchDeviceRegistry(a, r))?.list || null, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
     bustDevCache: () => { _myDevCache = null; },
