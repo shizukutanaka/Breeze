@@ -5303,6 +5303,7 @@ async function initMessenger(dbName) {
   // it will read silence as "nobody messaged me". Clicking it ends focus immediately.
   let _focusTimer = null;
   let _readTimer = null; // pending delayed read receipt (see openConversation)
+  let _disappearCleanupTimer = null; // pending disappearing-message cleanup chain tick
   let _noReplyNeeded = false; // one-shot: marks the NEXT message as needing no reply
   // True when this install is a LINKED secondary (see /linkto); resolved at boot and
   // refreshed by /link, /linkto and /unlink. _myAcctRoot is the account root pub this
@@ -7634,6 +7635,8 @@ async function initMessenger(dbName) {
         clearTimeout(_readTimer);
         _readTimer = null;
       }
+      // The expiry sweep is a timeout chain too; it must not survive account switch.
+      if (_disappearCleanupTimer) { clearTimeout(_disappearCleanupTimer); _disappearCleanupTimer = null; }
       // Discard this account's in-memory outbox. The Map is module-level and persists
       // across initMessenger calls; without clearing it here, pending P2P messages from
       // the old account would be sent under the new account's identity if both accounts
@@ -10814,27 +10817,32 @@ async function initMessenger(dbName) {
   });
 
   // Disappearing message cleanup: run every 10s
-  _intervals.push(setInterval(async () => {
-    if (_powerPresenceOff()) return;
-    if (!db || _vault.isBlocked()) return;
-    const now = Date.now();
+  const _disappearTick = async () => {
     try {
-      const tx = db.transaction('messages', 'readwrite');
-      const store = tx.objectStore('messages');
-      const all = await new Promise(r => { const req = store.getAll(); req.onsuccess = () => r(req.result); req.onerror = () => r([]); });
-      for (const m of all) {
-        if (m.disappearAt && m.disappearAt < now) store.delete(m.msgId);
+      if (_powerPresenceOff()) return;
+      if (!db || _vault.isBlocked()) return;
+      const now = Date.now();
+      try {
+        const tx = db.transaction('messages', 'readwrite');
+        const store = tx.objectStore('messages');
+        const all = await new Promise(r => { const req = store.getAll(); req.onsuccess = () => r(req.result); req.onerror = () => r([]); });
+        for (const m of all) {
+          if (m.disappearAt && m.disappearAt < now) store.delete(m.msgId);
+        }
+      } catch(e) { _dbg(e); }
+      // Refresh UI if viewing active conversation
+      if (activeContact) {
+        const el = _DOM.get('msg-messages');
+        el?.querySelectorAll('.msg').forEach(msg => {
+          const dts = parseInt(msg.dataset.disappear || '0');
+          if (dts && dts < now) { msg.classList.add('i-op0'); setTimeout(() => msg.remove(), CONFIG.FADE_OUT_MS); }
+        });
       }
-    } catch(e) { _dbg(e); }
-    // Refresh UI if viewing active conversation
-    if (activeContact) {
-      const el = _DOM.get('msg-messages');
-      el?.querySelectorAll('.msg').forEach(msg => {
-        const dts = parseInt(msg.dataset.disappear || '0');
-        if (dts && dts < now) { msg.classList.add('i-op0'); setTimeout(() => msg.remove(), CONFIG.FADE_OUT_MS); }
-      });
+    } finally {
+      _disappearCleanupTimer = setTimeout(_disappearTick, Math.max(CONFIG.DISAPPEAR_CHECK_MS, (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0)));
     }
-  }, CONFIG.DISAPPEAR_CHECK_MS));
+  };
+  _disappearCleanupTimer = setTimeout(_disappearTick, Math.max(CONFIG.DISAPPEAR_CHECK_MS, (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0)));
 
   // GROUP CHAT
   // Group: stored in IDB 'contacts' with isGroup:true, members:[{id, pubB64, name}]
