@@ -24,8 +24,6 @@ Daga [shafin saukewa](https://github.com/shizukutanaka/Breeze/releases/latest), 
 
 Kowane fayil yana da lambar tabbatarwa (SHA256SUMS.txt). Idan ka damu, za ka iya duba cewa lambar fayilin da ka sauke ta dace.
 
-> **Game da shafin samfur**: An samar da samfur don duba yadda yake aiki (https://breeze-469.pages.dev/). Abin da ke can manhaja ɗaya ce, amma samfur na iya canzawa ko tsayawa ba tare da sanarwa ba. Don amfani na gaske, don Allah ka yi amfani da wanda ka sa a sabarka. Wanda ka sa a sabarka ba zai shafi ko samfur ya tsaya ba.
-
 ### Saita na farko
 
 1. Buɗe manhajar.
@@ -233,7 +231,6 @@ Idan gazawa ta faru a tsakiyar sabuntawa (kamar lambar tabbatarwa ba ta dace ba)
 | Lambar tabbatar da kira ba ta dace ba | Katse kiran, ka sake kira. Kada ka ci gaba alhali ba ta dace ba. |
 | Ka manta kalmar sirri | Ba za a iya dawo da shi ba. Ƙirƙiri sabon asali, ka sake gaya wa ɗayan. |
 | Ka rasa na'urarka | Idan akwai ajiyar tanadi, za ka iya dawo da shi a sabuwar na'ura. Idan babu, zai zama sabon asali. |
-| Shafin samfur ba ya buɗewa | Samfur na iya tsayawa ba tare da sanarwa ba. Don Allah ka yi amfani da wanda ka sa a sabarka. |
 
 Rahoton matsala, don Allah zuwa [shafin Issue](https://github.com/shizukutanaka/Breeze/issues).
 

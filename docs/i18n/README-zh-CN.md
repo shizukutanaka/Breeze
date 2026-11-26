@@ -18,7 +18,6 @@ Breeze 没有"运营公司的服务器"。**使用时，你要自己准备放置
 
 - 标准安装使用 Cloudflare，因此**需要一个 Cloudflare 账号**。步骤在[安装指南](SELF_HOSTING-zh-CN.md)里（其他语言版本可从指南开头选择）。
 - 应用（Windows / Mac / Linux / Android / iPhone）从[下载页面](https://github.com/shizukutanaka/Breeze/releases/latest)获取，连接到自己的服务器使用。
-- **关于示例安装（诚实的说明）**: 放了一个用于确认动作的示例（https://breeze-469.pages.dev/）。放的是同一套软件，但实际使用请在自己的服务器上。示例可能会在没有预告的情况下变更或停止。放在自己服务器上的不受示例停止的影响。
 
 详细的使用方法在[说明书](MANUAL-zh-CN.md)里（其他语言版本可从说明书开头选择）。
 

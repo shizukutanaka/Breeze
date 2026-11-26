@@ -4,6 +4,14 @@
 
 ### Security
 
+- **Negotiated safety-number v2.** Supporting contacts compare the single-sourced, identifier-bound 5200-round SHA-512 reference's 60 digits; mixed or unknown capabilities retain the 96-bit legacy number. Versioned verification QRs include the separate both-key comparison; display upgrades preserve verification. The v1 in-person QR/transcript bootstrap remains compatible, with contact verification available afterwards. Includes EN/JA/fallback text, ESM/SW/CSP deployment and negotiation/persistence/browser tests.
+
+- **Certified device revocation and group authors.** Root-signed monotonic checkpoints,
+  consent-backed device ownership, bounded E2EE checkpoint/head gossip and persistent
+  stale-view alerts. Capable contacts reject revoked device sessions and group authors;
+  unlink rotates Sender Keys and excludes revoked mailboxes. Certified secondaries can
+  sign strict group messages. Legacy/no-Web-Locks boundaries, EN/JA/fallback strings,
+  SW/CSP and adversarial/application coverage included; see SECURITY.md for suppression limits.
 - **Vault-backed full history and browser metadata.** Enable/disable, key-only upgrades and ciphertext backups now cover all account stores (messages/files, contacts, settings, audit/calls and the legacy body key), opaque primary/index fields, drafts and sensitive local/session storage. An authenticated durable journal spans per-account atomic commits and idempotent browser-storage commits without a schema-version bump. Locked pages clear decrypted caches, hide history/search and defer expiry cleanup; enabled exports remain ciphertext-only. Includes real-app enable/disable crash recovery, raw-origin no-plaintext scans and a 10k-message timing regression. Theme, language and consent remain public; see SECURITY for async browser-write durability, rollback and browser/OS limits.
 
 - **Authenticated device-key linking, first slice.** Opt-in `/link keys` offers and root-signed both-key certificates transfer the root signing pin directly between devices; outstanding challenges, protected persistence, no raw-key downgrade and independently verified registry metadata. Persistent binding/removal alerts reuse device review and `/security`. Legacy raw-key linking remains unchanged. Peer revocation epochs, linked-device strict signed-group sends and unlink-triggered Sender Key rotation are explicitly not enabled yet. EN/JA, English fallback locales, SW/CSP and adversarial/app tests included.

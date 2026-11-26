@@ -24,8 +24,6 @@ Mula sa [pahina ng download](https://github.com/shizukutanaka/Breeze/releases/la
 
 Bawat file ay may kasamang mga numerong pangtapat (SHA256SUMS.txt). Kung nag-aalala ka, maaari mong tiyakin kung tumutugma ang mga numero ng na-download mong file.
 
-> **Tungkol sa sample na pahina**: May sample para makita kung paano ito gumagana (https://breeze-469.pages.dev/). Ang nakalagay doon ay parehong software, ngunit ang sample ay maaaring magbago o huminto nang walang abiso. Para sa tunay na paggamit, mangyaring gamitin ang inilagay mo sa sarili mong server. Ang inilagay mo sa sarili mong server ay hindi maaapektuhan kahit huminto ang sample.
-
 ### Unang pag-set up
 
 1. Buksan ang app.
@@ -233,7 +231,6 @@ Kung mabigo sa gitna ng pag-update (hindi tumugma ang pagtapat ng file, atbp.), 
 | Hindi tumutugma ang code ng kumpirmasyon ng tawag | Ibaba ang tawag at tumawag ulit. Huwag magpatuloy habang hindi ito tumutugma. |
 | Nakalimutan ang passphrase | Hindi na maibabalik. Gumawa ng bagong pagkakakilanlan at sabihan ulit ang kausap. |
 | Nawala ang device | Kung may backup ka, maaari kang magbawi sa bagong device. Kung wala, magiging bagong pagkakakilanlan ka. |
-| Hindi bumubukas ang sample na pahina | Maaaring huminto ang sample nang walang abiso. Mangyaring gamitin ang inilagay mo sa sarili mong server. |
 
 Ang mga ulat ng depekto ay mangyaring ipadala sa [pahina ng Issue](https://github.com/shizukutanaka/Breeze/issues).
 

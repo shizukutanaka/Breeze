@@ -432,7 +432,9 @@ describe('migration guide', () => {
 
 describe('wiring (index.html / locales)', () => {
   it('dbPut notifies the hook, and the hook is registered at backup wiring time', () => {
-    expect(html.split('_notifyBackupDirty(store)').length - 1).toBeGreaterThanOrEqual(2);
+    expect(html.split('_notifyBackupDirty(store, key)').length - 1).toBeGreaterThanOrEqual(2);
+    expect(html).toContain('_groupPolicyNotify?.(store, key)');
+    expect(html).toContain('_groupAuthor?.inputsChanged(store, key)');
     expect(html).toContain('_autoBackupNotify = () => _backupTools.notifyBackupDataChanged()');
     expect(html).toContain("window.addEventListener('online', () => flushAutoBackup()");
   });

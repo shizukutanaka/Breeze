@@ -42,11 +42,70 @@ relay-assisted bootstrap; they do NOT establish an authenticated both-key bindin
 Old clients ignore certificate metadata and retain their existing wire behavior.
 No group transcript or deployed crypto mirror is changed.
 
-**Not yet implemented:** revocation epochs, contact/group enforcement of revoked
-device keys, linked-device strict author-signature sending, unlink-triggered Sender
-Key rotation, and cross-device certificate/checkpoint gossip. V1 certificates must
-not be consumed as group-author authority. `/unlink` still revokes fan-out only;
-signed-list removal alerts do not mean past device keys are cryptographically revoked.
+### Device authority and revocation v1
+
+`src/app/device-revocation.js` adds `device-revocation-v1` to prekeys only when
+Web Locks are available. Legacy recipients retain the original plaintext and group
+formats. A linking offer optionally carries `authority:1`; the returned certificate
+then includes the initial signed checkpoint. Old certificates remain readable.
+
+The root signs UTF-8 `BreezeDeviceCheckpoint/v1:` + JSON
+`[root,rootEd,epoch,ts,devices.map(d=>[d.pub,d.binding||null]),revoked]`.
+Epochs and timestamps are positive safe integers; active encryption keys (1–10,
+including the root) and cumulative tombstones (0–256) are disjoint and unique.
+Every included binding is independently verified against the locally authenticated
+root pin. Re-adding a tombstoned key requires a new identity/key, never a rollback.
+The root separately signs `BreezeDeviceCheckpointHead/v1:` + JSON
+`[root,rootEd,epoch,ts,hash]`, where hash is base64 SHA-256 of the checkpoint
+transcript. Same-epoch differing hashes, older checkpoints, and removed tombstones
+are rejected. A newer head without its checkpoint persists an alert and pauses
+linked-device traffic until the matching checkpoint arrives. Root traffic remains
+available for recovery. Root-pin changes invalidate cached device authority.
+
+The secondary proves signing-key consent with `deviceSig` over UTF-8
+`BreezeDeviceConsent/v1:` + JSON `[root,rootEd,pub,ed,nonce,issuedAt,sig]`.
+Only consent received inside a ratchet-authenticated message from that encryption
+key, or locally completed linking, establishes the global device→root association.
+Forwarded certificates/consents authorize a device within the claimed root's group
+role, but cannot let a malicious root revoke an unrelated standalone contact.
+Direct roster identities are verified against their own signing pins, not another
+root's certificate. A signing offer alone does not prove encryption-key possession.
+
+Capable peers exchange `{breezeDeviceAuthority:1,body,checkpoints,heads,consents}`
+inside the existing ratchet ciphertext, unwrapped before application processing or
+franking. Active consents accompany checkpoints. Gossip includes own authority and
+rotating shared-group roots, with a 32 KiB metadata budget and 65,535-byte complete
+UTF-8 frame limit; oversized own checkpoints fail closed. Input array limits are
+64 checkpoints/heads and 640 consents, also bounded by the frame limit. Explicit
+checkpoint broadcasts use the existing encrypted profile-control carrier; the
+non-profile control body is ignored after authority processing, not displayed.
+Only the root may bootstrap automatic checkpoint delivery to its own devices.
+Other automatic targets require a session with authenticated inbound traffic;
+otherwise metadata waits for the next normal E2EE exchange. This avoids competing
+first-message ratchets during linking. Shared-group gossip to an own device uses
+the root's checkpoint membership even before that device has sent consent back;
+this routing lookup does not establish ownership for incoming authorization.
+
+Strict group authors retain `group-author-sig-v1` transcripts. A secondary signs
+as its own encryption identity with its certified signing key; recipients resolve
+`acctRoot` to a roster root and verify current membership, the root certificate and
+device consent before accepting the author signature. Secondary strict sends require
+checkpoints for the other roster roots (proof of upgraded participation). Legacy
+uncertified secondary sends remain unsigned in non-strict groups.
+
+On the first authority envelope from a known contact, the receiver establishes a
+missing sender signing pin through the existing verified-prekey path before
+processing checkpoints, heads or consent. Envelope keys never establish pins.
+Successful contact, signing/account, verification and group-proof writes trigger
+coalesced, serialized strict-policy re-evaluation; inputs arriving during a scan
+trigger another pass. Activation does not depend on later traffic or policy reads.
+
+Unlink first persists a newer checkpoint, rotates each existing local group Sender
+Key (new random 32-byte secret, incremented epoch, counter zero), distributes it only
+to active mailboxes, and broadcasts authority through existing E2EE channels before
+updating the relay registry. Peers rotate their own group Sender Keys when learning
+a revocation. Epoch markers make rotation resumable/idempotent on the next send.
+No new Worker endpoint or primitive/inline crypto mirror is introduced.
 
 ## Deployed key/session vault (application storage, no wire change)
 
@@ -436,35 +495,39 @@ symmetric-only (content verified, sender unattributed).
 
 ## 6b. Safety number — out-of-band MITM verification (key fingerprint)
 
-Two users compare a 60-digit number over an independent channel (voice, in
-person, QR). Matching numbers prove neither party's identity key was swapped by
-a malicious relay — the only protocol-level defense against an active MITM that
-substitutes pre-key bundles (X3DH alone cannot prevent it without a trust root).
+The deployed contact-verification display uses `src/app/safety-number.js`, importing
+`src/crypto/fingerprint.js` directly as ESM (no inline copy). Both parties must advertise
+`safety-number-v2` in their prekey capabilities. Opening comparison refreshes the peer
+capability hint; missing/failed capability lookup selects legacy. V2 is display-only:
+the existing `BreezeContactVerification` both-key binding and separate domain-separated
+both-key comparison remain unchanged. Existing verified contacts stay verified.
 
-Algorithm (`src/crypto/fingerprint.js`, faithful to Signal's
-NumericFingerprintGenerator):
-- Per party: `H₀ = SHA-512(version ‖ identityKey ‖ stableId)`, then
-  `Hₙ = SHA-512(Hₙ₋₁ ‖ identityKey)` for **5200 iterations**; the first 30 bytes
-  → six 5-digit chunks (`byteArray5 % 100000`) = 30 digits per party.
-- The two per-party fingerprints are concatenated in **sorted** order, so both
-  participants compute the identical 60-digit string regardless of who is local.
-- The iterated hash makes grinding a colliding substitute key ~5200× more
-  expensive per candidate; 60 shown digits ≈ 112 bits vs the legacy single-hash
-  `safetyNumber()` in index.html (one SHA-256 over 12 bytes, ~40 bits shown).
+The reference's default format version is 0 (distinct from the UI's “v2” generation).
+Per party, `H₀ = uint16be(0) ‖ encryptionPublicKeyBytes ‖ UTF8(stableId)` is an
+**unhashed** seed. Repeat `H = SHA-512(H ‖ encryptionPublicKeyBytes)` exactly 5200 times.
+The stable identifier is the first 12 characters of that party's canonical base64
+encryption public key, matching its existing Breeze contact ID. The first 30 hash bytes
+yield six 5-digit chunks (each five-byte integer modulo 100000). Sort and concatenate
+the two parties' 30-digit strings into twelve groups. The legacy display remains six
+groups from the first 12 bytes of SHA-256 over sorted base64 encryption keys: **96 bits**,
+not 40 bits. V2 is an enhancement, not remediation of a feasible legacy collision attack.
 
-Impl: `src/crypto/fingerprint.js` (`createFingerprint` → `safetyNumber` /
-`fingerprintFor` / `scannable` / `verifyScannable`). The scannable path is the
-stronger verification: `scannable()` encodes `version(1) ‖ myFp(30) ‖ peerFp(30)`
-as base64 (a QR payload, mirroring Signal's CombinedFingerprints) and
-`verifyScannable()` cross-matches a peer's scanned code (scanned.local == my
-remote ∧ scanned.remote == my local) in constant time — comparing the full
-30-byte fingerprints rather than the 40-bit-per-chunk display truncation, so it
-is immune to the digit-skipping errors of manual comparison. Tests:
-`tests/fingerprint.test.js` (17 — format, symmetry, determinism, MITM-substitution
-visibility, stableId binding, iteration binding, bytes≡base64, full 5200-round
-run; scannable: encoding length, cross-party match, MITM reject, malformed/
-version-mismatch reject, stableId binding). **Implemented (module).** Gap: migrate
-index.html `safetyNumber()`/`showSafetyNumber()` onto it (browser-validated pass).
+Comparison QRs use `breeze-verify:` plus compact JSON
+`{v:1|2,number,bothKeys}`, containing the displayed number and the existing symmetric
+both-key comparison. They are bounded to 512 characters and require canonical format,
+known version and both comparisons to match. A version mismatch asks both users to use
+the legacy display; it is not a key-change signal. V2 has an explicit legacy-display
+button to handle stale/asymmetric capability hints without false MITM alarms.
+Display capabilities are not trusted identity proofs; key verification still requires
+an independent channel and the unchanged fresh-key/revision checks on confirmation.
+
+The reference's `scannable/verifyScannable` raw 30-byte fingerprint codec remains
+available but is **not** this application's QR wire format: application QRs also bind
+the separate signing-key comparison. The v1 offline pairing invitation and nonce-bound
+pairing comparison are unchanged for old strict parsers. After bootstrap the pairing
+screen offers negotiated contact verification; without capability information it is legacy.
+Tests cover reference vectors, deployed bridge parity, mixed-version symmetry,
+versioned QR validation and preservation of both-key verification across upgrades.
 
 ## 6c. Call signalling (stage 5)
 

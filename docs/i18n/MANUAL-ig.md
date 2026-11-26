@@ -24,8 +24,6 @@ Site na [ibe nbudata](https://github.com/shizukutanaka/Breeze/releases/latest), 
 
 Faịlụ ọ bụla nwere nọmba nkwado (SHA256SUMS.txt). Ọ bụrụ na ị na-echegbu onwe gị, ị nwere ike ịlele ma nọmba faịlụ ị budatara dabara.
 
-> **Banyere ibe nlele**: E nyela nlele maka ịlele otu ọ si arụ ọrụ (https://breeze-469.pages.dev/). Ihe dị ebe ahụ bụ otu ngwanro ahụ, mana nlele ahụ nwere ike ịgbanwe ma ọ bụ kwụsị na-enweghị ọkwa. Maka ojiji n'ezie, biko jiri nke ị tinyere na sava nke gị. Ihe ị tinyere na sava nke gị agaghị emetụta ọbụna nlele kwụsịrị.
-
 ### Nhazi mbụ
 
 1. Mepee ngwa ahụ.
@@ -233,7 +231,6 @@ Oke ndekọ ndị na-anọ n'akụkụ sava (ha niile na-ehichapụ onwe ha, enw
 | Koodu nkwado oku adabaghị | Kwụsị oku ahụ, ma kpọgharịa. Agagharịla n'ihu mgbe ọ dabaghị. |
 | Ị chefuru okwuntughe | Enweghị ike iweghachi. Mepụta njirimara ọhụrụ, ma gwaghachi onye nke ọzọ. |
 | Ị tufuru ngwaọrụ gị | Ọ bụrụ na nkwado dị, ị nwere ike iweghachi na ngwaọrụ ọhụrụ. Ọ bụrụ na ọ dịghị, ọ ga-abụ njirimara ọhụrụ. |
-| Ibe nlele anaghị emeghe | Nlele ahụ nwere ike ịkwụsị na-enweghị ọkwa. Biko jiri nke ị tinyere na sava nke gị. |
 
 Akụkọ ntụpọ, biko gaa na [ibe Issue](https://github.com/shizukutanaka/Breeze/issues).
 

@@ -5,7 +5,9 @@
 export const CLOUDFLARE_LINK_KEY = 'cloudflareLink';
 
 const CF_API = 'https://api.cloudflare.com/client/v4';
+const CF_TOKEN_URL = 'https://dash.cloudflare.com/profile/api-tokens';
 const SECTION_SEL = '[data-cloudflare-section]';
+const SETUP_ENTRY_SEL = '[data-cloudflare-setup-entry]';
 const KV_TITLE = 'breeze-presence';
 const SCRIPT_NAME = 'breeze';
 const WORKER_SOURCE_PATH = '/server/breeze-worker.js';
@@ -54,14 +56,18 @@ const emptySetup = () => ({ state: 'idle', step: '', reason: '', serverUrl: '' }
 export function createCloudflareLink(D) {
   const { t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet } = D;
   const cfFetch = D.fetch || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
+  const apiBase = typeof D.proxyBase === 'string' && D.proxyBase ? D.proxyBase.replace(/\/+$/, '') : CF_API;
   const wired = new WeakSet();
   let observer = null;
   let view = { kind: 'none', hasToken: false, accounts: [], tokenStatus: '', reason: '', setup: emptySetup(), deployment: null };
 
   function sectionHtml() {
     return `<b class="i-g">${esc(t('settingsCloudflare'))}</b><br><span class="i-t3-10">${esc(t('cfNote'))}</span><br>`
+      + `<span class="i-t3-10">${esc(t('cfGuideText'))} `
+      + `<a href="${CF_TOKEN_URL}" target="_blank" rel="noopener noreferrer">${esc(t('cfCreateTokenLink'))}</a></span><br>`
       + `<label class="i-cur">${esc(t('cfTokenLabel'))} <input type="password" class="cloudflare-token-input" autocomplete="off" placeholder="${esc(t('cfTokenPlaceholder'))}"></label><br>`
-      + `<button type="button" class="btn btn-g btn-sm" data-action="cloudflare-save">${esc(t('cfSave'))}</button> `
+      + `<button type="button" class="btn btn-g btn-sm" data-action="cloudflare-quickstart">${esc(t('cfQuickSetup'))}</button> `
+      + `<button type="button" class="btn btn-o btn-sm" data-action="cloudflare-save">${esc(t('cfSave'))}</button> `
       + `<button type="button" class="btn btn-o btn-sm" data-action="cloudflare-verify">${esc(t('cfVerify'))}</button> `
       + `<button type="button" class="btn btn-o btn-sm" data-action="cloudflare-setup">${esc(t('cfSetup'))}</button> `
       + `<button type="button" class="btn btn-o btn-sm" data-action="cloudflare-disconnect">${esc(t('cfDisconnect'))}</button><br>`
@@ -69,9 +75,18 @@ export function createCloudflareLink(D) {
   }
 
   const body = () => domGet?.('settings-body') || null;
+  const setupRoot = () => domGet?.('msg-setup') || null;
   const sections = () => {
+    const out = [];
     const b = body();
-    return b ? [...b.querySelectorAll(SECTION_SEL)] : [];
+    if (b?.querySelectorAll) out.push(...b.querySelectorAll(SECTION_SEL));
+    const s = setupRoot();
+    if (s?.querySelectorAll) {
+      for (const el of s.querySelectorAll(SECTION_SEL)) {
+        if (!out.includes(el)) out.push(el);
+      }
+    }
+    return out;
   };
 
   function stepLabel(step) {
@@ -109,9 +124,11 @@ export function createCloudflareLink(D) {
     if (setupStatus) safeSetHTML(setupStatus, esc(setupStatusText()));
     const busy = view.kind === 'verifying' || view.setup?.state === 'running';
     const disconnected = !view.hasToken;
+    const quickBtn = section?.querySelector('[data-action="cloudflare-quickstart"]');
     const verifyBtn = section?.querySelector('[data-action="cloudflare-verify"]');
     const setupBtn = section?.querySelector('[data-action="cloudflare-setup"]');
     const disconnectBtn = section?.querySelector('[data-action="cloudflare-disconnect"]');
+    if (quickBtn) quickBtn.disabled = busy;
     if (verifyBtn) verifyBtn.disabled = busy || disconnected;
     if (setupBtn) {
       setupBtn.disabled = busy || disconnected;
@@ -129,20 +146,15 @@ export function createCloudflareLink(D) {
     }
   }
 
-  function scan() {
-    const b = body();
-    if (!b) return;
-    const container = b.querySelector('.cmd-panel-mono') || b;
-    let section = container.querySelector(SECTION_SEL);
-    if (!section && typeof document !== 'undefined') {
-      section = document.createElement('div');
-      section.setAttribute('data-cloudflare-section', '');
-      safeSetHTML(section, sectionHtml());
-      container.appendChild(section);
-    }
+  function wireSection(section) {
     if (!section) return;
     if (!wired.has(section)) {
       wired.add(section);
+      section.querySelector('[data-action="cloudflare-quickstart"]')?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        const input = section.querySelector('.cloudflare-token-input');
+        connectAndSetup(input?.value || '');
+      });
       section.querySelector('[data-action="cloudflare-save"]')?.addEventListener('click', (ev) => {
         ev.preventDefault();
         const input = section.querySelector('.cloudflare-token-input');
@@ -153,6 +165,54 @@ export function createCloudflareLink(D) {
       section.querySelector('[data-action="cloudflare-disconnect"]')?.addEventListener('click', (ev) => { ev.preventDefault(); disconnect(); });
     }
     render(section);
+  }
+
+  function scanSetupPage() {
+    const root = setupRoot();
+    if (!root) return;
+    let entry = root.querySelector?.(SETUP_ENTRY_SEL) || null;
+    if (!entry && typeof document !== 'undefined') {
+      entry = document.createElement('div');
+      entry.setAttribute('data-cloudflare-setup-entry', '');
+      entry.className = 'setup-restore-more';
+      safeSetHTML(entry,
+        `<button type="button" class="btn btn-o setup-restore" data-action="cloudflare-setup-toggle" aria-expanded="false">${esc(t('cfSetupToggle'))}</button>`
+        + `<div data-cloudflare-setup-panel class="cmd-panel-mono hidden"><div data-cloudflare-section>${sectionHtml()}</div></div>`
+      );
+      const footer = root.querySelector?.('.setup-footer') || null;
+      if (footer && root.insertBefore) root.insertBefore(entry, footer);
+      else if (root.appendChild) root.appendChild(entry);
+    }
+    if (!entry) return;
+    if (!wired.has(entry)) {
+      wired.add(entry);
+      const toggle = entry.querySelector?.('[data-action="cloudflare-setup-toggle"]');
+      const panel = entry.querySelector?.('[data-cloudflare-setup-panel]');
+      toggle?.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        if (!panel) return;
+        const hidden = panel.classList.toggle('hidden');
+        toggle.setAttribute?.('aria-expanded', hidden ? 'false' : 'true');
+      });
+    }
+    const section = entry.querySelector?.(SECTION_SEL) || root.querySelector?.(SECTION_SEL) || null;
+    wireSection(section);
+  }
+
+  function scan() {
+    const b = body();
+    if (b) {
+      const container = b.querySelector('.cmd-panel-mono') || b;
+      let section = container.querySelector(SECTION_SEL);
+      if (!section && typeof document !== 'undefined') {
+        section = document.createElement('div');
+        section.setAttribute('data-cloudflare-section', '');
+        safeSetHTML(section, sectionHtml());
+        container.appendChild(section);
+      }
+      wireSection(section);
+    }
+    scanSetupPage();
   }
 
   async function readRecord() {
@@ -192,7 +252,7 @@ export function createCloudflareLink(D) {
     if (opts.body !== undefined) init.body = opts.body;
     let resp;
     try {
-      resp = await cfFetch(CF_API + path, init);
+      resp = await cfFetch(apiBase + path, init);
     } catch {
       return { errorKey: 'cfErrNetwork' };
     }
@@ -203,7 +263,7 @@ export function createCloudflareLink(D) {
       const errorKey = (resp.status === 401 || resp.status === 403) ? 'cfErrInvalidToken' : 'cfErrApi';
       let errorDetail = errorKey === 'cfErrInvalidToken' && !honestStatus ? '' : cloudflareMessage(data, token);
       if (!errorDetail && honestStatus) errorDetail = t('cfErrHttp', resp.status || t('unknown'));
-      return { errorKey, errorDetail };
+      return { errorKey, errorDetail, status: resp.status };
     }
     return { data };
   }
@@ -369,25 +429,68 @@ export function createCloudflareLink(D) {
     return res.errorKey ? { error: reasonFor(res) } : { ok: true };
   }
 
+  function makeSubdomainName() {
+    let hex = '';
+    try {
+      const bytes = new Uint8Array(4);
+      globalThis.crypto.getRandomValues(bytes);
+      hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      hex = Math.floor(Math.random() * 0xffffffff).toString(16).padStart(8, '0');
+    }
+    return `breeze-${hex}`;
+  }
+
+  async function registerSubdomain(base, token) {
+    const candidate = makeSubdomainName();
+    let created;
+    try {
+      created = await cfRequest(`${base}/workers/subdomain`, token, { method: 'PUT', headers: JSON_HEADERS, body: JSON.stringify({ subdomain: candidate }) }, true);
+    } catch {
+      return { error: t('cfErrApi') };
+    }
+    if (created.errorKey) return { error: reasonFor(created) };
+    const name = created.data?.result?.subdomain || candidate;
+    if (typeof name !== 'string' || !/^[a-z0-9-]+$/i.test(name)) return { error: t('cfErrNoSubdomain') };
+    return { subdomain: name };
+  }
+
   async function enableSubdomain(accountId, token) {
     const base = `/accounts/${encodeURIComponent(accountId)}`;
+    const enableScript = () => cfRequest(`${base}/workers/scripts/${SCRIPT_NAME}/subdomain`, token, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ enabled: true }) }, true);
     let enable;
     try {
-      enable = await cfRequest(`${base}/workers/scripts/${SCRIPT_NAME}/subdomain`, token, { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ enabled: true }) }, true);
+      enable = await enableScript();
     } catch {
       return { error: t('cfErrApi') };
     }
-    if (enable.errorKey) return { error: reasonFor(enable) };
-    let sub;
-    try {
-      sub = await cfRequest(`${base}/workers/subdomain`, token, { method: 'GET' }, true);
-    } catch {
-      return { error: t('cfErrApi') };
+    let sub = null;
+    if (!enable.errorKey) {
+      try {
+        sub = await cfRequest(`${base}/workers/subdomain`, token, { method: 'GET' }, true);
+      } catch {
+        return { error: t('cfErrApi') };
+      }
+      const existing = !sub.errorKey ? sub.data?.result?.subdomain : null;
+      if (typeof existing === 'string' && /^[a-z0-9-]+$/i.test(existing)) {
+        return { serverUrl: `https://${SCRIPT_NAME}.${existing}.workers.dev` };
+      }
     }
-    if (sub.errorKey) return { error: reasonFor(sub) };
-    const subdomain = sub.data?.result?.subdomain;
-    if (typeof subdomain !== 'string' || !/^[a-z0-9-]+$/i.test(subdomain)) return { error: t('cfErrNoSubdomain') };
-    return { serverUrl: `https://${SCRIPT_NAME}.${subdomain}.workers.dev` };
+    // Brand-new Cloudflare accounts have no workers.dev subdomain yet (404).
+    const missingSubdomain = enable.status === 404 || sub?.status === 404 || (!enable.errorKey && !sub?.errorKey);
+    if (!missingSubdomain) return { error: reasonFor(enable.errorKey ? enable : sub) };
+    const reg = await registerSubdomain(base, token);
+    if (reg.error) return { error: reg.error };
+    if (enable.errorKey) {
+      let retry;
+      try {
+        retry = await enableScript();
+      } catch {
+        return { error: t('cfErrApi') };
+      }
+      if (retry.errorKey) return { error: reasonFor(retry) };
+    }
+    return { serverUrl: `https://${SCRIPT_NAME}.${reg.subdomain}.workers.dev` };
   }
 
   async function checkHealth(serverUrl) {
@@ -494,9 +597,38 @@ export function createCloudflareLink(D) {
       ? { state: 'done', step: 'health', reason: '', serverUrl: sub.serverUrl }
       : { state: 'unverified', step: 'health', reason: health.reason || t('cfErrHealth'), serverUrl: sub.serverUrl };
     renderAll();
+    if (health.ok && typeof D.onServerReady === 'function') {
+      try {
+        await D.onServerReady(deployment);
+      } catch (err) {
+        D.dbg?.(err, 'cloudflare-on-server-ready');
+      }
+    }
     return health.ok
       ? { ok: true, serverUrl: sub.serverUrl, deployment }
       : { ok: false, deployed: true, unverified: true, step: 'health', reason: health.reason || t('cfErrHealth'), serverUrl: sub.serverUrl, deployment };
+  }
+
+  async function connectAndSetup(rawToken) {
+    if (view.kind === 'verifying' || view.setup?.state === 'running') {
+      return { ok: false, reason: view.setup?.state === 'running' ? t('cfSetupRunning', stepLabel(view.setup.step)) : t('cfStatusVerifying') };
+    }
+    const trimmed = typeof rawToken === 'string' ? rawToken.trim() : '';
+    let freshlySaved = false;
+    if (trimmed) {
+      const saved = await saveToken(trimmed);
+      if (!saved?.ok) return saved;
+      freshlySaved = true;
+    } else if (!view.hasToken) {
+      let existing = null;
+      try { existing = await readRecord(); } catch { existing = null; }
+      if (!existing) return saveToken('');
+    }
+    if (freshlySaved || view.kind !== 'connected') {
+      const verified = await verify();
+      if (!verified?.ok) return verified;
+    }
+    return setupServer();
   }
 
   async function disconnect() {
@@ -564,6 +696,8 @@ export function createCloudflareLink(D) {
     verifyConnection: verify,
     setupServer,
     setup: setupServer,
+    connectAndSetup,
+    quickstart: connectAndSetup,
     disconnect,
     snapshot,
     statusText,

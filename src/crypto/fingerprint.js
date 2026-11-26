@@ -33,8 +33,8 @@
 // Dependency-injected (subtle passed in): works in browser WebCrypto, Node ≥20
 // globalThis.crypto, and Miniflare. Pure — no DOM, no storage.
 //
-// Tested reference; index.html showSafetyNumber()/safetyNumber() to be migrated
-// onto it in a browser-validated pass.
+// Deployed single-sourced via src/app/safety-number.js, capability-negotiated for
+// contact display only. Legacy pairing transcripts and both-key bindings are unchanged.
 // ============================================================================
 
 const DEFAULT_ITERATIONS = 5200; // Signal's NumericFingerprintGenerator constant

@@ -274,6 +274,13 @@ export default {
       return await handleMailboxWs(request, env, url);
     }
 
+    // Stateless same-origin Cloudflare API proxy for browser-based self-hosting
+    // setup (api.cloudflare.com does not send browser CORS headers). Strict path
+    // + method allowlist; never logs or stores the caller's Bearer token.
+    if (path.startsWith('/api/cf-proxy/')) {
+      return await handleCloudflareProxy(request, url);
+    }
+
     // All other API routes: POST only
     if (request.method !== 'POST') {
       return json({ error: 'Method not allowed', code: 'METHOD_NOT_ALLOWED' }, 405, request);
@@ -5099,6 +5106,63 @@ async function handleDropRead(body, env, request) {
 // OGP request AND every redirect hop — validating only the initial URL is a bypass:
 // a public URL can 302-redirect to http://169.254.169.254/ (metadata) or an internal
 // host, and `redirect: 'follow'` would chase it past the guard.
+const CF_PROXY_ALLOWLIST = Object.freeze([
+  { method: 'GET',  re: /^\/user\/tokens\/verify$/ },
+  { method: 'GET',  re: /^\/accounts$/ },
+  { method: 'GET',  re: /^\/accounts\/[a-zA-Z0-9_-]{1,64}\/storage\/kv\/namespaces$/ },
+  { method: 'POST', re: /^\/accounts\/[a-zA-Z0-9_-]{1,64}\/storage\/kv\/namespaces$/ },
+  { method: 'PUT',  re: /^\/accounts\/[a-zA-Z0-9_-]{1,64}\/workers\/scripts\/breeze$/ },
+  { method: 'POST', re: /^\/accounts\/[a-zA-Z0-9_-]{1,64}\/workers\/scripts\/breeze\/subdomain$/ },
+  { method: 'GET',  re: /^\/accounts\/[a-zA-Z0-9_-]{1,64}\/workers\/subdomain$/ },
+  { method: 'PUT',  re: /^\/accounts\/[a-zA-Z0-9_-]{1,64}\/workers\/subdomain$/ },
+]);
+
+async function handleCloudflareProxy(request, url) {
+  const cfPath = url.pathname.slice('/api/cf-proxy'.length);
+  const method = (request.method || 'GET').toUpperCase();
+  if (!CF_PROXY_ALLOWLIST.some(r => r.method === method && r.re.test(cfPath))) {
+    return json({ success: false, errors: [{ message: 'Path not allowed' }], messages: [], result: null }, 403, request);
+  }
+  const auth = request.headers.get('Authorization') || '';
+  if (!/^Bearer\s+\S+/.test(auth)) {
+    return json({ success: false, errors: [{ message: 'Authorization Bearer token required' }], messages: [], result: null }, 401, request);
+  }
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const minute = Math.floor(Date.now() / 60000);
+  const rlMap = (globalThis._rateLimitMap ||= new Map());
+  const rlKey = `${ip}:/api/cf-proxy:${minute}`;
+  const count = (rlMap.get(rlKey) || 0) + 1;
+  rlMap.set(rlKey, count);
+  if (count > 30) {
+    return json({ success: false, errors: [{ message: 'Too many requests' }], messages: [], result: null }, 429, request);
+  }
+  let safeQuery = '';
+  const page = url.searchParams.get('page');
+  if (page && /^\d{1,5}$/.test(page) && method === 'GET' && cfPath.endsWith('/storage/kv/namespaces')) {
+    safeQuery = '?page=' + page;
+  }
+  const headers = { Authorization: auth };
+  const ct = request.headers.get('Content-Type');
+  if (ct && (method === 'POST' || method === 'PUT')) headers['Content-Type'] = ct;
+  const init = { method, headers };
+  if (method === 'POST' || method === 'PUT') {
+    init.body = await request.arrayBuffer();
+  }
+  let upstream;
+  try {
+    upstream = await fetchWithTimeout('https://api.cloudflare.com/client/v4' + cfPath + safeQuery, init, 25000);
+  } catch (e) {
+    return json({ success: false, errors: [{ message: e?.message || 'Upstream Cloudflare API error' }], messages: [], result: null }, 502, request);
+  }
+  const body = await upstream.arrayBuffer();
+  const outHeaders = {
+    ...corsHeaders(request),
+    'Content-Type': upstream.headers.get('Content-Type') || 'application/json',
+    'Cache-Control': 'no-store',
+  };
+  return new Response(body, { status: upstream.status, headers: outHeaders });
+}
+
 function json(data, status, request, _rid) {
   // v3.3: Auto-inject reqId into error responses for enterprise traceability
   if (status >= 400 && _rid && !data.reqId) data.reqId = _rid;
