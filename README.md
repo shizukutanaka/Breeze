@@ -12,6 +12,11 @@
 
 ![Breeze Messenger screenshot — the main window right after creating an identity](docs/images/screenshot.png)
 
+## まず試せます
+
+- [見本](https://breeze-demo.pages.dev): 画面の見本です。ダミーのデータで動き、実際の通信はしません。
+- [予備の公開サイト](https://breeze-app-8ib.pages.dev): GitHub が使えないときのための予備です。正式版そのものが置いてあり、サーバーは未設定の状態です（使うには自分のサーバーへの接続が必要です）。
+
 ## 使うには、自分のサーバーに置きます
 
 Breeze には「運営会社のサーバー」がありません。**使うには、あなた自身が置き場所（サーバー）を用意して、そこに Breeze を置きます。これが正式な使い方です。**
