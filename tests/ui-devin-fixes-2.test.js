@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const profileSrc = readFileSync(new URL('../src/app/profile.js', import.meta.url), 'utf8');
 const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
+const accountTabsSrc = readFileSync(new URL('../src/app/account-tabs.js', import.meta.url), 'utf8');
 const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
 
 function sliceBetween(startMarker, endMarker) {
@@ -163,7 +164,9 @@ describe('(d) first-contact backup nudge and the always-visible account door', (
   });
 
   it('the account tab bar renders for a single account', () => {
-    const fn = sliceBetween('function renderAccountTabs()', '// Cross-account unread tracking');
+    // renderAccountTabs moved to src/app/account-tabs.js (modularization);
+    // slice the module source with the same markers.
+    const fn = accountTabsSrc.slice(accountTabsSrc.indexOf('function renderAccountTabs()'), accountTabsSrc.indexOf('return { renderAccountTabs }'));
     expect(fn).toContain('if (!accs.length) return;');
     expect(fn).not.toContain('accs.length <= 1');
     expect(fn).toContain("addBtn.className = 'acc-add'");

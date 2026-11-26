@@ -195,6 +195,7 @@ export function createCallManager(D) {
   }, { signal: _ac.signal });
 
   async function startCall(contact, withVideo) {
+    if (globalThis.__breezeMock?.enabled?.()) { showToast(t('mockUnavailable'), 'info'); return; }
     if (_callState !== 'idle' || !contact || contact.isGroup) return;
     const capsReady = _learnPeerCaps(contact);
     _callContact = contact;

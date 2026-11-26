@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 // normal text. Values are parsed from index.html at test time, never pinned
 // as literals, so a future palette tweak that drops below AA fails here.
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const accountTabsSrc = readFileSync(new URL('../src/app/account-tabs.js', import.meta.url), 'utf8');
 
 // Extract the flat declaration block that follows a selector's first '{'
 // at or after fromIndex (the auto-theme palette lives inside the
@@ -110,6 +111,7 @@ describe('muted-text size floor', () => {
   });
 
   it('the account-tab shortcut badge is marked decorative (aria-hidden)', () => {
-    expect(html).toContain("shortcut.setAttribute('aria-hidden', 'true')");
+    // the account tab bar lives in src/app/account-tabs.js (modularization)
+    expect(accountTabsSrc).toContain("shortcut.setAttribute('aria-hidden', 'true')");
   });
 });
