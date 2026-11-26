@@ -559,3 +559,79 @@ describe('power mode — tab title recount', () => {
     expect(h.updateTabTitle).toHaveBeenCalledTimes(3);
   });
 });
+
+// The focus-mode countdown banner is display-only — expiry is enforced by the
+// _focusActive() timestamp checks in _shouldAlert, not by this timer — so its
+// self-rescheduling setTimeout chain is pure wake cost. Extract the deployed
+// _updateFocusBanner verbatim and drive it with a controllable power floor.
+const focusBannerBlock = slice('  function _updateFocusBanner() {', '\n\n  // ═══ Quiet messenger');
+
+function focusBannerHarness(floor) {
+  const state = { active: true };
+  const timers = [];
+  const bar = {
+    classList: { add: vi.fn(), remove: vi.fn() },
+    textContent: '',
+    onclick: null,
+  };
+  const run = new Function(
+    '_DOM', '_focusActive', '_settings', '_focusRemainingMin', 't', 'MS',
+    'setTimeout', 'clearTimeout', 'saveSettings', 'showToast', '_powerPollFloorMs',
+    'let _focusTimer = null;\n' + focusBannerBlock + '\nreturn { update: _updateFocusBanner };',
+  );
+  const { update } = run(
+    { get: () => bar },
+    () => state.active,
+    { focusStrict: false, focusUntil: 0 },
+    () => 42,
+    (key) => key,
+    { MIN: 60000 },
+    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    () => {},
+    async () => {},
+    () => {},
+    () => floor,
+  );
+  update();
+  return { state, timers, bar, update };
+}
+
+describe('power mode — focus banner countdown floor', () => {
+  it('reschedules every minute in normal mode (floor 0)', () => {
+    const h = focusBannerHarness(0);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(60000);
+  });
+
+  it('reschedules every minute in saver mode (floor MS.MIN)', () => {
+    const h = focusBannerHarness(60000);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(60000);
+  });
+
+  it('stretches the reschedule to ten minutes in emergency mode', () => {
+    const h = focusBannerHarness(600000);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(600000);
+  });
+
+  it('keeps the chain alive in emergency mode — the timer is rescheduled, not skipped', () => {
+    const h = focusBannerHarness(600000);
+    expect(h.timers).toHaveLength(1);
+    expect(typeof h.timers[0].fn).toBe('function');
+    h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
+  });
+
+  it('schedules no timer and deactivates the banner when focus is inactive', () => {
+    const h = focusBannerHarness(600000);
+    expect(h.timers).toHaveLength(1); // active run still reschedules
+    h.state.active = false;
+    h.timers.length = 0;
+    h.update();
+    expect(h.timers).toHaveLength(0);
+    expect(h.bar.classList.remove).toHaveBeenCalledWith('active');
+    expect(h.bar.textContent).toBe('');
+  });
+});
