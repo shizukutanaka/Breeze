@@ -559,3 +559,79 @@ describe('power mode — tab title recount', () => {
     expect(h.updateTabTitle).toHaveBeenCalledTimes(3);
   });
 });
+// The conversation-status refresh is display-only periodic work bundled into
+// the presence heartbeat tick. Extract the deployed tick line verbatim and
+// drive it with the real power helpers.
+const presenceTickRegistration = lineContaining('_presenceTimer = setTimeout(() => { if (!_powerPresenceOff()) { beat();');
+const runPresenceTickRegistration = new Function(
+  '_presenceTimer', 'setTimeout', 'document', 'CONFIG', 'interval', '_powerPresenceOff', 'beat', 'activeContact', 'updateConvStatus', 'schedulePresence',
+  presenceTickRegistration + '\nreturn true;');
+
+function presenceTickHarness(settings) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const beat = vi.fn();
+  const updateConvStatus = vi.fn();
+  const schedulePresence = vi.fn();
+  const activeContact = { id: 'c1' };
+  const timers = [];
+  let interval = 30000;
+  runPresenceTickRegistration(
+    null,
+    (fn, ms) => { timers.push({ fn, ms }); return 1; },
+    { hidden: false },
+    { PRESENCE_INTERVAL_MS: 30000, PRESENCE_BG_INTERVAL_MS: 120000 },
+    interval,
+    power._powerPresenceOff,
+    beat,
+    activeContact,
+    updateConvStatus,
+    schedulePresence,
+  );
+  return { beat, updateConvStatus, schedulePresence, activeContact, timers };
+}
+
+describe('power mode — presence tick conversation status', () => {
+  it('skips beat and the status refresh outside normal mode while continuing to re-schedule', () => {
+    const settings = { powerMode: 'emergency' };
+    const h = presenceTickHarness(settings);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(30000);
+
+    h.timers[0].fn();
+    h.timers[0].fn();
+    h.timers[0].fn();
+    expect(h.beat).not.toHaveBeenCalled();
+    expect(h.updateConvStatus).not.toHaveBeenCalled();
+    expect(h.schedulePresence).toHaveBeenCalledTimes(3);
+
+    settings.powerMode = 'normal';
+    h.timers[0].fn();
+    expect(h.beat).toHaveBeenCalledTimes(1);
+    expect(h.updateConvStatus).toHaveBeenCalledTimes(1);
+    expect(h.updateConvStatus).toHaveBeenLastCalledWith(h.activeContact);
+    expect(h.schedulePresence).toHaveBeenCalledTimes(4);
+
+    settings.powerMode = 'saver';
+    h.timers[0].fn();
+    h.timers[0].fn();
+    expect(h.beat).toHaveBeenCalledTimes(1);
+    expect(h.updateConvStatus).toHaveBeenCalledTimes(1);
+    expect(h.schedulePresence).toHaveBeenCalledTimes(6);
+  });
+
+  it('keeps every tick live in normal mode', () => {
+    const h = presenceTickHarness({ powerMode: 'normal' });
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(30000);
+
+    h.timers[0].fn();
+    h.timers[0].fn();
+    h.timers[0].fn();
+    expect(h.beat).toHaveBeenCalledTimes(3);
+    expect(h.updateConvStatus).toHaveBeenCalledTimes(3);
+    expect(h.updateConvStatus).toHaveBeenNthCalledWith(1, h.activeContact);
+    expect(h.updateConvStatus).toHaveBeenNthCalledWith(2, h.activeContact);
+    expect(h.updateConvStatus).toHaveBeenNthCalledWith(3, h.activeContact);
+    expect(h.schedulePresence).toHaveBeenCalledTimes(3);
+  });
+});
