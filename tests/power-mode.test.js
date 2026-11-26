@@ -711,3 +711,82 @@ describe('power mode — presence tick conversation status', () => {
     expect(h.schedulePresence).toHaveBeenCalledTimes(3);
   });
 });
+
+// The Electron badge recount is display-only periodic DOM work, so its deployed
+// five-second timer must honour the same power gate as the browser tab-title recount.
+function electronBadgeStatement() {
+  const marker = '// ELECTRON NATIVE INTEGRATION';
+  const markerAt = html.indexOf(marker);
+  const start = html.indexOf('  setInterval(async () => {', markerAt);
+  const endMarker = '  }, 5000);';
+  const end = html.indexOf(endMarker, start);
+  if (markerAt < 0 || start < 0 || end < 0) throw Error('electron badge interval moved');
+  return html.slice(start, end + endMarker.length);
+}
+const runElectronBadgeRegistration = new Function(
+  'setInterval', '_powerPresenceOff', 'document', 'window', '_updateTitle', '_dbg',
+  electronBadgeStatement());
+
+function electronBadgeHarness(settings) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const timers = [];
+  const querySelectorAll = vi.fn(() => [{ textContent: '2' }, { textContent: '3' }]);
+  const electronWindow = { breeze: { setBadge: vi.fn() } };
+  const updateTitle = vi.fn();
+  runElectronBadgeRegistration(
+    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    power._powerPresenceOff,
+    { querySelectorAll },
+    electronWindow,
+    updateTitle,
+    vi.fn(),
+  );
+  return { timers, querySelectorAll, electronWindow, updateTitle };
+}
+
+describe('power mode — electron badge recount', () => {
+  it('skips the recount outside normal mode and re-evaluates every tick', async () => {
+    const settings = { powerMode: 'emergency' };
+    const h = electronBadgeHarness(settings);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(5000);
+
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).not.toHaveBeenCalled();
+    expect(h.electronWindow.breeze.setBadge).not.toHaveBeenCalled();
+    expect(h.updateTitle).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).toHaveBeenCalledTimes(1);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenCalledTimes(1);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenLastCalledWith(5);
+    expect(h.updateTitle).toHaveBeenCalledTimes(1);
+    expect(h.updateTitle).toHaveBeenLastCalledWith(5);
+
+    settings.powerMode = 'saver';
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).toHaveBeenCalledTimes(1);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenCalledTimes(1);
+    expect(h.updateTitle).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps every tick live in normal mode and recounts the summed total', async () => {
+    const h = electronBadgeHarness({ powerMode: 'normal' });
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(5000);
+
+    await h.timers[0].fn();
+    await h.timers[0].fn();
+    expect(h.querySelectorAll).toHaveBeenCalledTimes(2);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenCalledTimes(2);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenNthCalledWith(1, 5);
+    expect(h.electronWindow.breeze.setBadge).toHaveBeenNthCalledWith(2, 5);
+    expect(h.updateTitle).toHaveBeenCalledTimes(2);
+    expect(h.updateTitle).toHaveBeenNthCalledWith(1, 5);
+    expect(h.updateTitle).toHaveBeenNthCalledWith(2, 5);
+  });
+});
