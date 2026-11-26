@@ -344,7 +344,8 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
     box.dispatchEvent(new Event('scroll'));
   });
   await expect(A.locator('#scroll-fab')).toBeVisible();
-  await expect(A.locator('#scroll-fab')).toHaveText('↓');
+  await expect(A.locator('#scroll-fab svg')).toBeVisible();
+  await expect(A.locator('#scroll-count')).toHaveText('');
 
   await openAddContact(B);
   const dlgB = B.locator('dialog[open] .add-form-contact');
@@ -356,7 +357,7 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
   await B.locator('#msg-input').fill('arrives while you are scrolled up');
   await B.locator('#b-msg-send').click();
 
-  await expect(A.locator('#scroll-fab')).toHaveText('↓ 1', { timeout: 15000 });
+  await expect(A.locator('#scroll-count')).toHaveText('1', { timeout: 15000 });
   // The scroll position itself must not have been disturbed by the arrival — the whole
   // point of the FAB is that arriving messages do NOT yank the reader back to the
   // bottom mid-read.
@@ -364,7 +365,7 @@ test('the scroll-to-bottom FAB counts up when a message arrives while scrolled a
 
   // Clicking it returns to the bottom and clears the count.
   await A.locator('#scroll-fab').click();
-  await expect(A.locator('#scroll-fab')).toHaveText('↓');
+  await expect(A.locator('#scroll-count')).toHaveText('');
 
   await ctxA.close();
   await ctxB.close();

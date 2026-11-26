@@ -1,3 +1,4 @@
+import { iconSlot } from './icons.js';
 // Selected Latin/Greek/Cyrillic mappings from Unicode security 16.0.0 confusables.txt.
 // Unicode License v3: docs/UNICODE-LICENSE.txt. This is not full UTS #39 conformance.
 const folds = new Map();
@@ -85,11 +86,12 @@ export function createNameTools(D) {
     return out.join('\n');
   }
   const warningHtml = c => { const text = warningText(c); return text ? '<span class="ln-warning" role="note">⚠ ' + D.esc(text) + '</span>' : ''; };
+  const stateIcon = (name, key) => iconSlot(name, 'state-ico') + '<span class="sr-only">' + D.esc(D.t(key)) + ' </span>';
   function _setConvName(contact) {
     const el = D.dom('msg-conv-name');
     if (!el || !contact) return;
     const badge = contact.isGroup && contact.members ? ' <span class="enc-badge">' + contact.members.length + ' ' + D.esc(D.t('cmdMembersLabel')) + '</span>' : ' <span class="enc-badge">E2E</span>';
-    D.html(el, (contact.blocked ? '🚫 ' : '') + (contact.muted ? '🔇 ' : '') + D.esc(contactDisplayName(contact)) + contactPeerNameHtml(contact) + badge + warningHtml(contact));
+    D.html(el, (contact.blocked ? stateIcon('block', 'infoBlocked') : '') + (contact.muted ? stateIcon('mute', 'infoMuted') : '') + D.esc(contactDisplayName(contact)) + contactPeerNameHtml(contact) + badge + warningHtml(contact));
     D.verification?.(contact);
   }
   async function setContactNickname(c, name) {
