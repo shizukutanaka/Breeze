@@ -918,7 +918,8 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
   padding: 14px 20px calc(14px + env(safe-area-inset-bottom)); display: flex; align-items: center; gap: var(--sp-3);
   animation: bannerSlide .4s var(--bounce)
 }
-.install-banner .icon { width: 44px; height: 44px; border-radius: 12px; background: linear-gradient(135deg, var(--g), var(--gd)); display: flex; align-items: center; justify-content: center; font-size: var(--fs-display); font-weight: 700; color: #000; flex-shrink: 0; box-shadow: 0 2px 8px rgba(52,211,153,.3) }
+.install-banner .icon { width: 44px; height: 44px; border-radius: 12px; overflow: hidden; flex-shrink: 0; box-shadow: 0 2px 8px rgba(52,211,153,.3) }
+.install-banner .icon img { width: 100%; height: 100%; display: block }
 .install-banner .text { flex: 1; font-size: var(--fs-sub); line-height: 1.4 }
 .install-banner .text b { display: block; font-size: var(--fs-body); font-weight: 700 }
 .install-banner .dismiss { background: none; border: none; color: var(--t3); cursor: pointer; padding: var(--sp-2); font-size: var(--fs-title); transition: transform .1s var(--bounce) }
