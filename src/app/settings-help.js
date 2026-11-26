@@ -29,6 +29,7 @@ export const SETTINGS_HELP_MAP = Object.freeze({
     'add-relay': 'helpSetAddRelay',
     'autobackup-arm': 'helpSetAutobackupArm',
     backup: 'helpSetBackup',
+    'cloudflare-quickstart': 'helpSetCloudflareQuick',
     'cloudflare-save': 'helpSetCloudflareSave',
     'cloudflare-verify': 'helpSetCloudflareVerify',
     'cloudflare-setup': 'helpSetCloudflareSetup',
