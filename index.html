@@ -10444,27 +10444,8 @@ async function initMessenger(dbName) {
     });
   })();
 
-  // v3.5: Tab title unread counter
-
   // v3.5: Emoji picker lives in src/app/emoji-picker.js
   globalThis.__breezeEmojiPicker?.createEmojiPicker({ DOM: _DOM, t, signal: _ac.signal });
-  let _unreadTotal = 0;
-  const _originalTitle = document.title;
-  function updateTabTitle() {
-    try {
-      const contacts = document.querySelectorAll('.bdg-row');
-      let total = 0;
-      contacts.forEach(el => { const n = parseInt(el.textContent); if (n > 0) total += n; });
-      _unreadTotal = total;
-      _updateTitle(total);
-      // Badge API (if supported)
-      if ('setAppBadge' in navigator) {
-        total > 0 ? navigator.setAppBadge(total) : navigator.clearAppBadge();
-      }
-    } catch(e) { _dbg(e, 'tab-title'); }
-  }
-  // Update every 5 seconds
-  _intervals.push(setInterval(() => { if (!_powerPresenceOff()) updateTabTitle(); }, CONFIG.POLL_UNREAD_MS));
 
   // v3.5: Search highlighting within messages
   function highlightSearch(query) {
