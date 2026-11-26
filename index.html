@@ -12608,7 +12608,7 @@ async function initMessenger(dbName) {
     function schedulePresence() {
       if (_presenceTimer) clearTimeout(_presenceTimer);
       const interval = document.hidden ? CONFIG.PRESENCE_BG_INTERVAL_MS : CONFIG.PRESENCE_INTERVAL_MS;
-      _presenceTimer = setTimeout(() => { if (!_powerPresenceOff()) beat(); if (activeContact) updateConvStatus(activeContact); schedulePresence(); }, interval);
+      _presenceTimer = setTimeout(() => { if (!_powerPresenceOff()) { beat(); if (activeContact) updateConvStatus(activeContact); } schedulePresence(); }, interval);
     }
     schedulePresence();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (!_powerPresenceOff()) beat(); schedulePresence(); } }, { signal: _ac.signal });
