@@ -5,7 +5,7 @@ const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 function tabTitleBlock() {
   const startMarker = 'function updateTabTitle()';
-  const endMarker = '_intervals.push(setInterval(updateTabTitle, CONFIG.POLL_UNREAD_MS));';
+  const endMarker = '_intervals.push(setInterval(() => { if (!_powerPresenceOff()) updateTabTitle(); }, CONFIG.POLL_UNREAD_MS));';
   const start = html.indexOf(startMarker);
   const end = html.indexOf(endMarker, start);
   if (start < 0 || end < 0) throw Error('tab title markers moved');

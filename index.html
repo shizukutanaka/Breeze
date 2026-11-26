@@ -10449,7 +10449,7 @@ async function initMessenger(dbName) {
     } catch(e) { _dbg(e, 'tab-title'); }
   }
   // Update every 5 seconds
-  _intervals.push(setInterval(updateTabTitle, CONFIG.POLL_UNREAD_MS));
+  _intervals.push(setInterval(() => { if (!_powerPresenceOff()) updateTabTitle(); }, CONFIG.POLL_UNREAD_MS));
 
   // v3.5: Search highlighting within messages
   function highlightSearch(query) {
