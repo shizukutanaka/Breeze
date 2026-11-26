@@ -112,7 +112,7 @@ describe('mock mode wiring', () => {
     expect(html).toContain('if (globalThis.__breezeMock?.enabled?.()) return;\n    if (!contact.pubB64');
     expect(html.match(/!globalThis\.__breezeMock\?\.enabled\?\.\(\)\) try \{ navigator\.sendBeacon/g)?.length).toBe(2);
     expect(html).toContain('globalThis.__breezeMock?.enabled?.()) return;\n    _turnFetch?.fetchCredentials();');
-    expect(html).toContain('async function initPushNotifications() {\n    if (!API || !(\'serviceWorker\' in navigator) || !(\'PushManager\' in window) || globalThis.__breezeMock?.enabled?.()) return;');
+    expect(html).toContain('async function initPushNotifications() {\n    if (!(globalThis.__brzApiReady?.() ?? !!API) || !(\'serviceWorker\' in navigator) || !(\'PushManager\' in window) || globalThis.__breezeMock?.enabled?.()) return;');
     const callJs = readFileSync(new URL('../src/app/call.js', import.meta.url), 'utf8');
     const groupCallJs = readFileSync(new URL('../src/app/group-call.js', import.meta.url), 'utf8');
     expect(callJs).toContain('if (globalThis.__breezeMock?.enabled?.()) { showToast(t(\'mockUnavailable\'), \'info\'); return; }');

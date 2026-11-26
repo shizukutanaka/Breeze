@@ -630,7 +630,7 @@ describe('power mode — group member poll', () => {
   it('wires the deployed power-presence gate and poll floor into the group-create deps', () => {
     const depsBlock = slice('globalThis.__breezeGroupCreate?.createGroupCreate({', '\n  });');
     expect(depsBlock).toContain('powerOff: () => _powerPresenceOff()');
-    expect(depsBlock).toContain('hasApi: () => !!API, powerOff: () => _powerPresenceOff(), powerFloorMs: () => _powerPollFloorMs(),');
+    expect(depsBlock).toContain('hasApi: () => (globalThis.__brzApiReady?.() ?? !!API), powerOff: () => _powerPresenceOff(), powerFloorMs: () => _powerPollFloorMs(),');
   });
 });
 

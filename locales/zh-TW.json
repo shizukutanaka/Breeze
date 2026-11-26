@@ -202,6 +202,7 @@
   "voiceCall": "語音通話",
   "videoCall": "視訊通話",
   "serverNotConfigured": "伺服器未設定：需要 KV 繫結。請依照 README 設定。P2P 與訊息中繼無法使用。",
+  "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "noIdentity": "請先在通訊軟體中建立身分",
   "deleted": "訊息已刪除",
   "edited": "（已編輯）",
@@ -544,6 +545,7 @@
   "toastMin4Chars": "至少 4 個字元",
   "toastLabelsClear": "標籤已清除",
   "toastInstalling": "安裝中...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze 安裝完成！",
   "toastWiped": "裝置已遠端清除",
   "toastDbConflict": "資料庫版本衝突。請重新載入。",
@@ -1059,6 +1061,7 @@
   "cfErrInvalidToken": "invalid or expired token",
   "cfErrNetwork": "network error",
   "cfErrApi": "Cloudflare API error",
+  "cfErrNoProxy": "Cloudflare setup needs a configured Breeze relay for the API proxy. Add a home relay first, or self-host Breeze and run setup there.",
   "cfErrNoToken": "no Cloudflare token is saved",
   "cfErrStorage": "could not access on-device storage",
   "cfErrTokenRequired": "paste a Cloudflare API token first",
@@ -1121,5 +1124,7 @@
   "tabOrderSection": "Tab order",
   "tabMoveLeft": "Move tab left",
   "tabMoveRight": "Move tab right",
-  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown."
+  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

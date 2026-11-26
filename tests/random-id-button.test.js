@@ -103,7 +103,7 @@ describe('setup copy — plain language, no key jargon', () => {
   });
 
   it('every locale carries the new keys and the de-jargoned feature lines', () => {
-    expect(LOCALES.length).toBe(50);
+    expect(LOCALES.length).toBe(71);
     for (const f of LOCALES) {
       const loc = locale(f);
       expect(typeof loc.setupRandom, `${f} setupRandom`).toBe('string');

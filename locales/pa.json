@@ -197,6 +197,7 @@
   "voiceCall": "ਵੌਇਸ ਕਾਲ",
   "videoCall": "ਵੀਡੀਓ ਕਾਲ",
   "serverNotConfigured": "ਸਰਵਰ ਕੌਂਫਿਗਰ ਨਹੀਂ: KV ਬਾਈਂਡਿੰਗ ਚਾਹੀਦੀ ਹੈ। README ਸੈੱਟਅੱਪ ਦੀ ਪਾਲਣਾ ਕਰੋ। P2P ਅਤੇ ਸੁਨੇਹਾ ਰਿਲੇਅ ਉਪਲਬਧ ਨਹੀਂ।",
+  "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "noIdentity": "ਪਹਿਲਾਂ ਮੈਸੇਂਜਰ ਵਿੱਚ ਇੱਕ ਪਛਾਣ ਬਣਾਓ",
   "deleted": "ਸੁਨੇਹਾ ਮਿਟਾਇਆ ਗਿਆ",
   "edited": "(ਸੋਧਿਆ)",
@@ -637,6 +638,7 @@
   "toastMin4Chars": "ਘੱਟੋ-ਘੱਟ 4 ਅੱਖਰ",
   "toastLabelsClear": "ਲੇਬਲ ਸਾਫ਼ ਹੋ ਗਏ",
   "toastInstalling": "ਇੰਸਟਾਲ ਹੋ ਰਿਹਾ ਹੈ...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze ਇੰਸਟਾਲ ਹੋ ਗਿਆ!",
   "toastWiped": "ਡਿਵਾਈਸ ਦੂਰੋਂ ਮਿਟਾਇਆ ਗਿਆ",
   "toastDbConflict": "ਡਾਟਾਬੇਸ ਸੰਸਕਰਣ ਟਕਰਾਅ। ਕਿਰਪਾ ਕਰਕੇ ਦੁਬਾਰਾ ਲੋਡ ਕਰੋ।",
@@ -1066,6 +1068,7 @@
   "cfErrInvalidToken": "invalid or expired token",
   "cfErrNetwork": "network error",
   "cfErrApi": "Cloudflare API error",
+  "cfErrNoProxy": "Cloudflare setup needs a configured Breeze relay for the API proxy. Add a home relay first, or self-host Breeze and run setup there.",
   "cfErrNoToken": "no Cloudflare token is saved",
   "cfErrStorage": "could not access on-device storage",
   "cfErrTokenRequired": "paste a Cloudflare API token first",
@@ -1128,5 +1131,7 @@
   "tabOrderSection": "Tab order",
   "tabMoveLeft": "Move tab left",
   "tabMoveRight": "Move tab right",
-  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown."
+  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

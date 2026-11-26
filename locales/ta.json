@@ -197,6 +197,7 @@
   "voiceCall": "குரல் அழைப்பு",
   "videoCall": "வீடியோ அழைப்பு",
   "serverNotConfigured": "சேவையகம் உள்ளமைக்கப்படவில்லை: KV பைண்டிங் தேவை. README அமைப்பைப் பின்பற்றவும். P2P மற்றும் செய்தி ரிலே கிடைக்கவில்லை.",
+  "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "noIdentity": "முதலில் மெசஞ்சரில் ஒரு அடையாளத்தை உருவாக்கவும்",
   "deleted": "செய்தி நீக்கப்பட்டது",
   "edited": "(திருத்தப்பட்டது)",
@@ -637,6 +638,7 @@
   "toastMin4Chars": "குறைந்தது 4 எழுத்துகள்",
   "toastLabelsClear": "லேபிள்கள் அழிக்கப்பட்டன",
   "toastInstalling": "நிறுவுகிறது...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze நிறுவப்பட்டது!",
   "toastWiped": "சாதனம் தொலைவிலிருந்து அழிக்கப்பட்டது",
   "toastDbConflict": "தரவுத்தள பதிப்பு முரண்பாடு. தயவுசெய்து மீண்டும் ஏற்றவும்.",
@@ -1066,6 +1068,7 @@
   "cfErrInvalidToken": "invalid or expired token",
   "cfErrNetwork": "network error",
   "cfErrApi": "Cloudflare API error",
+  "cfErrNoProxy": "Cloudflare setup needs a configured Breeze relay for the API proxy. Add a home relay first, or self-host Breeze and run setup there.",
   "cfErrNoToken": "no Cloudflare token is saved",
   "cfErrStorage": "could not access on-device storage",
   "cfErrTokenRequired": "paste a Cloudflare API token first",
@@ -1128,5 +1131,7 @@
   "tabOrderSection": "Tab order",
   "tabMoveLeft": "Move tab left",
   "tabMoveRight": "Move tab right",
-  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown."
+  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

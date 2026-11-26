@@ -197,6 +197,7 @@
   "voiceCall": "音声通話",
   "videoCall": "ビデオ通話",
   "serverNotConfigured": "サーバー未設定: KVバインディングが必要です。READMEの手順に従ってください。",
+  "serverNoDefault": "サーバーが未設定です。設定 → ホームリレーで自分のリレーを追加するか、先にBreezeをセルフホストしてください。このバナーをタップすると設定を開きます。",
   "noIdentity": "まずメッセンジャーでIDを作成してください",
   "deleted": "メッセージ削除済み",
   "edited": "(編集済み)",
@@ -568,6 +569,7 @@
   "toastMin4Chars": "4文字以上必要",
   "toastLabelsClear": "ラベルをクリアしました",
   "toastInstalling": "インストール中...",
+  "toastInstallManual": "インストールするには、ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください",
   "toastInstalled": "Breezeがインストールされました！",
   "toastWiped": "リモートでデータが消去されました",
   "toastDbConflict": "DB競合が発生しました。リロードしてください。",
@@ -1059,6 +1061,7 @@
   "cfErrInvalidToken": "トークンが無効または期限切れです",
   "cfErrNetwork": "ネットワークエラー",
   "cfErrApi": "Cloudflare API エラー",
+  "cfErrNoProxy": "Cloudflare設定にはAPIプロキシ用の設定済みBreezeリレーが必要です。先にホームリレーを追加するか、Breezeをセルフホストしてそこで設定してください。",
   "cfErrNoToken": "保存された Cloudflare トークンがありません",
   "cfErrStorage": "端末内ストレージにアクセスできませんでした",
   "cfErrTokenRequired": "先に Cloudflare API トークンを貼り付けてください",
@@ -1121,5 +1124,7 @@
   "tabOrderSection": "タブの並び順",
   "tabMoveLeft": "タブを左へ移動",
   "tabMoveRight": "タブを右へ移動",
-  "helpSetTabOrder": "下部タブの順番を変更します。行をドラッグするか矢印ボタンを使うと、タブバーへすぐ反映されます。トークも並べ替えられますが、常に表示されます。"
+  "helpSetTabOrder": "下部タブの順番を変更します。行をドラッグするか矢印ボタンを使うと、タブバーへすぐ反映されます。トークも並べ替えられますが、常に表示されます。",
+  "settingsInstallApp": "アプリをインストール",
+  "helpSetInstallApp": "ブラウザーが対応している場合はワンクリックでアプリをインストールします。その確認を使えない場合は、インストール手順またはデスクトップ版のダウンロード案内を表示します。"
 }

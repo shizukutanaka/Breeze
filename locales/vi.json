@@ -197,6 +197,7 @@
   "voiceCall": "Cuộc gọi thoại",
   "videoCall": "Cuộc gọi video",
   "serverNotConfigured": "Máy chủ chưa được cấu hình: cần liên kết KV. Làm theo hướng dẫn cài đặt trong README. P2P và chuyển tiếp tin nhắn không khả dụng.",
+  "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "noIdentity": "Hãy tạo danh tính trong trình nhắn tin trước",
   "deleted": "Tin nhắn đã xóa",
   "edited": "(đã sửa)",
@@ -637,6 +638,7 @@
   "toastMin4Chars": "Tối thiểu 4 ký tự",
   "toastLabelsClear": "Đã xóa nhãn",
   "toastInstalling": "Đang cài đặt...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Đã cài đặt Breeze!",
   "toastWiped": "Thiết bị đã bị xóa từ xa",
   "toastDbConflict": "Xung đột phiên bản cơ sở dữ liệu. Vui lòng tải lại.",
@@ -1066,6 +1068,7 @@
   "cfErrInvalidToken": "invalid or expired token",
   "cfErrNetwork": "network error",
   "cfErrApi": "Cloudflare API error",
+  "cfErrNoProxy": "Cloudflare setup needs a configured Breeze relay for the API proxy. Add a home relay first, or self-host Breeze and run setup there.",
   "cfErrNoToken": "no Cloudflare token is saved",
   "cfErrStorage": "could not access on-device storage",
   "cfErrTokenRequired": "paste a Cloudflare API token first",
@@ -1128,5 +1131,7 @@
   "tabOrderSection": "Tab order",
   "tabMoveLeft": "Move tab left",
   "tabMoveRight": "Move tab right",
-  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown."
+  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

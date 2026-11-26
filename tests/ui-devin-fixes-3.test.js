@@ -17,7 +17,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 //  e. The 12 keys earlier batches left in English (ariaMoreActions,
 //     timeYesterday + batch 2's ten) are translated in all 48 locales
 //     that had the fallback; the new skipToContent key ships translated
-//     in all 50.
+//     in all 71.
 //  f. .msg-layout lets 100dvh win over 100vh (fallback first), and the
 //     bottom bar's visibility depends on width alone, not the UA class.
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');

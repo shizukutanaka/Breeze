@@ -196,6 +196,7 @@
   "voiceCall": "Ìpè ohùn",
   "videoCall": "Ìpè fídíò",
   "serverNotConfigured": "A kò ṣètò sáfà: a nílò ìsopọ̀ KV. Tẹ̀lé ìṣètò README. P2P àti relay ìránṣẹ́ kò sí.",
+  "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "noIdentity": "Ṣẹ̀dá ìdánimọ̀ nínú ìránṣẹ́ ní àkọ́kọ́",
   "deleted": "A ti pa ìránṣẹ́ jẹ",
   "edited": "(a ṣàtúnṣe)",
@@ -634,6 +635,7 @@
   "toastMin4Chars": "Ó kéré jùlọ àmì 4",
   "toastLabelsClear": "A ti pa àwọn àmì rẹ́",
   "toastInstalling": "Ń fi sílẹ̀...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "A ti fi Breeze sílẹ̀!",
   "toastWiped": "A ti pa ẹ̀rọ rẹ́ láti ọ̀nà jíjìn",
   "toastDbConflict": "Ìjà ẹ̀dà dátàbáìsì. Jọ̀wọ́ tún tẹ̀wé.",
@@ -1059,6 +1061,7 @@
   "cfErrInvalidToken": "invalid or expired token",
   "cfErrNetwork": "network error",
   "cfErrApi": "Cloudflare API error",
+  "cfErrNoProxy": "Cloudflare setup needs a configured Breeze relay for the API proxy. Add a home relay first, or self-host Breeze and run setup there.",
   "cfErrNoToken": "no Cloudflare token is saved",
   "cfErrStorage": "could not access on-device storage",
   "cfErrTokenRequired": "paste a Cloudflare API token first",
@@ -1121,5 +1124,7 @@
   "tabOrderSection": "Tab order",
   "tabMoveLeft": "Move tab left",
   "tabMoveRight": "Move tab right",
-  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown."
+  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

@@ -94,7 +94,7 @@ for (const [src, dst, required] of ASSETS) {
 const API_ORIGIN = (process.env.BREEZE_API_ORIGIN || 'https://breeze.pages.dev').replace(/\/+$/, '');
 const idxPath = path.join(WWW, 'index.html');
 let idxText = fs.readFileSync(idxPath, 'utf8');
-const API_LINE_RE = /^const API = location\.hostname === 'localhost' \|\| location\.hostname === '127\.0\.0\.1' \? '' : location\.origin \+ '\/api';$/m;
+const API_LINE_RE = /^const API = globalThis\.__BREEZE_NO_DEFAULT_SERVER__ === true \? '' : \(location\.hostname === 'localhost' \|\| location\.hostname === '127\.0\.0\.1' \? '' : location\.origin \+ '\/api'\);$/m;
 if (!API_LINE_RE.test(idxText)) {
   console.error("  ✗ index.html's `const API` line moved/changed — update prepare.js's rewrite, or the packaged app's API calls hit the virtual app.breeze.local host and fail");
   process.exit(1);

@@ -197,6 +197,7 @@
   "voiceCall": "ভয়েস কল",
   "videoCall": "ভিডিও কল",
   "serverNotConfigured": "সার্ভার কনফিগার করা নেই: KV বাইন্ডিং লাগবে। README-এর সেটআপ অনুসরণ করুন। P2P এবং বার্তা রিলে পাওয়া যাচ্ছে না।",
+  "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "noIdentity": "আগে মেসেঞ্জারে একটি পরিচয় তৈরি করুন",
   "deleted": "বার্তা মুছে ফেলা হয়েছে",
   "edited": "(সম্পাদিত)",
@@ -637,6 +638,7 @@
   "toastMin4Chars": "কমপক্ষে 4 অক্ষর",
   "toastLabelsClear": "লেবেল মোছা হয়েছে",
   "toastInstalling": "ইনস্টল হচ্ছে...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze ইনস্টল হয়েছে!",
   "toastWiped": "ডিভাইস দূর থেকে মোছা হয়েছে",
   "toastDbConflict": "ডেটাবেস সংস্করণে দ্বন্দ্ব। অনুগ্রহ করে আবার লোড করুন।",
@@ -1066,6 +1068,7 @@
   "cfErrInvalidToken": "invalid or expired token",
   "cfErrNetwork": "network error",
   "cfErrApi": "Cloudflare API error",
+  "cfErrNoProxy": "Cloudflare setup needs a configured Breeze relay for the API proxy. Add a home relay first, or self-host Breeze and run setup there.",
   "cfErrNoToken": "no Cloudflare token is saved",
   "cfErrStorage": "could not access on-device storage",
   "cfErrTokenRequired": "paste a Cloudflare API token first",
@@ -1128,5 +1131,7 @@
   "tabOrderSection": "Tab order",
   "tabMoveLeft": "Move tab left",
   "tabMoveRight": "Move tab right",
-  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown."
+  "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

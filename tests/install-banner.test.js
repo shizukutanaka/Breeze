@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { initInstallBanner } from '../src/app/install-banner.js';
+import { settingsPanelHtml } from '../src/app/settings-panel.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
@@ -40,6 +41,7 @@ describe('src/app/install-banner.js — initInstallBanner', () => {
     const store = new Map();
     if (dismissedAt !== null) store.set('brz-install-dismissed', String(dismissedAt));
     const winListeners = {};
+    const docListeners = {};
     const appended = [];
     const opened = [];
     const toasts = [];
@@ -67,6 +69,8 @@ describe('src/app/install-banner.js — initInstallBanner', () => {
     setGlobal('document', {
       createElement: () => makeNode(),
       querySelector: () => appended.find(b => !b.removed) || null,
+      querySelectorAll: () => [],
+      addEventListener: (type, fn) => { (docListeners[type] ||= []).push(fn); },
       body: { appendChild: (el) => { appended.push(el); } },
     });
 
@@ -79,7 +83,12 @@ describe('src/app/install-banner.js — initInstallBanner', () => {
       showToast: (msg, type) => { toasts.push({ msg, type }); },
     });
 
-    return { api, store, winListeners, appended, opened, toasts, setupBtn };
+    const clickSettingsInstall = () => docListeners.click[0]({
+      target: { closest: (sel) => (sel === '#settings-install-btn' ? {} : null) },
+      preventDefault() {},
+    });
+
+    return { api, store, winListeners, docListeners, appended, opened, toasts, setupBtn, clickSettingsInstall };
   }
 
   it('increments visit count and renders desktop download banner when not standalone', () => {
@@ -125,8 +134,57 @@ describe('src/app/install-banner.js — initInstallBanner', () => {
     expect(h.toasts[1]).toEqual({ msg: 'toastInstalled', type: 'success' });
   });
 
+
+  it('requestInstall forces the banner past the 7-day dismiss cooldown', async () => {
+    const h = setup({ dismissedAt: Date.now() - 1000 });
+    await h.api.requestInstall();
+    expect(h.appended).toHaveLength(1);
+    expect(h.appended[0].html).toContain('installBannerDesktopTitle:macOS');
+  });
+
+  it('settings install click uses a captured prompt instead of the fallback banner', async () => {
+    const h = setup({ dismissedAt: Date.now() - 1000 });
+    let prompted = 0;
+    h.winListeners.beforeinstallprompt[0]({
+      preventDefault() {},
+      prompt() { prompted++; },
+      userChoice: Promise.resolve({ outcome: 'accepted' }),
+    });
+
+    await h.clickSettingsInstall();
+    expect(prompted).toBe(1);
+    expect(h.appended).toHaveLength(0);
+    expect(h.toasts).toEqual([{ msg: 'toastInstalling', type: 'success' }]);
+  });
+
+  it('settings install click forces the fallback banner when no prompt is captured', async () => {
+    const h = setup({ dismissedAt: Date.now() - 1000 });
+    await h.clickSettingsInstall();
+    expect(h.appended).toHaveLength(1);
+    expect(h.appended[0].html).toContain('installBannerDownload');
+  });
+
+  it('settings install row renders by default but is omitted in standalone or Electron', () => {
+    const panelFor = () => settingsPanelHtml({
+      t: (key) => key, esc: (x) => String(x), myName: 'Name', fanout: 2, powerMode: 'auto', relays: [],
+    });
+
+    setup();
+    expect(panelFor()).toContain('id="settings-install-btn"');
+    expect(panelFor()).toContain('data-action="install-app"');
+    expect(panelFor()).toContain('settingsInstallApp');
+
+    setup({ standalone: true });
+    expect(panelFor()).not.toContain('settings-install-btn');
+
+    const h = setup();
+    window.process = { versions: { electron: 'test' } };
+    expect(panelFor()).not.toContain('settings-install-btn');
+    expect(h.appended).toHaveLength(0);
+  });
+
   it('wiring: index.html exposes window.__breezeInstallBanner and runs it after _appModulesReady', () => {
     expect(html).toContain("import { initInstallBanner } from './src/app/install-banner.js'; window.__breezeInstallBanner = { initInstallBanner };");
-    expect(html).toContain('globalThis.__breezeInstallBanner?.initInstallBanner({ DOM: _DOM, MS, t, esc, safeSetHTML, showToast });');
+    expect(html).toContain('globalThis.__breezeInstallBanner?.initInstallBanner({ DOM: _DOM, MS, t, esc, safeSetHTML, showToast, dbg: _dbg });');
   });
 });
