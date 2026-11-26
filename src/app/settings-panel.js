@@ -8,6 +8,11 @@ const POWER_MODES = Object.freeze([
   ['saver', 'powerSaver'],
   ['emergency', 'powerEmergency'],
 ]);
+const TAB_ORDER = Object.freeze(['chats', 'calls', 'contacts', 'self', 'settings']);
+const TAB_META = Object.freeze({
+  chats: ['message', 'tabChats'], calls: ['phone', 'tabCalls'], contacts: ['users', 'ariaContacts'],
+  self: ['user', 'tabSelf'], settings: ['settings', 'helpSettings'],
+});
 
 export function settingsPanelHtml(v) {
   const { t, esc } = v;
@@ -18,6 +23,12 @@ export function settingsPanelHtml(v) {
   const action = (act, icon, label, extra = '') => `<div class="settings-row settings-action-row${extra}" data-action-row="${act}"><button type="button" class="settings-action-main" data-action="${act}">${ico(icon)}<span class="settings-row-label">${esc(label)}</span>${chevron}</button></div>`;
   const options = (pairs, selected) => pairs.map(([value, key]) => `<option value="${value}"${selected === value ? ' selected' : ''}>${esc(t(key))}</option>`).join('');
   const selectRow = (setting, icon, label, inner) => `<div class="settings-row"><label class="settings-row-main i-cur">${ico(icon)}<span class="settings-row-label">${esc(label)}</span><select data-setting="${setting}">${inner}</select></label></div>`;
+  const validTabOrder = Array.isArray(v.tabOrder) && v.tabOrder.length === TAB_ORDER.length && TAB_ORDER.every((k) => v.tabOrder.includes(k));
+  const tabOrderRows = (validTabOrder ? v.tabOrder : TAB_ORDER).map((k, i) => {
+    const [iconName, labelKey] = TAB_META[k];
+    const move = (dir, moveIcon, labelKey2, disabled) => `<button type="button" class="btn btn-o btn-sm tab-order-move" data-action="tab-move" data-tab="${k}" data-dir="${dir}" aria-label="${esc(t(labelKey2))}"${disabled ? ' disabled' : ''}>${ico(moveIcon)}</button>`;
+    return `<div class="settings-row settings-tab-order-row" draggable="true" data-order-tab="${k}"><span class="settings-row-main">${ico(iconName)}<span class="settings-row-label">${esc(t(labelKey))}</span></span>${move('-1', 'arrow-left', 'tabMoveLeft', i === 0)}${move('1', 'arrow-right', 'tabMoveRight', i === TAB_ORDER.length - 1)}</div>`;
+  }).join('');
 
   const relayRows = v.relays.map((r) => {
     const fp = `<span class="settings-row-sub" data-relay-fp="${esc(r.url)}">…</span>${r.blocked ? ' ⚠' : ''}`;
@@ -71,7 +82,8 @@ export function settingsPanelHtml(v) {
       + check('tab-vis-calls', 'phone', t('tabShowCalls'), v.tabCalls)
       + check('tab-vis-contacts', 'users', t('tabShowContacts'), v.tabContacts)
       + check('tab-vis-self', 'user', t('tabShowSelf'), v.tabSelf)
-      + check('tab-vis-settings', 'settings', t('tabShowSettings'), v.tabSettings))
+      + check('tab-vis-settings', 'settings', t('tabShowSettings'), v.tabSettings)
+      + `<div class="settings-note">${esc(t('tabOrderSection'))}</div><div data-tab-order-list>${tabOrderRows}</div>`)
     + section(t('settingsCloudflare'), cloudflare, ' settings-section-advanced', ' data-cloudflare-section')
     + `<div class="settings-note settings-end">${esc(t('settingsImmediate'))}</div>`;
 }

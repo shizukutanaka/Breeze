@@ -8,6 +8,8 @@
 // unchanged — this is a move, not a rewrite.
 // ============================================================================
 
+import { createIcon } from './icons.js';
+
 export function createAccountTabs(deps) {
   function renderAccountTabs() {
     const accs = deps.getAccounts();
@@ -45,7 +47,8 @@ export function createAccountTabs(deps) {
       const tab = document.createElement('div');
       const isActive = acc.id === activeId;
       tab.className = 'acc-tab' + (isActive ? ' active' : '');
-      tab.textContent = acc.avatar || acc.name?.[0] || '?';
+      const waveIcon = acc.avatar === '🌊' ? createIcon('wave', 'acc-wave') : null;
+      if (waveIcon) tab.appendChild(waveIcon); else tab.textContent = acc.avatar || acc.name?.[0] || '?';
       tab.title = acc.name + (idx < 9 ? ` (Ctrl+${idx + 1})` : '');
       tab.setAttribute('role', 'tab');
       tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
@@ -74,7 +77,7 @@ export function createAccountTabs(deps) {
       // Long press / right-click context menu
       tab.oncontextmenu = async (e) => {
         e.preventDefault();
-        const avatars = ['🌊', '🔥', '🌙', '⭐', '🌿', '🎯', '💎', '🦊', '🐱', '🎵', '🚀', '💼', '🏠', '🎮', '🔒'];
+        const avatars = ['🔥', '🌙', '⭐', '🌿', '🎯', '💎', '🦊', '🐱', '🎵', '🚀', '💼', '🏠', '🎮', '🔒'];
         const action = await deps.showContextMenu(e.clientX, e.clientY, [
           { label: deps.t('rename'), action: 'rename' },
           { label: deps.t('chooseAvatar'), action: 'avatar' },

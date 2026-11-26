@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 
 describe('add-contact dialog keyboard submission', () => {
+  const INVITE_URL = 'https://breeze.example/?add=@alice';
   function form() {
     const nodes = new Map();
     const node = selector => {
@@ -20,13 +21,15 @@ describe('add-contact dialog keyboard submission', () => {
       return nodes.get(selector);
     };
     const dlg = { querySelector: node, close: vi.fn(), remove: vi.fn() };
-    const dispatch = vi.fn();
+    const dispatch = vi.fn(), setHTML = vi.fn(), qrCanvas = {};
+    const generateQR = vi.fn(() => qrCanvas), invite = vi.fn(() => ({ url: INVITE_URL, msg: 'INVITE-MSG' }));
+    globalThis.__breezeQR = { generateQR };
     const start = html.indexOf('function _showAddContactPanel(');
     const source = html.slice(start, html.indexOf('async function resolveAndAdd(', start));
-    new Function('_makeDialog', 'safeSetHTML', 'esc', 't', '_showDialog', '_wireDialogDismiss', '_deviceScanButton', '_dispatchAddInput', 'shareInvite', source + '\n_showAddContactPanel();')(
-      () => [dlg, 'title'], vi.fn(), s => s, s => s, vi.fn(), vi.fn(), vi.fn(), dispatch, vi.fn(),
+    new Function('_makeDialog', 'safeSetHTML', 'esc', 't', '_showDialog', '_wireDialogDismiss', '_deviceScanButton', '_dispatchAddInput', 'shareInvite', 'generateInviteMessage', source + '\n_showAddContactPanel();')(
+      () => [dlg, 'title'], setHTML, s => s, s => s, vi.fn(), vi.fn(), vi.fn(), dispatch, vi.fn(), invite,
     );
-    return { node, dlg, dispatch };
+    return { node, dlg, dispatch, setHTML, qrCanvas, generateQR, invite };
   }
 
   it.each([
@@ -43,6 +46,20 @@ describe('add-contact dialog keyboard submission', () => {
     expect(dispatch).toHaveBeenCalledOnce();
     expect(dispatch).toHaveBeenCalledWith(expected);
     expect(event.preventDefault.mock.invocationCallOrder[0]).toBeLessThan(dlg.close.mock.invocationCallOrder[0]);
+  });
+
+  it('shows the existing invite QR payload and link inside the dialog', () => {
+    const { node, setHTML, qrCanvas, generateQR, invite } = form();
+    expect(invite).toHaveBeenCalledOnce();
+    expect(generateQR).toHaveBeenCalledOnce();
+    expect(generateQR).toHaveBeenCalledWith(INVITE_URL);
+    expect(qrCanvas.className).toBe('qr-code');
+    expect(node('.qr-slot').appendChild).toHaveBeenCalledWith(qrCanvas);
+    const markup = setHTML.mock.calls[0][1];
+    expect(markup).toContain('qr-modal add-invite-qr');
+    expect(markup).toContain('addInviteQrHint');
+    expect(markup).toContain('qr-url');
+    expect(markup).toContain(INVITE_URL);
   });
 
   it('keeps an empty group open and ignores non-submit keys', () => {
@@ -99,11 +116,11 @@ describe('add-contact surface wiring (deployed inline)', () => {
   });
 
   it('the new strings exist in English and Japanese', () => {
-    for (const key of ['addContactTitle', 'addBtn']) {
+    for (const key of ['addContactTitle', 'addBtn', 'addInviteQrHint']) {
       expect(html, `en ${key}`).toContain(key + ':');
     }
     const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
-    for (const key of ['addContactTitle', 'addBtn']) {
+    for (const key of ['addContactTitle', 'addBtn', 'addInviteQrHint']) {
       expect(typeof ja[key], `ja ${key}`).toBe('string');
     }
   });

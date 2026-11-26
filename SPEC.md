@@ -400,12 +400,12 @@ utility names are legacy hooks rather than literal measurements — for example
   account tabs, folder/label filters, search and the self card; the
   conversation pane owns the header, message log and composer.
 - **Bottom tab bar (mobile)**: at ≤640px in the list view, a tab bar with five
-  possible tabs (chats / calls / contacts / my card / settings) is shown. It is
+  possible tabs (chats / calls / contacts / profile / settings) is shown. It is
   `role="navigation"` with `aria-current` on the active tab. Chats and Contacts
   are two modes of the sidebar list (`_listTab`: chats keeps recency order plus
   folder/label filters; contacts shows friends only — no groups, no archived —
   in name order), Calls is a third list mode owned by the call-history module,
-  My card opens the profile panel, and Settings opens the settings view;
+  Profile opens the profile panel, and Settings opens the settings view;
   selection state follows whichever entry point opened the screen. The Chats
   tab carries the total unread-count badge and the Calls tab carries the unseen
   missed-call badge. Which optional tabs are shown is a per-tab Settings choice
