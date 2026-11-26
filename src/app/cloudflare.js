@@ -56,6 +56,7 @@ const emptySetup = () => ({ state: 'idle', step: '', reason: '', serverUrl: '' }
 export function createCloudflareLink(D) {
   const { t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet } = D;
   const cfFetch = D.fetch || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
+  const apiBase = typeof D.proxyBase === 'string' && D.proxyBase ? D.proxyBase.replace(/\/+$/, '') : CF_API;
   const wired = new WeakSet();
   let observer = null;
   let view = { kind: 'none', hasToken: false, accounts: [], tokenStatus: '', reason: '', setup: emptySetup(), deployment: null };
@@ -251,7 +252,7 @@ export function createCloudflareLink(D) {
     if (opts.body !== undefined) init.body = opts.body;
     let resp;
     try {
-      resp = await cfFetch(CF_API + path, init);
+      resp = await cfFetch(apiBase + path, init);
     } catch {
       return { errorKey: 'cfErrNetwork' };
     }
