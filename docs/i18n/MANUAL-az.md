@@ -24,8 +24,6 @@ Bu təlimat istifadəyə başlayanlar üçün bələdçidir.
 
 Hər fayla yoxlama rəqəmi (SHA256SUMS.txt) əlavə olunub. İstəsəniz, yüklədiyiniz faylın rəqəminin uyğun gəlib-gəlmədiyini yoxlaya bilərsiniz.
 
-> **Nümunə səhifəsi haqqında**: Necə işlədiyini yoxlamaq üçün nümunə (https://breeze-469.pages.dev/) təqdim olunur. Orada yerləşdirilən eyni proqramdır, lakin nümunə xəbərdarlıq edilmədən dəyişə və ya dayana bilər. Həqiqi istifadə üçün öz serverinizə yerləşdirdiyiniz nüsxədən istifadə edin. Nümunə dayansa, öz serverinizə yerləşdirdiyiniz təsirlənmir.
-
 ### İlkin quraşdırma
 
 1. Tətbiqi açın.
@@ -233,7 +231,6 @@ Yeniləmə zamanı xəta baş verərsə (fayl yoxlaması uyğun gəlməzsə və 
 | Zəng yoxlama kodu uyğun gəlmir | Zəngi kəsin və yenidən zəng edin. Uyğun gəlmədiyi halda davam etməyin. |
 | Parol ifadəsini unutmusunuz | Bərpa mümkün deyil. Yeni şəxsiyyət yaradın və qarşı tərəfə yenidən bildirin. |
 | Cihazı itirmisiniz | Ehtiyat nüsxəniz varsa, yeni cihazda bərpa edə bilərsiniz. Yoxdursa, yeni şəxsiyyət yaranır. |
-| Nümunə səhifəsi açılmır | Nümunə xəbərdarlıq edilmədən dayana bilər. Zəhmət olmasa öz serverinizə yerləşdirdiyiniz nüsxədən istifadə edin. |
 
 Xəta hesabatlarını [Issue səhifəsinə](https://github.com/shizukutanaka/Breeze/issues) göndərin.
 

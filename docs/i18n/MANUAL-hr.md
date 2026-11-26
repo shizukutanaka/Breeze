@@ -24,8 +24,6 @@ Sa [stranice za preuzimanje](https://github.com/shizukutanaka/Breeze/releases/la
 
 Svakoj je datoteci priložen broj za provjeru (SHA256SUMS.txt). Ako želite, možete provjeriti podudara li se broj preuzete datoteke.
 
-> **O uzornoj stranici**: Uzorak za provjeru kako radi (https://breeze-469.pages.dev/) je osiguran. Tamo je postavljen isti softver, ali uzorak se može promijeniti ili zaustaviti bez najave. Za pravu uporabu koristite kopiju postavljenu na svoj poslužitelj. Kopija postavljena na vaš poslužitelj ne trpi posljedice ako se uzorak zaustavi.
-
 ### Prvo postavljanje
 
 1. Otvorite aplikaciju.
@@ -233,7 +231,6 @@ Ako tijekom ažuriranja dođe do pogreške (npr. provjera datoteke se ne podudar
 | Kod za provjeru poziva se ne podudara | Prekinite poziv i nazovite ponovno. Ne nastavljajte dok se ne podudara. |
 | Zaboravili ste lozinku | Oporavak nije moguć. Napravite novi identitet i ponovno obavijestite drugu stranu. |
 | Izgubili ste uređaj | Ako imate sigurnosnu kopiju, možete oporaviti na novom uređaju. Ako je nemate, postaje novi identitet. |
-| Uzorna stranica se ne otvara | Uzorak se može zaustaviti bez najave. Koristite kopiju postavljenu na svoj poslužitelj. |
 
 Prijave pogrešaka šaljite na [stranicu Issue](https://github.com/shizukutanaka/Breeze/issues).
 

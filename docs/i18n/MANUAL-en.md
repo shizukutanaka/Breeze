@@ -24,8 +24,6 @@ Choose the one that matches your machine from the [download page](https://github
 
 Each file comes with a checksum (SHA256SUMS.txt). If you are concerned, you can check that the checksum of the file you downloaded matches.
 
-> **About the sample page**: A sample for checking how it works (https://breeze-469.pages.dev/) is provided. What is hosted there is the same software, but the sample may change or stop without notice. For real use, please use a copy hosted on your own server. A copy hosted on your own server is not affected if the sample stops.
-
 ### First setup
 
 1. Open the app.
@@ -233,7 +231,6 @@ If something fails during the update (for example, the file check does not match
 | The call verification codes do not match | End the call and call again. Do not continue while they do not match. |
 | You forgot the passphrase | Recovery is impossible. Create a new identity and tell your contacts again. |
 | You lost your device | If you have a backup, you can recover on a new device. If not, it will be a new identity. |
-| The sample page does not open | The sample may stop without notice. Please use a copy hosted on your own server. |
 
 Please report bugs to the [Issues page](https://github.com/shizukutanaka/Breeze/issues).
 

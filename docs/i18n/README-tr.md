@@ -18,7 +18,6 @@ Breeze'in bir "işletmeci şirket sunucusu" yoktur. **Kullanmak için, barındı
 
 - Standart kurulum Cloudflare kullanır, bu yüzden **bir Cloudflare hesabı gereklidir**. Yöntem, [kurulum kılavuzunda](SELF_HOSTING-tr.md) yer alır (diğer dillerdeki sürümler kılavuzun başından seçilebilir).
 - Uygulamayı (Windows / Mac / Linux / Android / iPhone) [indirme sayfasından](https://github.com/shizukutanaka/Breeze/releases/latest) alır ve kendi sunucunuza bağlanarak kullanırsınız.
-- **Örnek kurulum hakkında (dürüst bir bilgilendirme)**: Çalışmayı kontrol etmek için bir örnek (https://breeze-469.pages.dev/) yerleştirdik. Orada aynı yazılım çalışıyor, ancak gerçek kullanım için lütfen kendi sunucunuzu kullanın. Örnek, önceden haber verilmeden değişebilir veya durabilir. Kendi sunucunuza kurduğunuz kopya, örneğin durmasından etkilenmez.
 
 Ayrıntılı kullanım, [kullanım kılavuzunda](MANUAL-tr.md) yer alır (diğer dillerdeki sürümler kılavuzun başından seçilebilir).
 

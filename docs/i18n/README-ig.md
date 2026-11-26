@@ -18,7 +18,6 @@ Breeze enweghị "sava ụlọ ọrụ". **Iji jiri ya, gị onwe gị ga-enye e
 
 - Ntọala ọkọlọtọ na-eji Cloudflare, ya mere **a chọrọ akaụntụ Cloudflare**. Usoro ndị a dị n'ime [akwụkwọ nduzi nwụnye](SELF_HOSTING-ig.md) (ị nwere ike ịhọrọ asụsụ ndị ọzọ site na mbido akwụkwọ nduzi ahụ).
 - Were ngwa ahụ (Windows / Mac / Linux / Android / iPhone) site na [ibe nbudata](https://github.com/shizukutanaka/Breeze/releases/latest), jikọọ ya na sava nke gị, ma jiri ya.
-- **Banyere ihe atụ ngosi (ọkwa eziokwu)**: Anyị etinyela ihe atụ ngosi (https://breeze-469.pages.dev/) maka nnwale ọrụ. Ihe dị n'ime ya bụ otu ngwanrọ ahụ, mana maka ojiji n'ezie, biko jiri sava nke gị. Ihe atụ ahụ nwere ike ịgbanwe ma ọ bụ kwụsị na-enweghị ọkwa mbụ. Ihe ị tinyere na sava nke gị agaghị emetụta site na nkwụsị ihe atụ ahụ.
 
 Nkọwa ojiji zuru oke dị n'ime [akwụkwọ ntuziaka](MANUAL-ig.md) (ị nwere ike ịhọrọ asụsụ ndị ọzọ site na mbido akwụkwọ ntuziaka ahụ).
 

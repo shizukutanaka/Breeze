@@ -24,8 +24,6 @@ Velg filen som passer til enheten din på [nedlastingssiden](https://github.com/
 
 Hver fil leveres med en kontrollsum (SHA256SUMS.txt). Hvis du er bekymret, kan du kontrollere at summen for filen du lastet ned, stemmer.
 
-> **Om eksempelsiden**: Et eksempel for å sjekke hvordan det fungerer (https://breeze-469.pages.dev/) er tilgjengelig. Det som ligger der, er den samme programvaren, men eksemplet kan endres eller stoppes uten varsel. Bruk en kopi du har plassert på din egen server til virkelig bruk. En kopi på din egen server påvirkes ikke hvis eksemplet stoppes.
-
 ### Første oppsett
 
 1. Åpne appen.
@@ -233,7 +231,6 @@ Hvis noe går galt under oppdateringen (for eksempel at filkontrollen ikke stemm
 | Bekreftelseskoden for samtalen stemmer ikke | Legg på og ring på nytt. Ikke fortsett mens den ikke stemmer. |
 | Glemt passfrasen | Gjenoppretting er umulig. Opprett en ny identitet og gi kontaktene dine beskjed på nytt. |
 | Mistet enheten | Hvis du har en sikkerhetskopi, kan du gjenopprette på en ny enhet. Hvis ikke, blir det en ny identitet. |
-| Eksempelsiden åpnes ikke | Eksemplet kan stoppes uten varsel. Bruk en kopi du har plassert på din egen server. |
 
 Rapporter feil på [issue-siden](https://github.com/shizukutanaka/Breeze/issues), takk.
 

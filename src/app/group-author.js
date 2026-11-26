@@ -112,8 +112,10 @@ export function createGroupAuthor(D) {
     try { return await next; } finally { if (locks.get(key) === next) locks.delete(key); }
   }
   const policyKey = gid => 'ga-policy:' + gid;
-  async function pinned(pub) {
+  async function pinned(pub, root) {
     if (pub === D.pub()) return D.sigPub();
+    const certified = await D.devicePin?.(pub, root);
+    if (certified) return certified;
     const contact = await D.get('contacts', pub.slice(0, 12));
     if (contact?.pubB64 === pub) return contact.sigPub || null;
     const account = await D.get('identity', 'account');
@@ -128,6 +130,7 @@ export function createGroupAuthor(D) {
     if (state.strict) return state;
     const group = await D.get('contacts', groupId);
     if (!group?.isGroup || !group.members?.length || !D.supported()) return state;
+    if (D.authorized && !await D.authorized(group)) return state;
     const others = group.members.filter(m => m.pubB64 !== D.pub());
     const caps = [];
     for (const member of others) {
@@ -141,10 +144,25 @@ export function createGroupAuthor(D) {
     return state;
   }
   const policy = groupId => serial('policy:' + groupId, () => readPolicy(groupId));
+  let refreshing = null, inputsDirty = false;
+  function inputsChanged(store, key) {
+    if (store !== 'contacts' && !(store === 'identity' && (key === 'account' || key === 'signing' || /^(verify:|ga-policy:)/.test(key)))) return Promise.resolve();
+    inputsDirty = true;
+    if (!refreshing) refreshing = Promise.resolve().then(async () => {
+      try {
+        while (inputsDirty) {
+          inputsDirty = false;
+          for (const group of await D.all('contacts')) if (group.isGroup) await policy(group.id);
+        }
+      } finally { refreshing = null; }
+    });
+    return refreshing;
+  }
   async function capability(groupId) {
     if (!D.supported()) return {};
     const group = await D.get('contacts', groupId);
     if (!group?.isGroup || !group.members?.length) return {};
+    if (D.authorized && !await D.authorized(group)) return {};
     const bytes = await D.sign(capabilityTranscript(groupId, D.pub()));
     if (!bytes) return {};
     return { authorCaps: [GROUP_AUTHOR_CAP], authorCapSig: base64(bytes) };
@@ -171,6 +189,11 @@ export function createGroupAuthor(D) {
     } catch (e) { D.dbg(e, 'group author capability'); }
   }
   async function prepareKey(groupId, stored) {
+    const group = await D.get('contacts', groupId);
+    const rotated = await D.revocationKey?.(group, stored);
+    if (rotated && rotated !== stored) {
+      await put('gsk:' + groupId, rotated); needsDistribution.add(groupId); stored = rotated;
+    }
     const strict = (await policy(groupId)).strict === true;
     if (!strict && stored.v === 5 && await D.legacyFormat?.(groupId)) {
       if (!uint32(stored.epoch) || stored.epoch === 0xFFFFFFFF) throw new Error('group legacy rotation unavailable');
@@ -183,18 +206,21 @@ export function createGroupAuthor(D) {
     const key = stored.v === 5
       ? { v: 5, chainKey: bytes, skipped: {}, epoch: stored.epoch + 1, counter: 0, authorSigV: 1 }
       : { raw: bytes, epoch: stored.epoch + 1, counter: 0, authorSigV: 1 };
+    if (stored.deviceEpochs) key.deviceEpochs = stored.deviceEpochs;
     await put('gsk:' + groupId, key);
     needsDistribution.add(groupId);
     return key;
   }
   async function sign(groupId, payload) {
     const strict = (await policy(groupId)).strict === true;
+    if (D.authorized && !await D.authorized(await D.get('contacts', groupId))) { if (strict) throw new Error('uncertified device group author'); return {}; }
     if (!D.supported()) { if (strict) throw new Error('strict group signing unavailable'); return {}; }
     if (!strict) {
       const group = await D.get('contacts', groupId);
       if (!group?.isGroup || !D.negotiate([GROUP_AUTHOR_CAP], (group.members || []).filter(m => m.pubB64 !== D.pub()).map(m => m.caps)).useAuthorSig) return {};
     }
     const p = payloadNumbers(payload), cacheKey = D.pub() + ':' + groupId + ':' + payload;
+    if ((await D.get('identity', 'gsk:' + groupId))?.epoch > p.ep) throw new Error('revoked sender key epoch');
     if (signatures.has(cacheKey)) return signatures.get(cacheKey);
     const bytes = await D.sign(groupAuthorTranscript(groupId, D.pub(), p.ep, p.c, payload));
     if (!bytes) throw new Error('group author signing failed');
@@ -215,8 +241,10 @@ export function createGroupAuthor(D) {
           msg.from === msg.fromPub.slice(0, 12) && (group.members || []).some(m => m.pubB64 === msg.acctRoot) &&
           await D.attributeDevice(msg.acctRoot, msg.fromPub)) author = msg.fromPub;
       if (!author) return;
+      const deviceRoot = member ? undefined : msg.acctRoot;
+      if (D.allowed && await D.allowed(author, deviceRoot) === false) return;
       const hasSignature = msg.authorSig !== undefined || msg.authorSigV !== undefined;
-      if (hasSignature && !await verifyGroupAuthor(msg.groupId, author, msg.payload, msg.authorSigV, msg.authorSig, await pinned(author))) return;
+      if (hasSignature && !await verifyGroupAuthor(msg.groupId, author, msg.payload, msg.authorSigV, msg.authorSig, await pinned(author, deviceRoot))) return;
       if (!hasSignature && (await policy(msg.groupId)).strict) return;
       return await serial('receive:' + msg.groupId + ':' + author, async () => {
         const p = hasSignature ? payloadNumbers(msg.payload) : null;
@@ -248,5 +276,14 @@ export function createGroupAuthor(D) {
     await D.distribute(gid);
     needsDistribution.delete(gid);
   }
-  return { sign, receive, capability, bindCapability, prepareKey, policy, ensureDistributed, supported: D.supported, withKey: (gid, work) => serial('key:' + gid, work), withSend: (gid, work) => serial('send:' + gid, work) };
+  async function rotate(gid) {
+    return serial('send:' + gid, async () => {
+      const next = await serial('key:' + gid, async () => {
+        const stored = await D.get('identity', 'gsk:' + gid);
+        return stored ? prepareKey(gid, stored) : null;
+      });
+      if (next) await ensureDistributed(gid, next);
+    });
+  }
+  return { sign, receive, capability, bindCapability, prepareKey, policy, inputsChanged, ensureDistributed, rotate, supported: D.supported, withKey: (gid, work) => serial('key:' + gid, work), withSend: (gid, work) => serial('send:' + gid, work) };
 }

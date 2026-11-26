@@ -24,8 +24,6 @@ A [letöltési oldalról](https://github.com/shizukutanaka/Breeze/releases/lates
 
 Minden fájlhoz tartozik egy ellenőrző szám (SHA256SUMS.txt). Aki aggódik, ellenőrizheti, hogy a letöltött fájl száma egyezik-e.
 
-> **A mintáról**: A működés kipróbálására szolgáló minta (https://breeze-469.pages.dev/) rendelkezésre áll. Az ott lévő ugyanaz a szoftver, de a minta előzetes értesítés nélkül megváltozhat vagy leállhat. Valódi használatra a saját szerverére telepített példányt használja. A saját szerverén lévő példányt a minta leállása nem érinti.
-
 ### Első beállítás
 
 1. Nyissa meg az alkalmazást.
@@ -233,7 +231,6 @@ Ha a frissítés közben hiba történik (például az ellenőrző szám nem egy
 | A hívás ellenőrző kódja nem egyezik | Bontsa a hívást, és hívjon újra. Ne folytassa egyezés nélkül. |
 | Elfelejtette a jelmondatot | A visszaállítás nem lehetséges. Hozzon létre új személyazonosságot, és értesítse újra a másik felet. |
 | Elvesztette az eszközt | Ha van biztonsági mentés, új eszközön helyreállítható. Ha nincs, új személyazonosság lesz. |
-| A mintaoldal nem nyílik meg | A minta előzetes értesítés nélkül leállhat. A saját szerverére telepített példányt használja. |
 
 A hibajelentéseket az [Issues oldalra](https://github.com/shizukutanaka/Breeze/issues) kérjük küldeni.
 

@@ -18,7 +18,6 @@ Breeze'da «operator kompaniya serveri» yo'q. **Ishlatish uchun joylashtirish j
 
 - Standart joylashtirish Cloudflare'dan foydalanadi, shuning uchun **Cloudflare hisobi kerak**. Qadamlar [joylashtirish qo'llanmasida](SELF_HOSTING-uz.md) (boshqa tillarni qo'llanma boshidan tanlashingiz mumkin) berilgan.
 - Ilovalarni (Windows / Mac / Linux / Android / iPhone) [yuklab olish sahifasidan](https://github.com/shizukutanaka/Breeze/releases/latest) olib, o'z serveringizga ulanib ishlatasiz.
-- **Namunaviy joylashtirish haqida (halol ogohlantirish)**: Ishlashini tekshirish uchun namuna (https://breeze-469.pages.dev/) joylashtirilgan. U yerda ham xuddi shu dasturiy ta'minot, lekin haqiqiy foydalanish uchun o'z serveringizdan foydalaning. Namuna ogohlantirishsiz o'zgarishi yoki to'xtashi mumkin. O'z serveringizga joylashtirganingiz namunaning to'xtashidan ta'sirlanmaydi.
 
 Batafsil foydalanish [qo'llanmada](MANUAL-uz.md) (boshqa tillarni qo'llanma boshidan tanlashingiz mumkin) berilgan.
 

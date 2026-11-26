@@ -18,7 +18,6 @@ Breeze har ingen "företagsserver". **För att använda Breeze tillhandahåller 
 
 - Standardinstallationen använder Cloudflare, så **ett Cloudflare-konto krävs**. Anvisningarna finns i [installationsguiden](SELF_HOSTING-sv.md) (versioner på andra språk kan väljas i början av guiden).
 - Hämta appen (Windows / Mac / Linux / Android / iPhone) från [nedladdningssidan](https://github.com/shizukutanaka/Breeze/releases/latest) och använd den ansluten till din egen server.
-- **Om exempeldistributionen (ett ärligt meddelande)**: Det finns ett exempel för att kontrollera att det fungerar (https://breeze-469.pages.dev/). Det som är placerat där är samma programvara, men använd din egen server för verklig användning. Exemplet kan ändras eller stoppas utan förvarning. En Breeze som du har placerat på din egen server påverkas inte om exemplet stoppas.
 
 Mer detaljerade anvisningar finns i [manualen](MANUAL-sv.md) (versioner på andra språk kan väljas i början av manualen).
 

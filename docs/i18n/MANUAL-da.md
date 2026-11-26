@@ -24,8 +24,6 @@ Vælg den fil på [downloadsiden](https://github.com/shizukutanaka/Breeze/releas
 
 Hver fil leveres med en kontrolsum (SHA256SUMS.txt). Hvis du er bekymret, kan du kontrollere, at summen for den fil, du har downloadet, stemmer.
 
-> **Om eksempelsiden**: Et eksempel til at tjekke, hvordan det virker (https://breeze-469.pages.dev/), er stillet til rådighed. Det, der ligger der, er den samme software, men eksemplet kan ændre sig eller stoppe uden varsel. Brug til virkelig brug en version, du har placeret på din egen server. En version på din egen server påvirkes ikke, hvis eksemplet stopper.
-
 ### Første opsætning
 
 1. Åbn appen.
@@ -233,7 +231,6 @@ Hvis noget går galt under opdateringen (f.eks. at filkontrollen ikke stemmer), 
 | Opkaldets bekræftelseskode stemmer ikke | Læg på, og ring op igen. Fortsæt ikke, mens den ikke stemmer. |
 | Glemt adgangsfrasen | Gendannelse er umulig. Opret en ny identitet, og giv dine kontakter besked igen. |
 | Mistet enheden | Hvis du har en sikkerhedskopi, kan du gendanne på en ny enhed. Hvis ikke, bliver det en ny identitet. |
-| Eksempelsiden åbner ikke | Eksemplet kan stoppe uden varsel. Brug en version, du har placeret på din egen server. |
 
 Rapportér venligst fejl på [issue-siden](https://github.com/shizukutanaka/Breeze/issues).
 

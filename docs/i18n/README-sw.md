@@ -18,7 +18,6 @@ Breeze haina "seva ya kampuni". **Ili kuitumia, wewe mwenyewe unatayarisha mahal
 
 - Usanidi wa kawaida hutumia Cloudflare, kwa hiyo **akaunti ya Cloudflare inahitajika**. Hatua ziko katika [mwongozo wa usakinishaji](SELF_HOSTING-sw.md) (matoleo ya lugha nyingine yanaweza kuchaguliwa kutoka mwanzo wa mwongozo).
 - Programu (Windows / Mac / Linux / Android / iPhone) zinachukuliwa kutoka [ukurasa wa kupakua](https://github.com/shizukutanaka/Breeze/releases/latest), na kuunganishwa na seva yako mwenyewe ili kuzitumia.
-- **Kuhusu usakinishaji wa mfano (taarifa ya ukweli)**: Kuna mfano uliowekwa kwa ajili ya kuthibitisha utendaji (https://breeze-469.pages.dev/). Programu iliyowekwa ni ile ile, lakini kwa matumizi halisi, tafadhali tumia seva yako mwenyewe. Mfano unaweza kubadilika au kusimama bila taarifa. Ulichoweka kwenye seva yako mwenyewe hakiathiriwi na kusimama kwa mfano.
 
 Maelezo ya kina ya matumizi yako katika [mwongozo](MANUAL-sw.md) (matoleo ya lugha nyingine yanaweza kuchaguliwa kutoka mwanzo wa mwongozo).
 
