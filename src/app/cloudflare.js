@@ -132,7 +132,9 @@ export function createCloudflareLink(D) {
     if (verifyBtn) verifyBtn.disabled = busy || disconnected;
     if (setupBtn) {
       setupBtn.disabled = busy || disconnected;
-      setupBtn.textContent = view.deployment ? t('cfUpdate') : t('cfSetup');
+      const label = setupBtn.querySelector?.('.settings-row-label');
+      if (label) label.textContent = view.deployment ? t('cfUpdate') : t('cfSetup');
+      else setupBtn.textContent = view.deployment ? t('cfUpdate') : t('cfSetup');
     }
     if (disconnectBtn) disconnectBtn.disabled = busy || disconnected;
   }

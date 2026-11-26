@@ -46,6 +46,7 @@ import {
 } from '../_worker.js';
 import { makeEnv, apiRequest } from './helpers/mockKV.js';
 import { createBackupTools } from '../src/app/backup.js';
+const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -443,11 +444,11 @@ describe('wiring (index.html / locales)', () => {
     expect(html).toContain('flushAutoBackup();');
   });
   it('settings carries the toggle, status line, arm button and migration entry', () => {
-    expect(html).toContain('data-setting="auto-backup"');
+    expect(settingsPanelSrc).toContain("check('auto-backup'");
     expect(html).toContain("if (s === 'auto-backup') { _settings.autoBackup = cb.checked; saveSettings(); return; }");
-    expect(html).toContain('data-autobackup-status');
-    expect(html).toContain('data-action="autobackup-arm"');
-    expect(html).toContain('data-action="migrate-device"');
+    expect(settingsPanelSrc).toContain('data-autobackup-status');
+    expect(settingsPanelSrc).toContain("action('autobackup-arm'");
+    expect(settingsPanelSrc).toContain("action('migrate-device'");
     expect(html).toContain('autoBackup: true,');
   });
   it('phrase restore marks the account just-recovered (both paths)', () => {

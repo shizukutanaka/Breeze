@@ -27,6 +27,8 @@ import { readFileSync } from 'node:fs';
 //      list, so it scrolls away instead of pinning screen height.
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const profileSrc = readFileSync(new URL('../src/app/profile.js', import.meta.url), 'utf8');
+const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
+const accountTabsSrc = readFileSync(new URL('../src/app/account-tabs.js', import.meta.url), 'utf8');
 const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
 
 function sliceBetween(startMarker, endMarker) {
@@ -77,9 +79,10 @@ describe('(a) settings is a dedicated view with history', () => {
     const fn = sliceBetween('function _renderSettingsPanel(d)', 'function openSettingsView()');
     expect(fn).not.toContain('_cmdPanelEl');
     expect(fn).not.toContain('box.appendChild');
-    // The panel content itself survived the move (privacy + backup rows).
-    expect(fn).toContain("data-setting=\"hide-rr\"");
-    expect(fn).toContain('data-action="backup"');
+    // The panel content itself survived the move (privacy + backup rows);
+    // after the stage-4 extraction that markup lives in the module.
+    expect(settingsPanelSrc).toContain("check('hide-rr'");
+    expect(settingsPanelSrc).toContain("action('backup'");
   });
 
   it('settings has no add-account button (the tab bar is the one door)', () => {
@@ -161,7 +164,9 @@ describe('(d) first-contact backup nudge and the always-visible account door', (
   });
 
   it('the account tab bar renders for a single account', () => {
-    const fn = sliceBetween('function renderAccountTabs()', '// Cross-account unread tracking');
+    // renderAccountTabs moved to src/app/account-tabs.js (modularization);
+    // slice the module source with the same markers.
+    const fn = accountTabsSrc.slice(accountTabsSrc.indexOf('function renderAccountTabs()'), accountTabsSrc.indexOf('return { renderAccountTabs }'));
     expect(fn).toContain('if (!accs.length) return;');
     expect(fn).not.toContain('accs.length <= 1');
     expect(fn).toContain("addBtn.className = 'acc-add'");

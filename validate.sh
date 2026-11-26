@@ -219,6 +219,10 @@ LINES=$(wc -l < index.html)
 # step 3 crossed it a tenth time; a tenth pass (the TURN credential
 # fetcher into turn.js, the call sampler into the p2p-stats
 # factory) landed it at 15,999.
+# 2026-11-26: the showroom mock merge crossed it an eleventh time; an
+# eleventh pass (renderAccountTabs into account-tabs.js as a factory,
+# container creation kept in index.html for the dead-wiring gate)
+# landed it at 15,935.
 if [ "$LINES" -lt 12000 ]; then pass "Total lines: $LINES (<12K)" 5
 elif [ "$LINES" -lt 16000 ]; then warn "Total lines: $LINES (12-16K)" 5
 else fail "Total lines: $LINES (≥16K) — reduction pass required (see ceiling note above)" 5; fi

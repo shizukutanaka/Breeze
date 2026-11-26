@@ -175,7 +175,7 @@ describe('delivery states differ by shape, not only by color or opacity', () => 
   });
 
   it('failed is a filled chip, unlike any check state', () => {
-    expect(ruleBody('.msg-status.failed')).toContain('background: var(--r)');
+    expect(ruleBody('.msg-status.failed')).toContain('background: var(--danger)');
   });
 
   it('no .msg-status rule dims by opacity any more', () => {

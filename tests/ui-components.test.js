@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 // one HTML file plus runtime ESM modules, so the class contract lives in
 // those sources rather than in a browser-only component tree.
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+const accountTabsSrc = readFileSync(new URL('../src/app/account-tabs.js', import.meta.url), 'utf8');
 
 const SRC_DIR = fileURLToPath(new URL('../src', import.meta.url));
 function walk(dir) {
@@ -58,7 +59,8 @@ describe('unified badge component', () => {
       expect(deployedClassLists.some(({ tokens }) => tokens.includes(modifier)), `${modifier} is used`).toBe(true);
     }
     expect(html).toContain('class="bdg bdg-row"');
-    expect(html).toContain("badge.className = 'bdg bdg-acc';");
+    // the account tab bar lives in src/app/account-tabs.js (modularization)
+    expect(accountTabsSrc).toContain("badge.className = 'bdg bdg-acc';");
   });
 });
 

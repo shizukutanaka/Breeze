@@ -386,6 +386,7 @@ export function createGroupCallManager(D) {
   }
 
   async function start(group) {
+    if (globalThis.__breezeMock?.enabled?.()) { showToast(t('mockUnavailable'), 'info'); return; }
     if (_state !== 'idle' || !group?.isGroup || D.isBusy()) return;
     const callId = acctId() + ':' + Date.now().toString(36);
     const ok = await _sendControl(group, { gctl: 'invite', callId, seat: 1, dev: D.myPubB64() });

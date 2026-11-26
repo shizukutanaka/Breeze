@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCloudflareLink, CLOUDFLARE_LINK_KEY } from '../src/app/cloudflare.js';
+import { settingsPanelHtml } from '../src/app/settings-panel.js';
 import worker from '../_worker.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -666,11 +667,10 @@ describe('cloudflare linking wiring', () => {
     expect(html).toContain('globalThis.__breezeCloudflare?.createCloudflareLink({ t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet:');
     expect(html).toContain("proxyBase: (API || (location.origin + '/api')) + '/cf-proxy'");
     expect(html).toContain('onServerReady:');
-    expect(html).toContain('data-action="cloudflare-quickstart"');
-    expect(html).toContain('data-action="cloudflare-save"');
-    expect(html).toContain('data-action="cloudflare-verify"');
-    expect(html).toContain('data-action="cloudflare-setup"');
-    expect(html).toContain('data-action="cloudflare-disconnect"');
+    const panel = settingsPanelHtml({ t: (key) => key, esc: (x) => String(x), myName: '', fanout: 2, powerMode: 'auto', relays: [] });
+    for (const action of ['cloudflare-quickstart', 'cloudflare-save', 'cloudflare-verify', 'cloudflare-setup', 'cloudflare-disconnect']) {
+      expect(panel).toContain(`data-action="${action}"`);
+    }
     expect(sw).toContain("'/src/app/cloudflare.js'");
   });
 });

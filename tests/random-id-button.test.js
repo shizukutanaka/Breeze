@@ -26,6 +26,7 @@ import { createProfileUI } from '../src/app/profile.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
 const profileSrc = readFileSync(join(HERE, '..', 'src', 'app', 'profile.js'), 'utf8');
+const settingsPanelSrc = readFileSync(join(HERE, '..', 'src', 'app', 'settings-panel.js'), 'utf8');
 const ja = JSON.parse(readFileSync(join(HERE, '..', 'locales', 'ja.json'), 'utf8'));
 const LOCALES = readdirSync(join(HERE, '..', 'locales')).filter(x => x.endsWith('.json'));
 const locale = (f) => JSON.parse(readFileSync(join(HERE, '..', 'locales', f), 'utf8'));
@@ -119,11 +120,10 @@ describe('setup copy — plain language, no key jargon', () => {
 // ── (4) display name from the settings view ─────────────────────────
 describe('settings view — display name editing shares the profile save path', () => {
   it('the settings panel renders a name field and a save button', () => {
-    const panel = sliceBetween('function _renderSettingsPanel(d)', 'function openSettingsView()');
-    expect(panel).toContain('class="field settings-name-input"');
-    expect(panel).toContain('data-action="save-display-name"');
-    expect(panel).toContain("t('yourDisplayName')");
-    expect(panel).toContain("value=\"${esc(myName)}\"");
+    expect(settingsPanelSrc).toContain('class="field settings-name-input"');
+    expect(settingsPanelSrc).toContain('data-action="save-display-name"');
+    expect(settingsPanelSrc).toContain("t('yourDisplayName')");
+    expect(settingsPanelSrc).toContain('value="${esc(v.myName)}"');
   });
 
   it('the save button delegates to the profile module — no second store', () => {
