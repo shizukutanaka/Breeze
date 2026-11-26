@@ -712,6 +712,87 @@ describe('power mode — presence tick conversation status', () => {
   });
 });
 
+// The heartbeat interval itself is wake-up cost: even when the tick body is
+// power-gated, a short self-rescheduling chain still wakes the CPU just to check
+// the gate. Extract the deployed schedulePresence verbatim and drive it with the
+// real power helpers, mutable visibility, and controllable timers.
+const presenceScheduleBlock = slice('    function schedulePresence() {', '\n    schedulePresence();');
+const createPresenceSchedule = new Function(
+  'document', 'CONFIG', 'setTimeout', 'clearTimeout', '_powerPresenceOff', '_powerPollFloorMs', 'beat', 'activeContact', 'updateConvStatus',
+  'let _presenceTimer = null;\n' + presenceScheduleBlock + '\nreturn schedulePresence;');
+
+function presenceScheduleHarness(settings, hidden = false) {
+  const power = create({ MIN: 60000 }, settings, {}, () => {});
+  const timers = [];
+  let nextTimer = 0;
+  const beat = vi.fn();
+  const updateConvStatus = vi.fn();
+  const schedule = createPresenceSchedule(
+    { hidden },
+    { PRESENCE_INTERVAL_MS: 30000, PRESENCE_BG_INTERVAL_MS: 120000 },
+    (fn, ms) => { timers.push({ fn, ms }); return ++nextTimer; },
+    vi.fn(),
+    power._powerPresenceOff,
+    power._powerPollFloorMs,
+    beat,
+    null,
+    updateConvStatus,
+  );
+  schedule();
+  return { beat, updateConvStatus, timers };
+}
+
+describe('power mode — presence heartbeat schedule floor', () => {
+  it('keeps the 30-second foreground and 120-second background intervals in normal mode', () => {
+    const foreground = presenceScheduleHarness({ powerMode: 'normal' });
+    expect(foreground.timers).toHaveLength(1);
+    expect(foreground.timers[0].ms).toBe(30000);
+
+    const background = presenceScheduleHarness({ powerMode: 'normal' }, true);
+    expect(background.timers).toHaveLength(1);
+    expect(background.timers[0].ms).toBe(120000);
+  });
+
+  it('floors the foreground interval at one minute in saver mode while background stays at two minutes', () => {
+    const foreground = presenceScheduleHarness({ powerMode: 'saver' });
+    expect(foreground.timers).toHaveLength(1);
+    expect(foreground.timers[0].ms).toBe(60000);
+
+    const background = presenceScheduleHarness({ powerMode: 'saver' }, true);
+    expect(background.timers).toHaveLength(1);
+    expect(background.timers[0].ms).toBe(120000);
+  });
+
+  it('floors foreground and background intervals at ten minutes in emergency mode', () => {
+    const foreground = presenceScheduleHarness({ powerMode: 'emergency' });
+    expect(foreground.timers).toHaveLength(1);
+    expect(foreground.timers[0].ms).toBe(600000);
+
+    const background = presenceScheduleHarness({ powerMode: 'emergency' }, true);
+    expect(background.timers).toHaveLength(1);
+    expect(background.timers[0].ms).toBe(600000);
+  });
+
+  it('keeps the chain alive outside normal mode and re-evaluates the interval after returning to normal', () => {
+    const settings = { powerMode: 'emergency' };
+    const h = presenceScheduleHarness(settings);
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(600000);
+
+    h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
+    expect(h.beat).not.toHaveBeenCalled();
+    expect(h.updateConvStatus).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    h.timers[1].fn();
+    expect(h.timers).toHaveLength(3);
+    expect(h.timers[2].ms).toBe(30000);
+    expect(h.beat).toHaveBeenCalledTimes(1);
+  });
+});
+
 // The Electron badge recount is display-only periodic DOM work, so its deployed
 // five-second timer must honour the same power gate as the browser tab-title recount.
 function electronBadgeStatement() {
