@@ -702,6 +702,7 @@
   "toastMin4Chars": "Мини 4 знаци",
   "toastLabelsClear": "Етикети",
   "toastInstalling": "Инсталирам...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze installed!",
   "toastWiped": "Уредот избришан оддалечено",
   "toastDbConflict": "Конфликт на верзијата на базата. Ве молам повторете.",
@@ -1130,5 +1131,7 @@
   "mockSeedB2": "Можам ли да се обидам да испратам порака?",
   "mockSeedB3": "Одговорите се генерираат локално по кратко задоцнување.",
   "mockSeedG1": "Добредојдовте во групата за примерок.",
-  "mockSeedG2": "Ова помага да покаже какви групни разговори изгледаат."
+  "mockSeedG2": "Ова помага да покаже какви групни разговори изгледаат.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

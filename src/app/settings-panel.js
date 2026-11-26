@@ -20,7 +20,7 @@ export function settingsPanelHtml(v) {
   const chevron = '<span class="settings-chevron" aria-hidden="true"></span>';
   const section = (title, body, extra = '', attrs = '') => `<section class="settings-section${extra}"${attrs}><h2>${esc(title)}</h2><div class="settings-card">${body}</div></section>`;
   const check = (setting, icon, label, checked) => `<div class="settings-row"><label class="settings-row-main i-cur">${ico(icon)}<span class="settings-row-label">${esc(label)}</span><input type="checkbox" data-setting="${setting}"${checked ? ' checked' : ''}></label></div>`;
-  const action = (act, icon, label, extra = '') => `<div class="settings-row settings-action-row${extra}" data-action-row="${act}"><button type="button" class="settings-action-main" data-action="${act}">${ico(icon)}<span class="settings-row-label">${esc(label)}</span>${chevron}</button></div>`;
+  const action = (act, icon, label, extra = '', id = '') => `<div class="settings-row settings-action-row${extra}" data-action-row="${act}"><button type="button" class="settings-action-main"${id ? ` id="${id}"` : ''} data-action="${act}">${ico(icon)}<span class="settings-row-label">${esc(label)}</span>${chevron}</button></div>`;
   const options = (pairs, selected) => pairs.map(([value, key]) => `<option value="${value}"${selected === value ? ' selected' : ''}>${esc(t(key))}</option>`).join('');
   const selectRow = (setting, icon, label, inner) => `<div class="settings-row"><label class="settings-row-main i-cur">${ico(icon)}<span class="settings-row-label">${esc(label)}</span><select data-setting="${setting}">${inner}</select></label></div>`;
   const validTabOrder = Array.isArray(v.tabOrder) && v.tabOrder.length === TAB_ORDER.length && TAB_ORDER.every((k) => v.tabOrder.includes(k));
@@ -37,6 +37,9 @@ export function settingsPanelHtml(v) {
   }).join('');
 
   const fanoutOpts = [1, 2, 3].map((n) => `<option value="${n}"${v.fanout === n ? ' selected' : ''}>${n}</option>`).join('');
+  const installStandalone = typeof window !== 'undefined' && ((typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) || window.navigator?.standalone);
+  const installElectron = typeof window !== 'undefined' && window.process?.versions?.electron;
+  const installRow = installStandalone || installElectron ? '' : action('install-app', 'arrow-down', t('settingsInstallApp'), '', 'settings-install-btn');
   const cloudflare = `<div class="settings-note">${esc(t('cfNote'))}</div><div class="settings-note">${esc(t('cfGuideText'))} <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer">${esc(t('cfCreateTokenLink'))}</a></div>`
     + `<div class="settings-row settings-row-stack"><label class="settings-row-main">${ico('lock')}<span class="settings-row-label">${esc(t('cfTokenLabel'))}</span><input type="password" class="field cloudflare-token-input" autocomplete="off" placeholder="${esc(t('cfTokenPlaceholder'))}"></label></div>`
     + action('cloudflare-quickstart', 'check', t('cfQuickSetup'))
@@ -47,6 +50,7 @@ export function settingsPanelHtml(v) {
     + '<div class="settings-status" data-cloudflare-status></div><div class="settings-status" data-cloudflare-setup-status></div>';
 
   return `<section class="settings-profile"><div class="settings-profile-card">${ico('user')}<label class="settings-profile-main"><span>${esc(t('yourDisplayName'))}</span><input type="text" class="field settings-name-input" maxlength="64" value="${esc(v.myName)}"></label><button type="button" class="btn btn-g btn-sm" data-action="save-display-name">${esc(t('profileSave'))}</button></div></section>`
+    + (installRow ? section(t('installBannerTitle'), installRow) : '')
     + section(t('settingsPrivacy'),
       check('hide-rr', 'lock', t('hideReadReceipts'), v.hideReadReceipts)
       + check('rr-delay', 'clock', t('rrDelayLabel'), v.readReceiptDelay)

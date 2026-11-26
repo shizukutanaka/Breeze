@@ -702,6 +702,7 @@
   "toastMin4Chars": "Min 4 caracteres",
   "toastLabelsClear": "Etiquetas limpadas",
   "toastInstalling": "A instalar...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Instalou Breeze!",
   "toastWiped": "Dispositivo eliminado remotamente",
   "toastDbConflict": "Conflito da versión da base de datos. Por favor, carga de novo.",
@@ -1130,5 +1131,7 @@
   "mockSeedB2": "Podo tentar enviar unha mensaxe?",
   "mockSeedB3": "Si. As respostas xeranse localmente despois dun pouco atraso.",
   "mockSeedG1": "Benvido ao grupo de mostraxes.",
-  "mockSeedG2": "Isto axuda a amosar a aparencia de conversas de grupo."
+  "mockSeedG2": "Isto axuda a amosar a aparencia de conversas de grupo.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

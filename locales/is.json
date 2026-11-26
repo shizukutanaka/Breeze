@@ -702,6 +702,7 @@
   "toastMin4Chars": "Lágmark 4 stafur",
   "toastLabelsClear": "Merki hreinsa",
   "toastInstalling": "Setja upp...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze uppsett!",
   "toastWiped": "Tæki eytt fjarlægt",
   "toastDbConflict": "Gagnagrunnsútgáfu. Vinsamlegast hafna aftur.",
@@ -1130,5 +1131,7 @@
   "mockSeedB2": "Má ég senda skilabođ?",
   "mockSeedB3": "Já. Svar eru búin til staðar eftir stuttu seinkun.",
   "mockSeedG1": "Velkomin í sýnahópinn.",
-  "mockSeedG2": "Þetta hjálpar að sýna hvernig samræður í hópnum líta út."
+  "mockSeedG2": "Þetta hjálpar að sýna hvernig samræður í hópnum líta út.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

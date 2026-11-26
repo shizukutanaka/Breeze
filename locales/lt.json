@@ -708,6 +708,7 @@
   "toastMin4Chars": "Min. 4 raidės",
   "toastLabelsClear": "Etiketės išvalytos",
   "toastInstalling": "Instaluojama...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze įrengtas!",
   "toastWiped": "Nutolęs įtaisas",
   "toastDbConflict": "Bazės versijos konfliktas. Prašome perkelti.",
@@ -1144,5 +1145,7 @@
   "mockSeedB2": "Ar galiu pabandyti siųsti laišką?",
   "mockSeedB3": "Taip. Atsakymai yra sukurti vietos po trumpai trumpalaikio.",
   "mockSeedG1": "Sveiki atrinkimo grupėje.",
-  "mockSeedG2": "Tai padeda parodyti, kokias grupės pokalbiai atrodo."
+  "mockSeedG2": "Tai padeda parodyti, kokias grupės pokalbiai atrodo.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

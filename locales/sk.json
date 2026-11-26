@@ -708,6 +708,7 @@
   "toastMin4Chars": "Min 4 znaky",
   "toastLabelsClear": "Vymazané štítky",
   "toastInstalling": "Inštalujem...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze nainštalovaný!",
   "toastWiped": "Zariadenie na diaľku vymazané",
   "toastDbConflict": "Databázová verzia konflikt. Prosím znovu načítať.",
@@ -1144,5 +1145,7 @@
   "mockSeedB2": "Môžem skúsiť poslať správu?",
   "mockSeedB3": "Áno. Odpovede sú generované lokálne po krátkom oneskorení.",
   "mockSeedG1": "Vitajte vo vzorkovej skupine.",
-  "mockSeedG2": "To pomáha ukázať, ako skupinové rozhovory vyzerajú."
+  "mockSeedG2": "To pomáha ukázať, ako skupinové rozhovory vyzerajú.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

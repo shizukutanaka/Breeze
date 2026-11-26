@@ -34,6 +34,7 @@ export const SETTINGS_HELP_MAP = Object.freeze({
     'cloudflare-verify': 'helpSetCloudflareVerify',
     'cloudflare-setup': 'helpSetCloudflareSetup',
     'cloudflare-disconnect': 'helpSetCloudflareDisconnect',
+    'install-app': 'helpSetInstallApp',
     'invite-friend': 'helpSetInviteFriend',
     'migrate-apps': 'helpSetMigrateApps',
     'migrate-device': 'helpSetMigrateDevice',

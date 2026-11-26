@@ -702,6 +702,7 @@
   "toastMin4Chars": "4 karaktere gutxienez",
   "toastLabelsClear": "Etiketak garbituta",
   "toastInstalling": "Instalatzen...",
+  "toastInstallManual": "To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.",
   "toastInstalled": "Breeze!",
   "toastWiped": "Gailua urrunetik garbitu da",
   "toastDbConflict": "Datu-basearen bertsioa gatazkan dago. Birkargatu berriro.",
@@ -1130,5 +1131,7 @@
   "mockSeedB2": "Mezu bat bidaltzen saia naiteke?",
   "mockSeedB3": "Bai, erantzunak lokalki sortzen dira atzerapen labur baten ondoren.",
   "mockSeedG1": "Ongi etorri lagin taldera.",
-  "mockSeedG2": "Honek talde-solasaldiak zein itxura duten erakusten du."
+  "mockSeedG2": "Honek talde-solasaldiak zein itxura duten erakusten du.",
+  "settingsInstallApp": "Install the app",
+  "helpSetInstallApp": "Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead."
 }

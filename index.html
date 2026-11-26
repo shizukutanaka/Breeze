@@ -2053,7 +2053,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     installBannerDesktopSub: 'Native app with system tray + notifications',
     installBannerDownload: 'Download',
     installPlatformPhone: 'phone',
-    installPlatformDevice: 'device',
+    installPlatformDevice: 'device', settingsInstallApp: 'Install the app', helpSetInstallApp: 'Opens one-click app installation when the browser offers it. If that prompt is unavailable, shows install instructions or the desktop download banner instead.',
     read: 'Read',
     typing: 'typing...',
     newMessages: 'New Messages',
@@ -2268,6 +2268,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     toastMin4Chars: 'Min 4 characters',
     toastLabelsClear: 'Labels cleared',
     toastInstalling: 'Installing...',
+    toastInstallManual: 'To install Breeze, open your browser menu and choose “Install app” or “Add to Home screen”.',
     toastInstalled: 'Breeze installed!',
     toastWiped: 'Device wiped remotely',
     toastDbConflict: 'Database version conflict. Please reload.',
@@ -2645,7 +2646,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
 // English table, which t() consults first, and the other 7 are never passed to t() anywhere.
 // It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
 // ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
-const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk'];
+const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk', 'sl', 'bs', 'be', 'af', 'eo', 'fy', 'lb', 'mt', 'gd', 'cy'];
 function detectLang() {
   const nav = (navigator.language || 'en');
   const lower = nav.toLowerCase();
@@ -3314,7 +3315,7 @@ const _appModulesReady = new Promise(resolve => {
   else document.addEventListener('DOMContentLoaded', () => resolve(), { once: true });
 });
 _appModulesReady.then(() => {
-  globalThis.__breezeInstallBanner?.initInstallBanner({ DOM: _DOM, MS, t, esc, safeSetHTML, showToast });
+  globalThis.__breezeInstallBanner?.initInstallBanner({ DOM: _DOM, MS, t, esc, safeSetHTML, showToast, dbg: _dbg });
 });
 
 // v3.6: Trusted Types — 'breeze-sanitizer' (named, via safeSetHTML) + 'default' (safety net sanitizing raw innerHTML/outerHTML under require-trusted-types-for 'script'). Fallback: same API, no TT.
@@ -7620,6 +7621,8 @@ async function initMessenger(dbName) {
       if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
       if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
       if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
+      // The network-quality probe self-reschedules outside _intervals; stop its chain too.
+      if (_netQualityTimer) { clearTimeout(_netQualityTimer); _netQualityTimer = null; }
       // _updateFocusBanner() self-reschedules every minute for as long as /focus is
       // active, and #focus-bar is a static element that survives every account switch
       // (only _DOM's memoization cache is cleared, not the DOM itself) — so an
@@ -12828,8 +12831,16 @@ async function initMessenger(dbName) {
       }
     } catch(e) { _lastRtt = -1; }
   }
-  // Measure on conversation open + periodically
-  _intervals.push(setInterval(() => { if (!_powerPresenceOff()) measureNetworkQuality(); }, MS.MIN));
+  // Measure on conversation open; the periodic probe is display-only, so it
+  // respects the power floor and sleeps when no conversation can show it.
+  let _netQualityTimer = null;
+  function scheduleNetworkQuality() {
+    _netQualityTimer = setTimeout(() => {
+      if (!_powerPresenceOff() && activeContact) measureNetworkQuality();
+      scheduleNetworkQuality();
+    }, Math.max(MS.MIN, _powerPollFloorMs()));
+  }
+  scheduleNetworkQuality();
 
   // ===== Share ID (with QR option) =====
   // Drag-drop: import chat history OR send file to active contact
