@@ -7592,6 +7592,8 @@ async function initMessenger(dbName) {
       if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
       if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
       if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
+      // The network-quality probe self-reschedules outside _intervals; stop its chain too.
+      if (_netQualityTimer) { clearTimeout(_netQualityTimer); _netQualityTimer = null; }
       // _updateFocusBanner() self-reschedules every minute for as long as /focus is
       // active, and #focus-bar is a static element that survives every account switch
       // (only _DOM's memoization cache is cleared, not the DOM itself) — so an
@@ -12791,8 +12793,16 @@ async function initMessenger(dbName) {
       }
     } catch(e) { _lastRtt = -1; }
   }
-  // Measure on conversation open + periodically
-  _intervals.push(setInterval(() => { if (!_powerPresenceOff()) measureNetworkQuality(); }, MS.MIN));
+  // Measure on conversation open; the periodic probe is display-only, so it
+  // respects the power floor and sleeps when no conversation can show it.
+  let _netQualityTimer = null;
+  function scheduleNetworkQuality() {
+    _netQualityTimer = setTimeout(() => {
+      if (!_powerPresenceOff() && activeContact) measureNetworkQuality();
+      scheduleNetworkQuality();
+    }, Math.max(MS.MIN, _powerPollFloorMs()));
+  }
+  scheduleNetworkQuality();
 
   // ===== Share ID (with QR option) =====
   // Drag-drop: import chat history OR send file to active contact
