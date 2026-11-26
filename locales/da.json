@@ -1100,5 +1100,22 @@
   "cfGuideText": "Create an API token with Account Settings: Read, Workers Scripts: Edit, and Workers KV Storage: Edit, then paste it below.",
   "cfCreateTokenLink": "Open Cloudflare API Tokens ↗",
   "cfQuickSetup": "Connect & set up server",
-  "helpSetCloudflareQuick": "Saves the pasted Cloudflare API token on this device, verifies the account, creates the KV namespace and workers.dev subdomain if needed, deploys the Breeze Worker, and checks /api/health in one step."
+  "helpSetCloudflareQuick": "Saves the pasted Cloudflare API token on this device, verifies the account, creates the KV namespace and workers.dev subdomain if needed, deploys the Breeze Worker, and checks /api/health in one step.",
+  "mockBanner": "Demo (mock) — no real communication takes place",
+  "mockUnavailable": "Not available in this demo",
+  "mockSelfName": "Demo User",
+  "mockContactAoi": "Demo Aoi",
+  "mockContactHana": "Demo Hana",
+  "mockContactRen": "Demo Ren",
+  "mockGroupName": "Demo group",
+  "mockReply": "This is a canned demo reply. No message was sent.",
+  "mockGroupReply": "This is a canned group reply. No message was sent.",
+  "mockSeedA1": "Hi! This sample conversation shows what a received message looks like.",
+  "mockSeedA2": "Thanks — I am just looking around.",
+  "mockSeedA3": "Everything here stays on this device.",
+  "mockSeedB1": "The demo includes a few quiet sample threads.",
+  "mockSeedB2": "Can I try sending a message?",
+  "mockSeedB3": "Yes. Replies are generated locally after a short delay.",
+  "mockSeedG1": "Welcome to the sample group.",
+  "mockSeedG2": "This helps show what group conversations look like."
 }

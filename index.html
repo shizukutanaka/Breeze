@@ -567,6 +567,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .i-mb12 { margin-bottom: var(--sp-3) }
 .i-muted { color: var(--t2) }
 .focus-bar { background: var(--gl); color: var(--g); cursor: pointer }
+.mock-banner { padding: var(--sp-2) var(--sp-4); background: var(--gl); color: var(--g); font-size: var(--fs-caption); font-weight: 700; text-align: center; border-bottom: 1px solid var(--b1) }
 #b-msg-nrn.nrn-on { background: var(--gl); color: var(--g); border-color: var(--g) }
 /* The "+" button carries a dot while "no reply needed" is armed, so the
    one-shot state stays visible after the panel closes. */
@@ -1186,6 +1187,7 @@ del.md-del { opacity: .6 }
 <div id="v-msg" class="hidden">
 
   <!-- Setup (first visit) -->
+  <div id="mock-banner" class="mock-banner hidden" role="note" data-i18n="mockBanner"></div>
   <div id="msg-setup" class="hidden setup-page">
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
@@ -1443,6 +1445,7 @@ import { showContextMenu as _showContextMenuMod } from './src/app/context-menu.j
 import { createLightbox } from './src/app/lightbox.js'; window.__breezeLightbox = { createLightbox };
 import { createSmartReplies } from './src/app/smart-replies.js'; window.__breezeSmartReplies = { createSmartReplies };
 import { createChatSearch } from './src/app/chat-search.js'; window.__breezeChatSearch = { createChatSearch };
+import { createMock, createMockApi, mockEnabled, mockApi } from './src/app/mock.js'; window.__breezeMock = { createMock, createMockApi, enabled: mockEnabled, api: mockApi };
 import { createCallHistory } from './src/app/call-history.js'; window.__breezeCallHistory = { createCallHistory }; import { installSettingsHelp } from './src/app/settings-help.js'; window.__breezeSettingsHelp = { installSettingsHelp }; import { createCloudflareLink } from './src/app/cloudflare.js'; window.__breezeCloudflare = { createCloudflareLink };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
@@ -2536,6 +2539,23 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     cmdCryptoFwdSec: '✓ Each message uses unique key',
     cmdCryptoCompression: '✗ off by design (avoids CRIME/BREACH)',
     cmdInfoFilesBookmarks: "📎 Files: {0} | 🔖 Bookmarks: {1}", settingsCloudflare: 'Your Cloudflare', cfTokenLabel: 'Cloudflare API token', cfTokenPlaceholder: 'Paste API token', cfSave: 'Save', cfVerify: 'Verify connection', cfDisconnect: 'Disconnect', cfStatusNone: 'Not connected.', cfStatusSaved: 'Token saved on this device, but not verified yet.', cfStatusVerifying: 'Verifying connection…', cfStatusConnected: 'Connected as {0}. Token status: {1}.', cfStatusConnectedNoAccounts: 'Token verified. Token status: {0}; no accounts are visible to this token.', cfStatusError: 'Connection check failed: {0}', cfErrInvalidToken: 'invalid or expired token', cfErrTokenNotActive: "token is not active (status: {0})", cfErrNetwork: 'network error', cfErrApi: 'Cloudflare API error', cfErrNoToken: 'no Cloudflare token is saved', cfErrStorage: 'could not access on-device storage', cfErrTokenRequired: 'paste a Cloudflare API token first', cfSaved: 'Cloudflare token saved on this device.', cfDisconnected: 'Cloudflare connection removed from this device.', cfSetup: 'Set up server', cfUpdate: 'Update server', cfSetupRunning: 'Setting up server: {0}…', cfSetupFailed: 'Server setup failed while {0}: {1}', cfSetupDone: 'Server ready and health-checked: {0}. Add it as a home relay from the Relays section.', cfSetupUnverified: 'Worker deployed at {0}, but the health check did not answer ({1}). Add it as a home relay only after checking it.', cfStepAccount: 'resolving the account', cfStepKv: 'finding or creating KV storage', cfStepSource: 'loading the server worker source', cfStepUpload: 'uploading the worker', cfStepSubdomain: 'enabling the workers.dev address', cfStepHealth: 'checking server health', cfErrNoAccount: 'no Cloudflare account is visible to this token', cfErrNoSubdomain: 'Cloudflare did not return a workers.dev subdomain', cfErrWorkerSource: 'could not load the bundled worker source', cfErrHealth: 'the health check did not answer ok', cfErrHttp: 'HTTP {0}', cfNote: "The token is stored only on this device. Browser requests pass statelessly through this origin's /api/cf-proxy to Cloudflare's API without being logged or stored. Verified relays with a relay key are added to Home Relays automatically.", helpSetCloudflareSave: "Stores the Cloudflare API token only in this device's IndexedDB settings store. It is sent only to Cloudflare's API as a Bearer token, never to Breeze relays. Server setup needs a token with account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.", helpSetCloudflareVerify: "Calls Cloudflare's token verification and account list APIs with the token saved on this device, then shows the real token status and account names or the actual error. The token is sent only to Cloudflare's API. Server setup needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.", helpSetCloudflareDisconnect: "Deletes the saved Cloudflare API token from this device's IndexedDB settings store and clears the shown connection state. It does not revoke the token, and it does not delete the Worker, KV namespace, or any other resource from your Cloudflare account.", helpSetCloudflareSetup: "Creates or reuses the breeze-presence KV namespace, uploads the bundled Breeze Worker as the breeze script with the required KV binding, enables its workers.dev address, and checks /api/health. The token needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit. The server URL is stored on this device only; add it as a home relay from Relays if you want to use it. Setup does not configure optional secrets for push notifications, TURN, or the relay identity key, so those features stay off or in their default fallback until configured in the Cloudflare dashboard.", cfSetupToggle: 'Set up your own Cloudflare server', cfGuideText: 'Create an API token with Account Settings: Read, Workers Scripts: Edit, and Workers KV Storage: Edit, then paste it below.', cfCreateTokenLink: 'Open Cloudflare API Tokens ↗', cfQuickSetup: 'Connect & set up server', helpSetCloudflareQuick: 'Saves the pasted Cloudflare API token on this device, verifies the account, creates the KV namespace and workers.dev subdomain if needed, deploys the Breeze Worker, and checks /api/health in one step.',
+    mockBanner: 'Demo (mock) — no real communication takes place',
+    mockUnavailable: 'Not available in this demo',
+    mockSelfName: 'Demo User',
+    mockContactAoi: 'Demo Aoi',
+    mockContactHana: 'Demo Hana',
+    mockContactRen: 'Demo Ren',
+    mockGroupName: 'Demo group',
+    mockReply: 'This is a canned demo reply. No message was sent.',
+    mockGroupReply: 'This is a canned group reply. No message was sent.',
+    mockSeedA1: 'Hi! This sample conversation shows what a received message looks like.',
+    mockSeedA2: 'Thanks — I am just looking around.',
+    mockSeedA3: 'Everything here stays on this device.',
+    mockSeedB1: 'The demo includes a few quiet sample threads.',
+    mockSeedB2: 'Can I try sending a message?',
+    mockSeedB3: 'Yes. Replies are generated locally after a short delay.',
+    mockSeedG1: 'Welcome to the sample group.',
+    mockSeedG2: 'This helps show what group conversations look like.',
   },
   // ja (and every future locale) lives in locales/<lang>.json — fetched at boot by _loadLocale()
   // and merged here. Only English ships inline: it is the reference table and the fallback, so
@@ -3135,7 +3155,7 @@ window.addEventListener('offline', () => {
 // v3.1: Notify server when page closes (sendBeacon for reliable delivery)
 window.addEventListener('beforeunload', () => {
   if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-    try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
+    if (!globalThis.__breezeMock?.enabled?.()) try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
   }
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
@@ -3150,7 +3170,7 @@ window.addEventListener('beforeunload', () => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-      try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
+      if (!globalThis.__breezeMock?.enabled?.()) try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
     }
   }
 });
@@ -3581,6 +3601,8 @@ function fetchT(url, opts = {}, timeoutMs = 10000) {
     setTimeout(() => ctrl.abort(), timeoutMs);
     opts.signal = ctrl.signal;
   }
+  const _mockApi = globalThis.__breezeMock?.api?.();
+  if (_mockApi) return _mockApi.fetch(url, opts);
   return fetch(url, opts);
 }
 
@@ -7863,6 +7885,12 @@ async function initMessenger(dbName) {
     checkAutoRestore();
     flushAutoBackup();
   } else {
+    if (_mock) {
+      const nameInput = _DOM.get('msg-name-random');
+      if (nameInput) nameInput.value = t('mockSelfName');
+      await _runSetupCreate('random');
+      return;
+    }
     _DOM.get('msg-setup').classList.remove('hidden');
     _DOM.get('msg-main').classList.add('hidden');
     // Recovery plan step 4: the simple-mode entries exist only where
@@ -7887,6 +7915,7 @@ async function initMessenger(dbName) {
     // cancels at the recovery-phrase step (or derivation failed) — stay on
     // the setup screen with nothing created.
     if (!await createIdentity(name, alias, disposable)) return;
+    if (_mock) await _mock.seedIfNeeded();
     _outbox.clear();
     await _enterMainUI();
     initTurn();
@@ -8230,6 +8259,7 @@ async function initMessenger(dbName) {
         return;
       }
       const safeName = typeof name === 'string' ? name.slice(0, 64) : 'Contact';
+      globalThis.__breezeMock?.api?.()?.registerContact(safePub);
       await dbPut('contacts', { id, pubB64: safePub, name: safeName, addedAt: Date.now(), unread: 0, ...(home.length ? { home } : {}), ...(alias ? { alias } : {}) });
       await _requests?.drain(safePub);
       _profileUI?.sendTo({ id, pubB64: safePub }).catch(e => _dbg(e, 'profile-add')); // stage 5 step 4: greet with my profile (cap-gated inside; skipped until a session exists)
@@ -10239,6 +10269,7 @@ async function initMessenger(dbName) {
         { sig: envelope.sig, sigPub: envelope.sigPub }, { sfFor: activeContact.id, sfPub: activeContact.pubB64, sfName: activeContact.name });
       _profileUI?.sendTo(activeContact).catch(e => _dbg(e, 'profile-first')); // my profile follows the first chat message (never opens the session — see profile.js); a no-op once delivered
     }
+    _mock?.afterSend(contact);
     renderContacts();
     } catch(err) {
       _dbg(err, 'sendMessage');
@@ -10758,10 +10789,14 @@ async function initMessenger(dbName) {
 
   // Call button handlers
   _DOM.get('b-msg-call')?.addEventListener('click', () => {
+    if (globalThis.__breezeMock?.enabled?.()) { showToast(t('mockUnavailable'), 'info'); return; }
     if (activeContact?.isGroup) { _gcall.start(activeContact); return; }
     if (activeContact) startCall(activeContact, false);
   });
-  _DOM.get('b-msg-video')?.addEventListener('click', () => { if (activeContact) startCall(activeContact, true); });
+  _DOM.get('b-msg-video')?.addEventListener('click', () => {
+    if (globalThis.__breezeMock?.enabled?.()) { showToast(t('mockUnavailable'), 'info'); return; }
+    if (activeContact) startCall(activeContact, true);
+  });
   _DOM.get('b-msg-sticker')?.addEventListener('click', () => { _stickersUI?.togglePanel().catch(e => _dbg(e, 'sticker-panel')); });
   // The location button shipped with no handler at all (the panel was only
   // reachable via /location); wire it to the same panel, like the sticker one.
@@ -10854,7 +10889,7 @@ async function initMessenger(dbName) {
     refreshSelfCard: () => { renderSelfCard().catch(e => _dbg(e, 'self-card-refresh')); },
     domGet: (id) => _DOM.get(id), dbg: _dbg, downscaleAvatar: (f) => _downscaleAvatar(f),
     myId: () => myId, myName: () => myName, myPubB64: () => myPubB64, setMyName: (v) => { myName = v; }, hasSession: (id) => getSession(id).then(s => !!s),
-  }); globalThis.__breezeSettingsHelp?.installSettingsHelp({ t, esc, safeSetHTML, makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c), domGet: (id) => _DOM.get(id) }); globalThis.__breezeCloudflare?.createCloudflareLink({ t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet: (id) => _DOM.get(id), fetch: (u, o) => fetch(u, o), proxyBase: (API || (location.origin + '/api')) + '/cf-proxy', dbg: _dbg, onServerReady: async (dep) => { if (!dep?.serverUrl) return; const res = await attestNewRelay(dep.serverUrl).catch(() => null); if (!res || res.error || !res.relayKey) return; let label = ''; try { label = new URL(res.url).host; } catch { label = res.url; } await addHomeRelay({ url: res.url, pin: res.relayKey, label, health: res.health }); showToast(t('relayAdded', res.url), 'success'); if (myId) { _lastPreKeyCheck = 0; checkAndReplenishPreKeys(); maybeStartMailboxWs(); } } }).install();
+  }); globalThis.__breezeSettingsHelp?.installSettingsHelp({ t, esc, safeSetHTML, makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c), domGet: (id) => _DOM.get(id) }); globalThis.__breezeCloudflare?.createCloudflareLink({ t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet: (id) => _DOM.get(id), fetch: (u, o) => globalThis.__breezeMock?.enabled?.() ? fetchT(u, o) : fetch(u, o), proxyBase: (API || (location.origin + '/api')) + '/cf-proxy', dbg: _dbg, onServerReady: async (dep) => { if (!dep?.serverUrl) return; const res = await attestNewRelay(dep.serverUrl).catch(() => null); if (!res || res.error || !res.relayKey) return; let label = ''; try { label = new URL(res.url).host; } catch { label = res.url; } await addHomeRelay({ url: res.url, pin: res.relayKey, label, health: res.health }); showToast(t('relayAdded', res.url), 'success'); if (myId) { _lastPreKeyCheck = 0; checkAndReplenishPreKeys(); maybeStartMailboxWs(); } } }).install();
   const _turnFetch = globalThis.__breezeTurn?.createTurnFetcher({
     apiReady: () => !!API, postTurn: (body) => postAPIRaw('/turn', body),
     myId: () => myId, setCredential: (c) => { _turnCredential = c; },
@@ -12055,6 +12090,7 @@ async function initMessenger(dbName) {
   }
 
   async function connectPeer(contact, { signalingMode = 'relay' } = {}) {
+    if (globalThis.__breezeMock?.enabled?.()) return;
     if (!contact.pubB64 || peers[contact.pubB64]?.pc) return;
     if (contact.offlinePairing?.manualOnly && signalingMode !== 'manual') return;
     const manual = signalingMode === 'manual';
@@ -13117,13 +13153,13 @@ async function initMessenger(dbName) {
   // TURN credentials are for everyone (NAT traversal), not a paid feature. This used to live
   // inside initTurn(); the billing system is gone but the TURN fetch must remain.
   async function initTurn() {
-    if (!API || !_userId) return;
+    if (!API || !_userId || globalThis.__breezeMock?.enabled?.()) return;
     _turnFetch?.fetchCredentials();
   }
 
   // WEB PUSH NOTIFICATIONS — subscribe for background notifications
   async function initPushNotifications() {
-    if (!API || !('serviceWorker' in navigator) || !('PushManager' in window)) return;
+    if (!API || !('serviceWorker' in navigator) || !('PushManager' in window) || globalThis.__breezeMock?.enabled?.()) return;
     if (typeof Notification === 'undefined') return;
     try {
       const reg = await navigator.serviceWorker.ready;
@@ -15590,6 +15626,11 @@ async function initMessenger(dbName) {
   window.exitSelectMode = exitSelectMode;
   window._getActiveContact = () => activeContact;
   window._isSelectMode = () => _selectMode;
+
+  const _mock = globalThis.__breezeMock?.createMock({ t, MS, dbGet, dbPut, appendMsg, renderContacts,
+    activeContact: () => activeContact, myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
+    dom: id => _DOM.get(id), dbg: _dbg });
+  _mock?.installBanner();
 
   // Boot LAST — see the _boot definition for why this line's position is load-bearing.
   await _boot();

@@ -19,19 +19,31 @@ describe('deployed safety-number negotiation', () => {
     expect(await negotiatedSafetyNumber(a.pubB64, b.pubB64)).toBe(expected);
   });
   it('matches the single-sourced reference at 5200 rounds with stable identifiers and symmetric 60-digit display', async () => {
-    const number = await v2(a.pubB64, b.pubB64);
+    const [number, reference, reverse, unbound] = await Promise.all([
+      v2(a.pubB64, b.pubB64),
+      createFingerprint().safetyNumber(a.pubB64, b.pubB64, { localId: a.pubB64.slice(0, 12), remoteId: b.pubB64.slice(0, 12) }),
+      v2(b.pubB64, a.pubB64),
+      createFingerprint().safetyNumber(a.pubB64, b.pubB64),
+    ]);
     expect(number).toMatch(/^(?:\d{5} ){11}\d{5}$/);
-    expect(number).toBe(await createFingerprint().safetyNumber(a.pubB64, b.pubB64, { localId: a.pubB64.slice(0, 12), remoteId: b.pubB64.slice(0, 12) }));
-    expect(await v2(b.pubB64, a.pubB64)).toBe(number);
-    expect(await createFingerprint().safetyNumber(a.pubB64, b.pubB64)).not.toBe(number);
+    expect(number).toBe(reference);
+    expect(reverse).toBe(number);
+    expect(unbound).not.toBe(number);
   });
   it('versioned QR comparison binds both keys; version mismatch is not a key-change alarm', async () => {
-    const number = await v2(a.pubB64, b.pubB64), both = await contactSafetyNumber(a, b);
+    const [number, both, reverseNumber, reverseBoth, legacyNumber, mismatchBoth] = await Promise.all([
+      v2(a.pubB64, b.pubB64),
+      contactSafetyNumber(a, b),
+      v2(b.pubB64, a.pubB64),
+      contactSafetyNumber(b, a),
+      legacySafetyNumber(a.pubB64, b.pubB64),
+      contactSafetyNumber(a, { ...b, sigPub: key(5) }),
+    ]);
     const qr = comparisonQR(number, both);
     expect(JSON.parse(qr.slice(14)).v).toBe(2);
-    expect(compareQR(comparisonQR(await v2(b.pubB64, a.pubB64), await contactSafetyNumber(b, a)), qr)).toBe('match');
-    expect(compareQR(comparisonQR(await legacySafetyNumber(a.pubB64, b.pubB64), both), qr)).toBe('version');
-    expect(compareQR(comparisonQR(number, await contactSafetyNumber(a, { ...b, sigPub: key(5) })), qr)).toBe('mismatch');
+    expect(compareQR(comparisonQR(reverseNumber, reverseBoth), qr)).toBe('match');
+    expect(compareQR(comparisonQR(legacyNumber, both), qr)).toBe('version');
+    expect(compareQR(comparisonQR(number, mismatchBoth), qr)).toBe('mismatch');
     for (const value of ['', 'breeze-verify:{}', 'breeze-verify:' + 'x'.repeat(600), qr.replace('"v":2', '"v":3')]) expect(compareQR(value, qr)).toBe('invalid');
     expect(() => comparisonQR('', both)).toThrow();
   });

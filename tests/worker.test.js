@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { createHash } from 'node:crypto';
 // Solve a difficulty-N PoW puzzle for testing (brute-force; keep N small — see mockKV).
 // challenge defaults to "${pub}:breeze-test" (no timestamp → freshness check skipped).
 async function solvePoW(pub, difficulty = 8, challenge) {
   const ch = challenge ?? `${pub}:breeze-test`;
   const target = (2 ** (32 - difficulty)) >>> 0;
   for (let nonce = 0; nonce < 10_000_000; nonce++) {
-    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${ch}:${nonce}`));
-    if (new DataView(d).getUint32(0, false) < target) return { challenge: ch, nonce, difficulty };
+    const d = createHash('sha256').update(`${ch}:${nonce}`).digest();
+    if (d.readUInt32BE(0) < target) return { challenge: ch, nonce, difficulty };
   }
   throw new Error('PoW unsolved');
 }
