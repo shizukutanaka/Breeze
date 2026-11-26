@@ -10,7 +10,11 @@
   "app": {
     "withGlobalTauri": false,
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-v1qebErT0t6uxWB/1cAzopgKYlwqJHnRegMhauSisdM=' 'sha256-JUEa8e1KshqOPuL4wIPHRw2p/4pECP+AQpWFYBza3uk=' 'sha256-HaF7L+Z6UcilVH+7rts2hw6Vm4dJ+LJx+SChj1BW35g=' 'sha256-Mf/0yRKUsSCIWlEOyDdujTPrExKA0LeIyzRxXrKkcPc='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests"
+<<<<<<< HEAD
+      "csp": "default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-v1qebErT0t6uxWB/1cAzopgKYlwqJHnRegMhauSisdM=' 'sha256-JUEa8e1KshqOPuL4wIPHRw2p/4pECP+AQpWFYBza3uk=' 'sha256-HaF7L+Z6UcilVH+7rts2hw6Vm4dJ+LJx+SChj1BW35g=' 'sha256-U8nOq5bACVSwWIrtNJ8RyZhoXbzsAL689N0fpCWuMhg='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests"
+=======
+      "csp": "default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-v1qebErT0t6uxWB/1cAzopgKYlwqJHnRegMhauSisdM=' 'sha256-JUEa8e1KshqOPuL4wIPHRw2p/4pECP+AQpWFYBza3uk=' 'sha256-HaF7L+Z6UcilVH+7rts2hw6Vm4dJ+LJx+SChj1BW35g=' 'sha256-BEZ33T/gjALUuh/JWfAXUPYdtSop3cbvIgQzWJ6ZaRQ='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests"
+>>>>>>> 0fad4ca (feat(i18n): add 10 locales (batch 2) — sl bs be af eo fy lb mt gd cy (71 total))
     },
     "windows": [
       {

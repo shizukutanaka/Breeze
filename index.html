@@ -2646,7 +2646,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
 // English table, which t() consults first, and the other 7 are never passed to t() anywhere.
 // It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
 // ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
-const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk'];
+const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk', 'sl', 'bs', 'be', 'af', 'eo', 'fy', 'lb', 'mt', 'gd', 'cy'];
 function detectLang() {
   const nav = (navigator.language || 'en');
   const lower = nav.toLowerCase();

@@ -224,7 +224,7 @@ closed-by-default packaging is the Docker path above.
 | TURN relay | ✓ | Open Relay (20GB/month free) |
 | Groups (1,000 members) | ✓ | Sender Key O(1) |
 | File transfer | ✓ | Up to 50MB via P2P |
-| 62 languages | ✓ | English built in + 61 full locale files, auto-detected |
+| 72 languages | ✓ | English built in + 71 full locale files, auto-detected |
 | Offline/PWA | ✓ | Service Worker |
 | Push notifications | ✗ | Needs VAPID keys |
 
