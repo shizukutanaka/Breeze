@@ -7588,6 +7588,7 @@ async function initMessenger(dbName) {
       // chain in the old context: double-polling the relay, double-writing presence, and
       // (for _retryTimer) retrying old messages under the new account's identity.
       if (_presenceTimer) { clearTimeout(_presenceTimer); _presenceTimer = null; }
+      if (_presencePollTimer) { clearTimeout(_presencePollTimer); _presencePollTimer = null; }
       if (_pollTimer) { clearTimeout(_pollTimer); _pollTimer = null; }
       if (_retryTimer) { clearTimeout(_retryTimer); _retryTimer = null; }
       if (_typingTimeout) { clearTimeout(_typingTimeout); _typingTimeout = null; }
@@ -12565,6 +12566,7 @@ async function initMessenger(dbName) {
 
   // ===== Presence heartbeat (v3.3: adaptive — slower in background) =====
   let _presenceTimer = null;
+  let _presencePollTimer = null;
   let _cloneWarnedAt = 0;
   function startPresence() {
     if (!API) return;
@@ -13059,8 +13061,12 @@ async function initMessenger(dbName) {
         }
       }
     }
+    const tick = async () => {
+      try { await poll(); } catch(e) { _dbg(e, 'presence-poll'); }
+      finally { _presencePollTimer = setTimeout(tick, Math.max(CONFIG.PRESENCE_INTERVAL_MS, _powerPollFloorMs())); }
+    };
     poll();
-    _intervals.push(setInterval(poll, CONFIG.PRESENCE_INTERVAL_MS));
+    _presencePollTimer = setTimeout(tick, Math.max(CONFIG.PRESENCE_INTERVAL_MS, _powerPollFloorMs()));
   }
   startPresencePolling();
 
