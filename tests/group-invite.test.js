@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createGroupProtection } from '../src/app/group-protection.js';
 
 const ROOT = path.resolve(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -106,9 +107,9 @@ describe('group invite id namespace', () => {
     const dbGet = async (store, key) => (store === 'contacts' ? contacts.get(key) : undefined);
     const dbPut = async (store, value) => { if (store === 'contacts') contacts.set(value.id, value); return true; };
     const onInvite = new Function(
-      'dbGet', 'dbPut', 'decryptFrom', 'CONFIG', '_focusActive', 'playNotif', '_renderContactsThrottled', '_dbg',
+      'dbGet', 'dbPut', 'decryptFrom', 'CONFIG', '_focusActive', 'playNotif', '_renderContactsThrottled', '_dbg', '_groupProtection',
       `return async function (msg) { ${slice('if (msg.isGroupInvite) {', '// === Group message ===')} };`,
-    )(dbGet, dbPut, async (payload) => payload, { GROUP_MAX: 8 }, () => true, () => {}, () => {}, (e) => { throw e; });
+    )(dbGet, dbPut, async (payload) => payload, { GROUP_MAX: 8 }, () => true, () => {}, () => {}, (e) => { throw e; }, createGroupProtection({ get: dbGet, put: dbPut }));
     const addContact = new Function(
       'dbGet', 'dbPut', 'sanitizeHomeList', '_profileUI', 'auditLog', 'renderContacts', '_dbg',
       // Batch-2 fix (d): addContact now also consults _settings /

@@ -126,6 +126,7 @@ export function createGroupAuthor(D) {
   }
   async function readPolicy(groupId) {
     const state = await D.get('identity', policyKey(groupId)) || { proofs: {} };
+    if (await D.protection?.(groupId, state) === false) return { ...state, strict: false };
     if (state.strict) return state;
     const group = await D.get('contacts', groupId);
     if (!group?.isGroup || !group.members?.length || !D.supported()) return state;
@@ -177,6 +178,7 @@ export function createGroupAuthor(D) {
       const key = await crypto.subtle.importKey('raw', decode64(pin, 32), 'Ed25519', false, ['verify']);
       const valid = await crypto.subtle.verify('Ed25519', key, decode64(sk.authorCapSig, 64), capabilityTranscript(groupId, author));
       if (!valid) return;
+      await D.protectionProof?.(groupId, author);
       await serial('policy:' + groupId, async () => {
         const state = await D.get('identity', policyKey(groupId)) || { proofs: {} };
         if (state.strict) return;
@@ -193,6 +195,11 @@ export function createGroupAuthor(D) {
       await put('gsk:' + groupId, rotated); needsDistribution.add(groupId); stored = rotated;
     }
     const strict = (await policy(groupId)).strict === true;
+    if (!strict && stored.v === 5 && await D.legacyFormat?.(groupId)) {
+      if (!uint32(stored.epoch) || stored.epoch === 0xFFFFFFFF) throw new Error('group legacy rotation unavailable');
+      const legacy = { raw: Array.from(crypto.getRandomValues(new Uint8Array(32))), counter: 0, epoch: stored.epoch + 1 };
+      await put('gsk:' + groupId, legacy); needsDistribution.add(groupId); return legacy;
+    }
     if (!strict || stored.authorSigV === 1) return stored;
     if (!D.supported() || !uint32(stored.epoch) || stored.epoch === 0xFFFFFFFF) throw new Error('group author rotation unavailable');
     const bytes = Array.from(crypto.getRandomValues(new Uint8Array(32)));

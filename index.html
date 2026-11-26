@@ -265,6 +265,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg); max-width: 100% }
 .conv-header { padding: var(--sp-3) var(--sp-4); display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--b1); min-height: 52px; backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass); background: var(--s1) }
 .conv-header .name { flex: 1; font-weight: 700; font-size: var(--fs-body) }
+.group-protection { padding: var(--sp-2) var(--sp-4); background: var(--s1); color: var(--t2); border-bottom: 1px solid var(--b1); font-size: var(--fs-caption); max-height: 160px; overflow: auto; flex-shrink: 0; overflow-wrap: anywhere } .group-protection-confirm { margin: auto; overflow-wrap: anywhere }
 .request-card { padding: var(--sp-3) 0; border-bottom: 1px solid var(--b1) } .request-list { max-height: 55vh; overflow: auto } .request-button { margin: 0 var(--sp-3); flex-shrink: 0 }
 .ln-warning { display: block; white-space: normal; overflow-wrap: anywhere; color: var(--r); font-size: var(--fs-caption); font-weight: 500; line-height: 1.4; max-height: 6em; overflow: auto; unicode-bidi: plaintext }
 
@@ -1371,7 +1372,7 @@ window.__breezeSeed = createSeedHelper();
 <script type="module">
 import { getVault, vaultGate } from './src/app/vault.js'; window.__breezeVault = { getVault, vaultGate };
 import { createContactVerify, negotiatedSafetyNumber } from './src/app/contact-verify.js'; window.__breezeContactVerify = { createContactVerify, negotiatedSafetyNumber };
-import { createDeviceRevocationHost } from './src/app/device-revocation.js'; window.__breezeDeviceRevocation = { createDeviceRevocationHost };
+import { createGroupProtectionHost } from './src/app/group-protection.js'; window.__breezeGroupProtection = { createGroupProtectionHost }; import { createDeviceRevocationHost } from './src/app/device-revocation.js'; window.__breezeDeviceRevocation = { createDeviceRevocationHost };
 </script>
 <script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
@@ -1981,6 +1982,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     typing: 'typing...',
     newMessages: 'New Messages',
     groupAuthorLegacy: 'Legacy — author not verified',
+    gpAnchorConfirm: "Confirm {0} ({1}) as this group’s administrator? Only this pinned signing key will be allowed to authorize reduced author protection.",     gpDowngradeTitle: "Reduce group author protection?",     gpDowngradeWarning: "These members do not advertise signed-author support: {0}. Allowing them means any member with the shared group key can impersonate another author. Existing members will receive a persistent notice. Cancel keeps strict protection and does not admit this change.",     gpAllow: "Allow legacy members",     gpAnchored: "Pinned group administrator: {0}",     gpUnanchored: "No authenticated administrator. Strict protection cannot be reduced until you verify and confirm an admin contact.",     gpDropped: "⚠ Author protection reduced by the pinned administrator. Legacy messages do not verify the individual author.",     gpRestored: "✓ Signed-author protection restored. Unsigned messages are rejected.",     gpSetAdmin: "Confirm verified admin contact",     gpChooseAdmin: "Choose the verified administrator’s contact number:",     gpVerifyFirst: "Verify this contact’s safety number first, then confirm them as admin from this group.",     gpReview: "Review pending member change",     gpFailed: "Group security update failed. Unapproved changes remain blocked.", gpSelfAdmin: "Confirm my creator identity as admin", gpSelfConfirm: "This device’s local record says you created this group. Confirm your locally authenticated signing identity as administrator? Encryption identity: {0}. Signing key: {1}. Other members must independently verify and confirm you.",
     cvTitle: "Contact verification",
     cvVerified: "✓ Verified",
     cvChanged: "⚠ Keys changed",
@@ -2795,7 +2797,7 @@ function showPrompt(title, defaultVal = '', opts = {}) {
 
 function showConfirm(title, opts = {}) {
   return new Promise(resolve => {
-    const [dlg, titleId] = _makeDialog(); // a11y: accessible name from the title; showModal() handles the rest
+    const [dlg, titleId] = _makeDialog(); if (opts.defaultCancel) dlg.classList.add('group-protection-confirm');
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(title)}</div>
       ${opts.desc ? `<div class="modal-desc">${esc(opts.desc)}</div>` : ''}
       <div class="modal-actions">
@@ -2803,7 +2805,7 @@ function showConfirm(title, opts = {}) {
         <button class="btn ${opts.danger ? 'btn-r' : 'btn-g'} btn-sm" value="ok">${opts.okText || t('ok')}</button>
       </div>`);
     _showDialog(dlg);
-    dlg.querySelector('[value="ok"]').focus();
+    dlg.querySelector(opts.defaultCancel ? '[value="cancel"]' : '[value="ok"]').focus();
     const close = (val) => { dlg.close(); dlg.remove(); resolve(val); };
     dlg.querySelector('[value="ok"]').onclick = () => close(true);
         _wireDialogDismiss(dlg, close, false);
@@ -4184,7 +4186,7 @@ async function initMessenger(dbName) {
   try { if (localStorage.getItem('brz-locked')) showLockScreen(); } catch(e) { _dbg(e, 'lock-restore'); }
   try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // last bridge of the block unset ⇒ the block aborted: /security, calls, backup… would otherwise do nothing, silently
   if (!globalThis.__breezeVault) throw new Error(t('vaultFailed')); if (!globalThis.__breezeContactVerify) throw new Error(t('toastModulesFailed'));
-  let _contactVerify = null;
+  let _contactVerify = null, _groupProtection = null;
   const _vault = globalThis.__breezeVault.getVault({ t, dbg: _dbg, accounts: getAccounts, restoreAccounts: saveAccounts, reload: () => location.reload(),
     prompt: text => showPrompt(text, '', { type: 'password', autocomplete: 'current-password' }), confirm: text => showConfirm(text), toast: text => showToast(text, 'error'),
     gate: unlock => globalThis.__breezeVault.vaultGate({ t }, unlock),
@@ -5802,6 +5804,7 @@ async function initMessenger(dbName) {
     authorized: g => _deviceRevocation.certified(g), devicePin: (pub, root) => _deviceRevocation.authorPin(pub, root), allowed: (pub, root) => _deviceRevocation.allowed(pub, root), revocationKey: (g, sk) => _deviceRevocation.keyFor(g, sk),
     sign: async bytes => new Uint8Array(await crypto.subtle.sign('Ed25519', _signingKey.privateKey, bytes)),
     negotiate: _negotiateGroupCaps, attributeDevice: _deviceAttributionOk, dbg: _dbg,
+    protection: (gid, state) => _groupProtection?.guard(gid, state), protectionProof: (gid, pub) => _groupProtection?.proof(gid, pub), legacyFormat: gid => _groupProtection?.legacyFormat(gid),
     establishPin: pub => _fetchSessionBundleV5(pub),
     commit: async (record, auth) => { const ok = await globalThis.__breezeGroupAuthor.commitGroupAcceptance(db, record ? await _msgSealRecord(record) : null, auth); if (record) _notifyBackupDirty('messages'); _notifyBackupDirty('identity'); return ok; },
     lock: (key, work) => navigator.locks ? navigator.locks.request('breeze-ga:' + myPubB64 + ':' + key, work) : work(),
@@ -8782,7 +8785,7 @@ async function initMessenger(dbName) {
   let _drafts = {};
   try { _drafts = JSON.parse(localStorage.getItem('brz-drafts') || '{}'); } catch { _drafts = {}; }
   function _persistDrafts() { try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts)); } catch {} }
-  _vault.caches.add({ clear: () => { _drafts = {}; _settings = {}; _retryQueue.length = 0; _userId = ''; activeContact = null; _attribDevCache.clear(); _sealCapsCache.clear(); _relayInfoCache.clear(); _myDevCache = null; for (const k in _crossAccountUnread) delete _crossAccountUnread[k]; for (const id of ['msg-input', 'msg-messages', 'msg-contacts', 'msg-conv-name']) { const el = _DOM.get(id); if (el) { el.replaceChildren(); if ('value' in el) el.value = ''; } } } });
+  _vault.caches.add({ clear: () => { _groupProtection?.clear(); _drafts = {}; _settings = {}; _retryQueue.length = 0; _userId = ''; activeContact = null; _attribDevCache.clear(); _sealCapsCache.clear(); _relayInfoCache.clear(); _myDevCache = null; for (const k in _crossAccountUnread) delete _crossAccountUnread[k]; for (const id of ['msg-input', 'msg-messages', 'msg-contacts', 'msg-conv-name']) { const el = _DOM.get(id); if (el) { el.replaceChildren(); if ('value' in el) el.value = ''; } } } });
 
   let openConversation = async function(contact) {
     // v3.3: Save draft for current contact before switching
@@ -8928,7 +8931,7 @@ async function initMessenger(dbName) {
         if (_loadedCount >= totalMsgCount) _DOM.get('load-more-hint')?.remove();
       }
     };
-    await renderContacts();
+    await renderContacts(); await _groupProtection?.paint();
     const _msgInput = _DOM.get('msg-input');
     // v3.3: Restore draft for this contact — but only if the user hasn't typed while the
     // switch was in flight (see _inputAtSwitch above).
@@ -10809,9 +10812,6 @@ async function initMessenger(dbName) {
 
   _DOM.get('b-msg-add')?.addEventListener('click', () => _showAddContactPanel());
 
-  // Local-members groups have no server registry to snapshot caps from (invite-link groups
-  // get them free via /group/info) — fetch once via the batch prekey endpoint, chunked at
-  // 10 ids/call (server cap); a failed chunk fails CLOSED (no caps = no v5).
   async function _fetchMemberCapsBatch(memberIds) {
     if (!API || !memberIds.length) return {};
     const out = {};
@@ -10826,14 +10826,11 @@ async function initMessenger(dbName) {
     return out;
   }
 
-  // Group creation lives in src/app/group-create.js (stage 5 step 4
-  // line-budget move); these wrappers keep the call sites unchanged.
-  // The /security and /who panels live in src/app/info-panels.js
-  // (stage 5 step 5 line-budget move); the dispatcher delegates to them.
   _contactVerify = globalThis.__breezeContactVerify.createContactVerify({ account: dbName, get: dbGet, put: dbPut, contacts: () => dbGetAll('contacts'), audit: auditLog, t, esc, safeSetHTML, dbg: _dbg,
     safetyNumber, qr: globalThis.__breezeQR, auditKeys: _auditKeyTransparency, local: () => ({ pubB64: myPubB64, sigPub: _signingPubB64 }), active: () => activeContact, header: () => _DOM.get('msg-conv-name'),
     refresh: async () => { if (activeContact) { activeContact = await dbGet('contacts', activeContact.id) || activeContact; _setConvName(activeContact); } await renderContacts(); },
   });
+  _groupProtection = globalThis.__breezeGroupProtection.createGroupProtectionHost({ get: dbGet, put: dbPut, pub: () => myPubB64, ed: () => _signingPubB64, sign: bytes => crypto.subtle.sign('Ed25519', _signingKey.privateKey, bytes), encrypt: encryptFor, send: relaySend, establishPin: pub => _fetchSessionBundleV5(pub), verified: c => _contactVerify.state(c), verify: showSafetyNumber, confirm: showConfirm, prompt: showPrompt, t, toast: showToast, dbg: _dbg, active: () => activeContact, header: () => _DOM.get('msg-conv-header'), sync: (gid, members) => { if (activeContact?.id === gid) activeContact.members = members; }, lock: (gid, work) => navigator.locks ? navigator.locks.request('breeze-gp:' + myPubB64 + ':' + gid, work) : work() });
   const _infoPanels = globalThis.__breezeInfoPanels?.createInfoPanels({
     dbGet, getSession, hasRTCCertificate, t, esc, safeSetHTML, deviceAlerts: _deviceAlerts, contactVerify: _contactVerify,
     cmdPanel: (id) => _cmdPanelEl(id),
@@ -10898,6 +10895,7 @@ async function initMessenger(dbName) {
   });
   const _groupCreate = globalThis.__breezeGroupCreate?.createGroupCreate({
     dbGetAll, dbPut, showPrompt, fetchCaps: _fetchMemberCapsBatch, encryptFor, relaySend, postAPIRaw, groupCreateAuth, groupJoinAuth,
+    invitation: invite => _groupProtection.invitation(invite), admitRoster: (g, members) => _groupProtection.admit(g, members), linkInvite: () => new URLSearchParams(location.search).get('invite'), acceptLink: (gid, invite) => _groupProtection.acceptLink(gid, invite),
     showToast, t, esc, renderContacts, auditLog, uid, safeSetHTML, dbGet, addContact, openConversation,
     cmdPanel: (id) => _cmdPanelEl(id), myId: () => myId, myPubB64: () => myPubB64, myName: () => myName,
     cleanUrl: () => history.replaceState(null, '', location.pathname),
@@ -10911,10 +10909,8 @@ async function initMessenger(dbName) {
     share: async (o) => { if (navigator.share) { try { await navigator.share(o); } catch(e) { _dbg(e); } } },
     dbg: _dbg,
   });
-  const createGroup = (name) => _groupCreate ? _groupCreate.createGroup(name) : Promise.resolve();
-  const createGroupInviteLink = (name) => _groupCreate ? _groupCreate.createGroupInviteLink(name) : Promise.resolve();
-  function startGroupMemberPoll(token, groupId) { return _groupCreate?.startGroupMemberPoll(token, groupId); }
-  async function processJoinToken(token) { return _groupCreate?.processJoinToken(token); }
+  const createGroup = name => _groupCreate?.createGroup(name) || Promise.resolve(), createGroupInviteLink = name => _groupCreate?.createGroupInviteLink(name) || Promise.resolve();
+  function startGroupMemberPoll(token, groupId) { return _groupCreate?.startGroupMemberPoll(token, groupId); } async function processJoinToken(token) { return _groupCreate?.processJoinToken(token); }
 
 
   // Poll for new members joining the group
@@ -11502,6 +11498,7 @@ async function initMessenger(dbName) {
         const pub = c?.pubB64 || (typeof msg.fromPub === 'string' && msg.fromPub.slice(0, 12) === msg.from ? msg.fromPub : ''); // unknown sender: still run the ratchet — a 3.7/3.8 peer's add-greeting carries the X3DH first-message header, and dropping it loses the session for good
         const decrypted = pub ? await decryptFrom(msg.payload, pub) : null;
         if (!c || !decrypted) return;
+        if (await _groupProtection.receive(decrypted)) return;
         const P = globalThis.__breezeProfile;
         const prof = P?.parseProfilePayload(decrypted);
         if (prof && P.profileNewer(prof, c)) {
@@ -11561,6 +11558,7 @@ async function initMessenger(dbName) {
           .map(m => ({ id: m.id, pubB64: m.pubB64, name: typeof m.name === 'string' ? m.name.slice(0, 64) : '',
                        ...(Array.isArray(m.caps) ? { caps: m.caps.filter(c => typeof c === 'string').slice(0, 20).map(c => c.slice(0, 32)) } : {}) }));
         if (invite.type === 'group_invite' && inviteGroupId && !(await dbGet('contacts', inviteGroupId))) {
+          if (!await _groupProtection.invited(invite, msg.fromPub || (await dbGet('contacts', msg.from))?.pubB64)) return;
           await dbPut('contacts', { id: inviteGroupId, name: inviteName, isGroup: true, members: inviteMembers, addedAt: Date.now(), unread: 0, pubB64: '' });
           if (!_focusActive()) playNotif();
           _renderContactsThrottled();
@@ -14292,6 +14290,7 @@ async function initMessenger(dbName) {
             activeContact.members = activeContact.members.filter(m => m.id !== member.id);
             if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
             activeContact.groupV5 = _computeGroupV5(activeContact); // re-negotiate: kick can only relax the AND rule (fewer members), may newly enable v5
+            if (!await _groupProtection.admit(activeContact, activeContact.members)) return;
             await dbPut('contacts', activeContact);
             // v5 epoch rotation: generate a fresh chain key and re-distribute to remaining
             // members only. The kicked member's stale key is valid for the old epoch only.
