@@ -12,6 +12,11 @@ This is not a web page; it is software you install and use (Windows / Mac / Linu
 
 ![Breeze Messenger screenshot — the main window right after creating an identity](../images/screenshot.png)
 
+## Try it first
+
+- [Demo](https://breeze-demo.pages.dev): a look-and-feel demo. It runs on dummy data and does not communicate for real.
+- [Backup public site](https://breeze-app-8ib.pages.dev): a mirror for times when GitHub is unavailable. It serves the release build itself, with no server configured (you connect it to your own server to use it).
+
 ## To use Breeze, you host it on your own server
 
 Breeze has no "operating company's server." **To use it, you provide a place to run it (a server) yourself, and you put Breeze there. That is the intended way to use it.**
