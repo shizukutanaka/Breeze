@@ -102,7 +102,7 @@ describe('mock mode wiring', () => {
   it('auto-creates through the normal setup flow, seeds after identity creation, and exposes the persistent banner', () => {
     expect(html).toContain('id="mock-banner"');
     expect(html).toContain('data-i18n="mockBanner"');
-    expect(html).toContain('await _runSetupCreate(\'random\');\n      return;');
+    expect(html).toContain("if (!globalThis.__BREEZE_MOCK_MANUAL__) {\n        await _runSetupCreate('random');\n        return;\n      }");
     expect(html).toContain('if (_mock) await _mock.seedIfNeeded();');
     expect(html).toContain('_mock?.installBanner();');
   });
