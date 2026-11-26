@@ -1,5 +1,5 @@
 const VERSION = '3.8.0';
-const CACHE = 'breeze-v' + VERSION + '-group-protection-safety-v2';
+const CACHE = 'breeze-v' + VERSION + '-wave-icon-v3';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
   '/src/app/device-alerts.js', '/src/app/device-keys.js', '/src/app/device-revocation.js',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
