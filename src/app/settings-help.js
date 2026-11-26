@@ -41,6 +41,7 @@ export const SETTINGS_HELP_MAP = Object.freeze({
     restore: 'helpSetRestore',
     'restore-file': 'helpSetRestoreFile',
     'save-display-name': 'helpSetSaveDisplayName',
+    'tab-move': 'helpSetTabOrder',
   }),
 });
 

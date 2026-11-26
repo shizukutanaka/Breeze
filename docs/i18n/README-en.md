@@ -49,7 +49,7 @@ We also state the scope honestly. In order to deliver messages, the server holds
 - Profiles with a photo, stickers, location sharing
 - Command operations such as `/help` (71 kinds)
 - Power modes matched to your battery (automatic / normal / power saving / emergency). As the battery runs down, delivery checks are spaced out so the battery lasts longer. A safeguard for disasters and other times when you cannot recharge
-- Bottom tabs on a phone (Chats / Calls / Contacts / My card / Settings. Which tabs are shown can be chosen in the settings)
+- Bottom tabs on a phone (Chats / Calls / Contacts / Profile / Settings. Which tabs are shown can be chosen in the settings)
 - Readable screens (attention to colour contrast, text size, and operating with the keyboard alone)
 
 ## Differences from other messengers

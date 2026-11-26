@@ -3,11 +3,11 @@ import { readFileSync } from 'node:fs';
 
 // Bottom tab bar (UI/UX phase 1A + the 2026-11-25 expansions, owner
 // requests): on narrow (mobile) screens the list view gains a LINE-style
-// bottom tab bar — Chats / Calls / Contacts / My card / Settings. The bar
+// bottom tab bar — Chats / Calls / Contacts / Profile / Settings. The bar
 // rides the EXISTING views, not a parallel router: Chats, Contacts and
 // Calls are three modes of the one sidebar list (_listTab — recency +
 // folder filters vs friends by name vs the on-device call history from
-// src/app/call-history.js), My card opens the existing profile panel,
+// src/app/call-history.js), Profile opens the existing profile panel,
 // and Settings opens the settings view through the same synthetic-Enter
 // path as the ?settings shortcut (_openSettingsFromUrl). Bar visibility
 // is CSS-derived from .sidebar.hidden. Which optional tabs exist is a
@@ -60,12 +60,12 @@ describe('bottom tab bar markup', () => {
     expect(bar).toContain('data-i18n="helpSettings"');
     expect(html).toContain("tabChats: 'Chats'");
     expect(html).toContain("tabCalls: 'Calls'");
-    expect(html).toContain("tabSelf: 'My card'");
+    expect(html).toContain("tabSelf: 'Profile'");
     expect(html).toContain("ariaContacts: 'Contacts'");
     expect(html).toContain("helpSettings: 'Settings'");
     expect(ja.tabChats).toBe('トーク');
     expect(ja.tabCalls).toBe('通話');
-    expect(ja.tabSelf).toBe('自分のカード');
+    expect(ja.tabSelf).toBe('プロフィール');
     expect(ja.ariaContacts).toBe('連絡先');
     expect(ja.helpSettings).toBe('設定');
   });
@@ -205,7 +205,7 @@ describe('tab visibility settings (Settings → Bottom tabs)', () => {
     expect(ja.tabChatsAlways).toBe('トークは常に表示されます');
     expect(ja.tabShowCalls).toBe('通話タブを表示');
     expect(ja.tabShowContacts).toBe('連絡先タブを表示');
-    expect(ja.tabShowSelf).toBe('自分のカードタブを表示');
+    expect(ja.tabShowSelf).toBe('プロフィールタブを表示');
     expect(ja.tabShowSettings).toBe('設定タブを表示');
   });
   it('the privacy section offers the call-history recording switch', () => {
@@ -233,5 +233,34 @@ describe('tab visibility settings (Settings → Bottom tabs)', () => {
   });
   it('settings stays reachable with its tab hidden (the header gear keeps its own door)', () => {
     expect(html).toContain("_DOM.get('b-msg-settings')?.addEventListener('click', () => openSettingsView());");
+  });
+});
+
+
+describe('bottom tab order settings', () => {
+  it('renders all five rows in the saved order with localized move buttons and drag enabled', () => {
+    expect(settingsPanelSrc).toContain('data-tab-order-list');
+    expect(settingsPanelSrc).toContain('draggable="true" data-order-tab="${k}"');
+    expect(settingsPanelSrc).toContain('data-action="tab-move"');
+    expect(settingsPanelSrc).toContain("move('-1', 'arrow-left', 'tabMoveLeft', i === 0)");
+    expect(settingsPanelSrc).toContain("move('1', 'arrow-right', 'tabMoveRight', i === TAB_ORDER.length - 1)");
+    expect(ja.tabOrderSection).toBe('タブの並び順');
+    expect(ja.tabMoveLeft).toBe('タブを左へ移動');
+    expect(ja.tabMoveRight).toBe('タブを右へ移動');
+  });
+  it('validates the saved permutation, applies it at wiring time, and saves both move paths', () => {
+    const valid = slice('function _validTabOrder()', 'function _applyTabOrder()');
+    expect(valid).toContain('Array.isArray(order)');
+    expect(valid).toContain('order.length === keys.length');
+    expect(valid).toContain('keys.every(k => order.includes(k))');
+    const apply = slice('function _applyTabOrder()', 'function _applyTabVisibility()');
+    expect(apply).toContain('bar.appendChild(el)');
+    expect(html).toContain('_applyTabOrder(); _applyTabVisibility();');
+    expect(html).toContain('await loadSettings(); _applyTabOrder();');
+    expect(html).toContain('tabOrder: _validTabOrder()');
+    expect(html).toContain("ev.target.closest('[data-action=\"tab-move\"]')");
+    expect(html).toContain("d.addEventListener('dragstart'");
+    expect(html).toContain("d.addEventListener('drop'");
+    expect(html).toContain('_settings.tabOrder = order.slice(); saveSettings(); _applyTabOrder();');
   });
 });
