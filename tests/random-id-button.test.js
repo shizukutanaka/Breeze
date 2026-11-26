@@ -27,6 +27,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
 const profileSrc = readFileSync(join(HERE, '..', 'src', 'app', 'profile.js'), 'utf8');
 const settingsPanelSrc = readFileSync(join(HERE, '..', 'src', 'app', 'settings-panel.js'), 'utf8');
+const settingsViewSrc = readFileSync(join(HERE, '..', 'src', 'app', 'settings-view.js'), 'utf8');
 const ja = JSON.parse(readFileSync(join(HERE, '..', 'locales', 'ja.json'), 'utf8'));
 const LOCALES = readdirSync(join(HERE, '..', 'locales')).filter(x => x.endsWith('.json'));
 const locale = (f) => JSON.parse(readFileSync(join(HERE, '..', 'locales', f), 'utf8'));
@@ -127,9 +128,10 @@ describe('settings view — display name editing shares the profile save path', 
   });
 
   it('the save button delegates to the profile module — no second store', () => {
-    const panel = sliceBetween('function _renderSettingsPanel(d)', 'function openSettingsView()');
-    expect(panel).toContain("_profileUI?.setDisplayName(name)");
-    expect(panel).toContain("showToast(t('profileSaved'), 'success')");
+    const start = settingsViewSrc.indexOf('function renderPanel(d)');
+    const panel = settingsViewSrc.slice(start, settingsViewSrc.indexOf('function open()', start));
+    expect(panel).toContain("deps._profileUI?.setDisplayName(name)");
+    expect(panel).toContain("deps.showToast(deps.t('profileSaved'), 'success')");
     expect(profileSrc).toContain('setDisplayName: _setDisplayName');
     // One save path: the panel OK handler and setDisplayName both land
     // in _saveProfile, which is the only writer of the profile record.

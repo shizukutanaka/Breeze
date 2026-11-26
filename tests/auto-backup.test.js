@@ -47,6 +47,7 @@ import {
 import { makeEnv, apiRequest } from './helpers/mockKV.js';
 import { createBackupTools } from '../src/app/backup.js';
 const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
+const settingsViewSrc = readFileSync(new URL('../src/app/settings-view.js', import.meta.url), 'utf8');
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
@@ -445,7 +446,7 @@ describe('wiring (index.html / locales)', () => {
   });
   it('settings carries the toggle, status line, arm button and migration entry', () => {
     expect(settingsPanelSrc).toContain("check('auto-backup'");
-    expect(html).toContain("if (s === 'auto-backup') { _settings.autoBackup = cb.checked; saveSettings(); return; }");
+    expect(settingsViewSrc).toContain("if (s === 'auto-backup') { deps.settings().autoBackup = cb.checked; deps.saveSettings(); return; }");
     expect(settingsPanelSrc).toContain('data-autobackup-status');
     expect(settingsPanelSrc).toContain("action('autobackup-arm'");
     expect(settingsPanelSrc).toContain("action('migrate-device'");
