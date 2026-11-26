@@ -35,6 +35,7 @@ import { mintPQPreKey, pqSeedRecord, pqPublicKeyFromSeed, pqSecretKeyFromSeed } 
 import { createFranking } from '../src/crypto/franking.js';
 import { sealMeta as refSealMeta, unsealMeta as refUnsealMeta } from '../src/crypto/seal.js';
 
+globalThis._deviceRevocation = { allowed: async () => null, admit: async () => true, wrap: async body => body, unwrap: async body => body, targets: async () => null };
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 // index.html's encrypt/decrypt now call _keyCommit/_cmOk as free variables (I16 key commitment).

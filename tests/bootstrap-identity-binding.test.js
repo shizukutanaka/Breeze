@@ -4,6 +4,7 @@ import { createRatchet, padBucketSize } from '../src/crypto/ratchet.js';
 import { createPQSessionHelper } from '../src/crypto/pqxdh.js';
 import { mintPQPreKey } from '../src/crypto/pqkey.js';
 
+globalThis._deviceRevocation = { allowed: async () => null, admit: async () => true, wrap: async body => body, unwrap: async body => body, targets: async () => null };
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const ratchet = createRatchet({ hasX25519: true, PREFERRED_CURVE: 'X25519' });
 const b64 = bytes => Buffer.from(bytes).toString('base64');

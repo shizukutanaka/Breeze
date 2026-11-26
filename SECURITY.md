@@ -66,14 +66,44 @@ surfaces. Relay stripping cannot erase an already observed binding. Relays can s
 withhold updates, replay an old view to an observer without a newer checkpoint, or
 suppress all independent paths. A certificate is proof of issuance, not freshness.
 
-**This is not effective peer revocation yet.** There are no revocation epochs or
-new group capabilities in this slice. Linked devices still cannot send into strict
-signed-author groups; unlink still revokes fan-out only and does not rotate group
-Sender Keys. These require the next protocol slice. Legacy raw `/link`/`/linkto`
-remains unchanged, including relay-assisted first-link signing-key TOFU; physically
+**Effective revocation is opt-in and evidence-dependent.** Upgraded peers exchange
+root-signed monotonic checkpoints and device signing consent inside existing E2EE
+messages. Once observed, revoked certified keys cannot start/use 1:1 sessions or
+send group messages, even if a previously associated sender omits its root claim.
+Unlink rotates local group Sender Keys and excludes revoked mailboxes; other group
+senders rotate when their own clients learn the signed revocation. Certified linked
+devices can send strict signed-author group messages. Legacy raw `/link`/`/linkto`
+remains compatible, including relay-assisted first-link signing-key TOFU; physically
 carrying only the root encryption key does not authenticate its signing key.
 An authenticated certificate link cannot be downgraded through the raw-key path.
 See [the transcript specification](docs/CRYPTO-SPEC.md#opt-in-device-key-linking-v1-first-slice).
+
+Checkpoint state, heads, consents and observed device ownership use vault-covered
+`identity:verify:*` records. The authenticated root pin must already come from the
+direct linking ceremony or an existing root contact. Another root cannot globally
+revoke a standalone contact using only a forwarded certificate: ownership is learned
+from the device's authenticated encryption channel. Independently accepted legacy
+keys that have never established that association remain independent identities.
+Without Web Locks no capability is advertised or new checkpoints issued; legacy
+non-strict messaging continues, while authenticated linking and strict device
+signing remain unavailable. Previously learned revocations are not forgotten.
+Automatic checkpoint broadcasts do not initiate unconfirmed 1:1 sessions, except
+from a root to its own devices. Other unready targets receive authority metadata
+on subsequent normal E2EE traffic instead; both ends starting first-message
+ratchets at linking would otherwise strand Sender Key delivery.
+
+This is not immediate global consensus. A relay can suppress every new ciphertext,
+and offline peers or peers with no authenticated root pin cannot enforce an unseen
+revocation. Signed heads and shared-group checkpoint gossip expose stale/withheld
+views only after an independent authenticated path delivers newer evidence. Bounded
+gossip can temporarily deliver a head before its full checkpoint, intentionally
+pausing device traffic rather than guessing freshness. Legacy peers ignore this
+protocol. New root-signed evidence cannot erase prior plaintext, invalidate copied
+root keys, revoke remote push subscriptions, or protect a compromised browser/root.
+Checkpoint history is bounded to 256 tombstoned keys; exhausting it requires moving
+to a fresh identity, not silently dropping old revocations. A crash/network failure
+after local unlink commits can leave the relay registry stale; local/peer enforcement
+uses the committed checkpoint and subsequent sends retry key distribution/gossip.
 
 The deployed `src/app/device-alerts.js` verifies the existing root-signed device registry,
 persists its own-account high-water revision and device list, and records previously unseen
@@ -125,8 +155,9 @@ lie about completeness, or return matching keys in status while serving other ke
 The local registry high-water mark detects rollback only after a newer revision was observed;
 it is not global consensus or protection against indefinite omission of a not-yet-seen event.
 An explicit unavailable warning catches errors, not a relay plausibly serving a stale subset.
-There is no independent witness/gossip channel, guaranteed push wakeup, or cross-relay activity
-aggregation. The activity service covers the serving relay; other home relays can be hidden.
+There is no independent witness, guaranteed push wakeup, or cross-relay activity
+aggregation. Device-authority gossip covers signed checkpoints, not all installation
+or push activity. The activity service covers the serving relay; other home relays can be hidden.
 
 Only upgraded, **cooperating** clients announce sessions/restores and push registrations.
 Linked secondaries additionally need a locally pinned root signing key (`account.rootEd`
@@ -140,11 +171,12 @@ An old or malicious client using copied keys can omit the new announcement entir
 normal prekey upload/refresh is intentionally not treated as a new device (that would flag
 ordinary rotation). Likewise, an old relay cannot supply the new activity/status fields.
 This feature is detection with explicit limits, not remote session invalidation or an
-anti-takeover guarantee. The existing root-signed `/unlink` only stops linked-device fan-out;
+anti-takeover guarantee. For legacy peers `/unlink` only stops linked-device fan-out;
 it cannot invalidate copied identity keys or a push subscription belonging to another browser.
 The review dialog explains the boundary and recommends moving to a fresh identity and notifying
 contacts after identity theft. Per-session tokens, authenticated key-transition proofs,
-root-signed per-device signing keys and remote push-subscription revocation are deferred.
+remote push-subscription revocation remain deferred. Certified device signing keys
+and checkpoint-based revocation are described above.
 
 ## Persisted contact verification
 
