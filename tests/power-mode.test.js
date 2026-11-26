@@ -87,8 +87,8 @@ const pollingBlock = slice('  function startPresencePolling() {', '\n  startPres
 const createPolling = new Function(
   'API', 'dbGetAll', 'peers', '_presenceCache', '_lastSeenCache', 'renderContacts', 'postAPIRaw', '_dbg', '_devRegTs',
   '_attribDevCache', 'deliverPeerRelayQueue', 'connectPeer', 'CONFIG', '_intervals',
-  'setInterval', '_powerPresenceOff',
-  pollingBlock + '\nreturn startPresencePolling;');
+  'setInterval', 'setTimeout', '_powerPresenceOff', '_powerPollFloorMs',
+  'let _presencePollTimer = null;\n' + pollingBlock + '\nreturn startPresencePolling;');
 
 function presenceHarness(settings) {
   const power = create({ MIN: 60000 }, settings, {}, () => {});
@@ -111,8 +111,10 @@ function presenceHarness(settings) {
     () => {},
     { PRESENCE_INTERVAL_MS: 30000 },
     [],
-    (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
+    (fn, ms) => { timers.push({ fn, ms, type: 'interval' }); return timers.length; },
+    (fn, ms) => { timers.push({ fn, ms, type: 'timeout' }); return timers.length; },
     power._powerPresenceOff,
+    power._powerPollFloorMs,
   );
   start();
   return { postAPIRaw, dbGetAll, renderContacts, timers };
@@ -127,7 +129,7 @@ describe('power mode — presence checks', () => {
     const h = presenceHarness(settings);
     await flushMicrotasks();
     expect(h.timers).toHaveLength(1);
-    expect(h.timers[0].ms).toBe(30000);
+    expect(h.timers[0].ms).toBe(60000);
     // The pre-fix request-only gate still read IndexedDB and re-rendered in saver;
     // presence polling must now return before every one of those side effects.
     expect(h.dbGetAll).not.toHaveBeenCalled();
@@ -140,14 +142,14 @@ describe('power mode — presence checks', () => {
     expect(h.postAPIRaw).not.toHaveBeenCalled();
 
     settings.powerMode = 'normal';
-    await h.timers[0].fn();
+    await h.timers.at(-1).fn();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
     expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
     const dbCallsInNormal = h.dbGetAll.mock.calls.length;
     const renderCallsInNormal = h.renderContacts.mock.calls.length;
 
     settings.powerMode = 'emergency';
-    await h.timers[0].fn();
+    await h.timers.at(-1).fn();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
     expect(h.dbGetAll).toHaveBeenCalledTimes(dbCallsInNormal);
     expect(h.renderContacts).toHaveBeenCalledTimes(renderCallsInNormal);
@@ -158,6 +160,50 @@ describe('power mode — presence checks', () => {
     await flushMicrotasks();
     expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
     expect(h.postAPIRaw).toHaveBeenLastCalledWith('/presence', { ids: ['c1'], check: true });
+  });
+
+  it.each([
+    ['normal', 30000],
+    ['saver', 60000],
+    ['emergency', 600000],
+  ])('schedules the first tick in %s mode at %i ms', async (mode, ms) => {
+    const h = presenceHarness({ powerMode: mode });
+    await flushMicrotasks();
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(ms);
+    expect(h.timers[0].type).toBe('timeout');
+  });
+
+  it('reschedules through emergency and re-evaluates back down to normal', async () => {
+    const settings = { powerMode: 'emergency' };
+    const h = presenceHarness(settings);
+    await flushMicrotasks();
+    expect(h.timers).toHaveLength(1);
+    expect(h.timers[0].ms).toBe(600000);
+
+    await h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(600000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+
+    settings.powerMode = 'normal';
+    await h.timers[1].fn();
+    expect(h.timers).toHaveLength(3);
+    expect(h.timers[2].ms).toBe(30000);
+  });
+
+  it('keeps the chain alive when a poll tick throws', async () => {
+    const h = presenceHarness({ powerMode: 'normal' });
+    await flushMicrotasks();
+    h.dbGetAll.mockRejectedValueOnce(Error('idb unavailable'));
+    await h.timers[0].fn();
+    expect(h.timers).toHaveLength(2);
+    expect(h.timers[1].ms).toBe(30000);
+  });
+
+  it('clears the chain timer explicitly on account switch', () => {
+    const cleanup = slice('_messengerCleanup = () => {', '\n      // Discard this account');
+    expect(cleanup).toContain('if (_presencePollTimer) { clearTimeout(_presencePollTimer); _presencePollTimer = null; }');
   });
 });
 
