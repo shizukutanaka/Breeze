@@ -19,6 +19,7 @@ import { readFileSync } from 'node:fs';
 // so there was no calls screen for a tab to open.
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
+const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
 
 const barStart = html.indexOf('<nav id="msg-tabbar"');
 const bar = html.slice(barStart, html.indexOf('</nav>', barStart));
@@ -190,16 +191,16 @@ describe('tab visibility settings (Settings → Bottom tabs)', () => {
     expect(html).not.toContain("data-setting=\"tab-vis-chats\"");
   });
   it('the settings panel offers one checkbox per optional tab plus the always-shown note', () => {
-    expect(html).toContain("${t('tabBarSection')}");
-    expect(html).toContain("${t('tabChatsAlways')}");
-    expect(html).toContain('data-setting="tab-vis-calls" ${_settings.tabCalls !== false ? \'checked\' : \'\'}');
-    expect(html).toContain('data-setting="tab-vis-contacts" ${_settings.tabContacts !== false ? \'checked\' : \'\'}');
-    expect(html).toContain('data-setting="tab-vis-self" ${_settings.tabSelf !== false ? \'checked\' : \'\'}');
-    expect(html).toContain('data-setting="tab-vis-settings" ${_settings.tabSettings !== false ? \'checked\' : \'\'}');
-    expect(html).toContain("${t('tabShowCalls')}");
-    expect(html).toContain("${t('tabShowContacts')}");
-    expect(html).toContain("${t('tabShowSelf')}");
-    expect(html).toContain("${t('tabShowSettings')}");
+    expect(settingsPanelSrc).toContain("section(t('tabBarSection')");
+    expect(settingsPanelSrc).toContain("t('tabChatsAlways')");
+    expect(settingsPanelSrc).toContain("check('tab-vis-calls'");
+    expect(settingsPanelSrc).toContain("check('tab-vis-contacts'");
+    expect(settingsPanelSrc).toContain("check('tab-vis-self'");
+    expect(settingsPanelSrc).toContain("check('tab-vis-settings'");
+    expect(settingsPanelSrc).toContain("t('tabShowCalls')");
+    expect(settingsPanelSrc).toContain("t('tabShowContacts')");
+    expect(settingsPanelSrc).toContain("t('tabShowSelf')");
+    expect(settingsPanelSrc).toContain("t('tabShowSettings')");
     expect(ja.tabBarSection).toBe('下部タブ');
     expect(ja.tabChatsAlways).toBe('トークは常に表示されます');
     expect(ja.tabShowCalls).toBe('通話タブを表示');
@@ -208,8 +209,8 @@ describe('tab visibility settings (Settings → Bottom tabs)', () => {
     expect(ja.tabShowSettings).toBe('設定タブを表示');
   });
   it('the privacy section offers the call-history recording switch', () => {
-    expect(html).toContain('data-setting="call-history-log" ${_settings.callHistoryLog !== false ? \'checked\' : \'\'}');
-    expect(html).toContain("${t('callHistoryLogLabel')}");
+    expect(settingsPanelSrc).toContain("check('call-history-log'");
+    expect(settingsPanelSrc).toContain("t('callHistoryLogLabel')");
     expect(html).toContain("if (s === 'call-history-log') { _settings.callHistoryLog = cb.checked; saveSettings(); return; }");
     expect(ja.callHistoryLogLabel).toBe('この端末に通話履歴を残す');
   });

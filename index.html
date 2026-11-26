@@ -64,6 +64,7 @@
   --fs-display: 22px;
   --rad-sm: 8px;
   --rad-bubble: 18px;
+  --bubble-self: linear-gradient(135deg, var(--g), var(--gd)); --bubble-other: var(--s2); --badge-bg: var(--g); --danger: var(--r);
   --rad: 16px; --rad-lg: 22px; --rad-full: 9999px;
   --ease: .3s cubic-bezier(.175,.885,.32,1.275); --ease-smooth: .25s ease;
   --touch: 48px;
@@ -87,7 +88,7 @@ html.theme-transitioning, html.theme-transitioning *, html.theme-transitioning *
   color-scheme: light;
 }
 }
-.light .msg.me { background: var(--gd); color: #fff }
+.light .msg.me { background: var(--bubble-self); color: #fff }
 .light .btn-g, .light .btn-r, .light .folder-tab .bdg, .light .bdg-row, .light .acc-tab .bdg-acc, .light .label-chip.active, .light .i-highlight, .light .highlight-mark, .light .input-bar .send, .light .server-banner, .light .drop-overlay-text, .light .skip-to-content { color: #fff }
 .light ::selection { color: #fff }
 .light .msg-status.failed { color: #fff }
@@ -163,7 +164,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .btn-o { background: rgba(255,255,255,.06); color: var(--t2); border: 1px solid var(--b1); backdrop-filter: blur(8px) }
 .btn-o:hover { background: var(--s2); color: var(--t1); transform: translateY(-1px) }
 .btn-sm { padding: 6px 14px; font-size: var(--fs-caption); min-height: 32px; border-radius: var(--rad) }
-.btn-r { background: var(--r); color: #000; box-shadow: 0 2px 12px rgba(255,107,107,.25) }
+.btn-r { background: var(--danger); color: #000; box-shadow: 0 2px 12px rgba(255,107,107,.25) }
 .label { font-size: var(--fs-caption); font-weight: 600; color: var(--t3); text-transform: uppercase; letter-spacing: .08em; margin-bottom: var(--sp-2) }
 .color-g { color: var(--g) }
 .text-xs { font-size: var(--fs-caption) }
@@ -197,7 +198,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .folder-tab.active { color: var(--t1); background: var(--s1); box-shadow: var(--shadow-sm) }
 .folder-tab:hover:not(.active) { color: var(--t1) }
 .folder-tab:active { transform: scale(.95) }
-.bdg { background: var(--g); color: #000; font-size: var(--fs-caption); border-radius: var(--rad-full); padding: 2px 6px; margin-left: var(--sp-1); font-weight: 700; min-width: 16px; text-align: center; display: inline-block; vertical-align: middle }
+.bdg { background: var(--badge-bg); color: #000; font-size: var(--fs-caption); border-radius: var(--rad-full); padding: 2px 6px; margin-left: var(--sp-1); font-weight: 700; min-width: 16px; text-align: center; display: inline-block; vertical-align: middle }
 .bdg:empty { display: none }
 .bdg-row { padding: 2px 7px; margin: var(--sp-1) 0 0; min-width: initial; text-align: inherit; vertical-align: baseline }
 .bdg-count { display: inline; min-width: initial; text-align: inherit; vertical-align: baseline }
@@ -206,9 +207,9 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 /* ─── Contact list ─── */
 .contact {
   display: flex; align-items: center; gap: var(--sp-3);
-  padding: 10px 14px; cursor: pointer;
+  padding: var(--sp-2) var(--sp-3); cursor: pointer;
   transition: transform .15s var(--bounce), background var(--ease-smooth);
-  min-height: 60px; margin: 2px var(--sp-2); border-radius: var(--rad);
+  min-height: calc(var(--touch) + var(--sp-3)); margin: var(--sp-1) var(--sp-2); border-radius: var(--rad-sm);
   -webkit-tap-highlight-color: transparent;
   content-visibility: auto; contain-intrinsic-size: auto 60px
 }
@@ -217,7 +218,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .contact.active { background: var(--gl); box-shadow: inset 3px 0 0 var(--g) }
 .contact-blocked { opacity: .3 }
 .contact .avatar {
-  width: 42px; height: 42px; border-radius: 50%; background: var(--s3);
+  width: calc(var(--touch) - 6px); height: calc(var(--touch) - 6px); border-radius: 50%; background: var(--s3);
   display: flex; align-items: center; justify-content: center;
   font-size: var(--fs-name); flex-shrink: 0; color: #fff; font-weight: 700; position: relative;
   box-shadow: var(--shadow-sm); transition: transform .2s var(--bounce)
@@ -236,10 +237,11 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .msg-loc a { color: var(--g) }
 .live-chip { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; background: var(--s1); border-top: 1px solid var(--b1); font-size: var(--fs-sub) }
 .contact .info { flex: 1; min-width: 0 }
-.contact .info .name { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.contact .info .preview { font-size: var(--fs-caption); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px }
-.contact .meta { text-align: right; flex-shrink: 0 }
-.contact .meta .time { font-size: var(--fs-caption); color: var(--t3) }
+.contact .info .name { font-weight: 600; font-size: var(--fs-name); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.contact .info .preview { font-size: var(--fs-caption); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: var(--sp-1) }
+.contact .meta { text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; align-self: stretch; padding: var(--sp-1) 0 }
+.contact .meta .time { font-size: var(--fs-caption); color: var(--t3); line-height: 1.2 }
+.contact .meta .bdg-row { margin-top: auto }
 .contact.unread .info .name { font-weight: 700 }
 .contact.unread .info .preview { color: var(--t1); font-weight: 600 }
 .contact.unread .meta .time { color: var(--g); font-weight: 700 }
@@ -251,7 +253,29 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .settings-head { display: flex; align-items: center; gap: 10px; padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--b1); background: var(--s1) }
 .settings-title { font-weight: 700; font-size: var(--fs-body) }
 .settings-body { flex: 1; overflow-y: auto; padding: var(--sp-4); overscroll-behavior-y: contain }
-.settings-body .cmd-panel-mono { max-width: 640px; margin: 0 auto }
+.settings-panel { max-width: 680px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--sp-5); color: var(--t1); font-family: var(--font); font-size: var(--fs-body); line-height: 1.45; white-space: normal }
+.settings-section h2 { margin: 0 0 var(--sp-2); padding: 0 var(--sp-2); color: var(--t3); font-size: var(--fs-caption); font-weight: 700; letter-spacing: .08em; text-transform: uppercase }
+.settings-card, .settings-profile-card { overflow: hidden; background: var(--s1); border: 1px solid var(--b1); border-radius: var(--rad); box-shadow: var(--shadow-sm) }
+.settings-profile-card { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) }
+.settings-profile-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--sp-2); color: var(--t2); font-size: var(--fs-sub) }
+.settings-row { min-height: var(--touch); display: flex; align-items: center; gap: var(--sp-2); padding: 0 var(--sp-3); color: var(--t1) }
+.settings-card .settings-row + .settings-row { border-top: 1px solid var(--b1) }
+.settings-row-main { flex: 1; min-width: 0; min-height: var(--touch); display: flex; align-items: center; gap: var(--sp-3); font-size: var(--fs-body) }
+.settings-row-label { flex: 1; min-width: 0; overflow-wrap: anywhere }
+.settings-row-sub { display: block; color: var(--t3); font-family: var(--mono); font-size: var(--fs-caption) }
+.settings-ico { width: 20px; height: 20px; flex-shrink: 0; color: var(--t3) }
+.settings-row-main input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; accent-color: var(--g) }
+.settings-row-main select { width: auto; min-width: calc(var(--touch) + var(--sp-6)); padding: var(--sp-1) var(--sp-2); font-size: var(--fs-sub) }
+.settings-row-main input[type="password"] { width: auto; flex: 1; min-width: 0 }
+.settings-action-row { padding: 0 }
+.settings-action-main { flex: 1; min-height: var(--touch); display: flex; align-items: center; gap: var(--sp-3); padding: 0 var(--sp-3); border: 0; background: transparent; color: var(--t1); font: inherit; text-align: left; cursor: pointer }
+.settings-action-main:hover { background: var(--s2) }
+.settings-action-row:has(.settings-action-main.hidden) { display: none }
+.settings-chevron { width: 8px; height: 8px; margin-left: auto; border-right: 2px solid var(--t3); border-bottom: 2px solid var(--t3); transform: rotate(-45deg) }
+.settings-note, .settings-status { padding: var(--sp-2) var(--sp-3); color: var(--t3); font-size: var(--fs-caption); line-height: 1.5 }
+.settings-danger-row .settings-action-main { color: var(--danger) }
+.settings-row > .settings-help-btn, .settings-profile-card > .settings-help-btn { margin-right: var(--sp-2); flex-shrink: 0 }
+.settings-end { text-align: center }
 /* One-time cards in the chat log (keywrap tip, first-contact backup nudge) */
 .nudge-card { display: flex; flex-direction: column; gap: var(--sp-2) }
 .nudge-actions { display: flex; gap: var(--sp-2); flex-wrap: wrap }
@@ -271,7 +295,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 
 /* ─── Messages ─── */
 .msg {
-  max-width: 72%; padding: 10px var(--sp-4); border-radius: 20px;
+  max-width: 72%; padding: var(--sp-2) var(--sp-4); border-radius: var(--rad-bubble);
   font-size: var(--fs-body); line-height: 1.5; word-wrap: break-word; overflow-wrap: break-word;
   position: relative; contain: content;
   content-visibility: auto; contain-intrinsic-size: auto 44px;
@@ -281,12 +305,12 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
   box-shadow: var(--shadow-sm)
 }
 .msg:active { transform: scale(.98) }
-.msg.me { background: linear-gradient(135deg, var(--g), var(--gd)); color: #000; align-self: flex-end; border-bottom-right-radius: 6px }
-.msg.them { background: var(--s2); backdrop-filter: blur(8px); align-self: flex-start; border-bottom-left-radius: 6px }
+.msg.me { background: var(--bubble-self); color: #000; align-self: flex-end; border-bottom-right-radius: var(--rad-sm) }
+.msg.them { background: var(--bubble-other); backdrop-filter: blur(8px); align-self: flex-start; border-bottom-left-radius: var(--rad-sm) }
 .msg.sys { background: transparent; align-self: center; max-width: 90%; text-align: center; font-size: var(--fs-caption); color: var(--t3); padding: 6px 14px; border-radius: var(--rad-full); border: 1px dashed var(--b1) }
-.msg.grouped { margin-top: 2px }
-.msg.grouped.me { border-top-right-radius: 6px }
-.msg.grouped.them { border-top-left-radius: 6px }
+.msg.grouped { margin-top: calc(var(--sp-1) / 2) }
+.msg.grouped.me { border-top-right-radius: var(--rad-sm) }
+.msg.grouped.them { border-top-left-radius: var(--rad-sm) }
 @keyframes msgBounce { 0% { opacity: 0; transform: translateY(10px) scale(.95) } 60% { transform: translateY(-2px) scale(1.01) } 100% { opacity: 1; transform: none } }
 
 /* Message sub-elements */
@@ -327,7 +351,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .msg-status { font-size: var(--fs-caption); margin-left: 2px; display: inline-flex; align-items: center; justify-content: center; vertical-align: middle; min-height: 20px }
 .msg-status.deposited { border: 1.5px solid currentColor; border-radius: 50%; width: 22px; height: 22px }
 .msg-status.read { background: var(--blue); color: #000; border-radius: var(--rad-full); padding: 0 6px; font-weight: 700 }
-.msg-status.failed { background: var(--r); color: #000; border-radius: var(--rad-full); padding: 0 6px; font-weight: 700; cursor: pointer; min-width: 24px; min-height: 24px }
+.msg-status.failed { background: var(--danger); color: #000; border-radius: var(--rad-full); padding: 0 6px; font-weight: 700; cursor: pointer; min-width: 24px; min-height: 24px }
 .msg-copy {
   position: absolute; top: 4px; right: 4px; font-size: var(--fs-caption); opacity: 0;
   cursor: pointer; background: var(--s3); border: none; color: var(--t3);
@@ -420,7 +444,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; pointer-events: none }
 .btn-sm .ico { width: 17px; height: 17px }
 .tab-ico .ico { width: 22px; height: 22px }
-.ico.state-ico, .pin-banner .ico { width: 14px; height: 14px } .ico.state-ico { vertical-align: -2px; margin-right: 2px } .setup-feat .ico { width: 28px; height: 28px; display: block; margin: 0 auto 6px } .i-icon48 .ico, .drop-page-icon .ico { width: 48px; height: 48px } .i-emoji-lg .ico { width: 28px; height: 28px }
+.ico.state-ico, .pin-banner .ico { width: 14px; height: 14px } .ico.state-ico { vertical-align: -2px; margin-right: 2px } .setup-feat .ico { width: calc(var(--fs-display) + 6px); height: calc(var(--fs-display) + 6px); display: block; margin: 0 auto var(--sp-2) } .i-icon48 .ico, .drop-page-icon .ico { width: 48px; height: 48px } .i-emoji-lg .ico { width: 28px; height: 28px }
 .timer-label { font-weight: 600 }
 .timer-label:not(:empty) { margin-left: var(--sp-1) }
 
@@ -738,9 +762,9 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 .qr-url { font-size: var(--fs-caption); color: var(--t3); word-break: break-all; margin-top: var(--sp-2); font-family: var(--mono) }
 .search-hl { background: rgba(16,185,129,.3); border-radius: 2px; padding: 0 1px }
 .drag-active { border: 2px dashed var(--g); opacity: .8 }
-.compact .msg { padding: 6px var(--sp-3); font-size: var(--fs-sub); border-radius: 14px; max-width: 80% }
-.compact .msg.me { border-bottom-right-radius: 4px }
-.compact .msg.them { border-bottom-left-radius: 4px }
+.compact .msg { padding: calc(var(--sp-2) - 2px) var(--sp-3); font-size: var(--fs-sub); border-radius: var(--rad-bubble); max-width: 80% }
+.compact .msg.me { border-bottom-right-radius: var(--rad-sm) }
+.compact .msg.them { border-bottom-left-radius: var(--rad-sm) }
 .compact .contact { min-height: 44px; padding: var(--sp-2) var(--sp-3); margin: 1px 6px; border-radius: 10px }
 .compact .contact .avatar { width: 32px; height: 32px; font-size: var(--fs-sub) }
 .compact .date-sep { padding: var(--sp-2) 0 2px; font-size: var(--fs-caption) }
@@ -755,18 +779,19 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 
 /* ─── Page-specific layouts ─── */
 .legal-body { padding: var(--sp-5); max-width: 640px; margin: 0 auto; font-size: var(--fs-sub); line-height: 1.8; color: var(--t2) }
-.setup-page { text-align: center; padding: 60px 20px 20px; max-width: 400px; margin: 0 auto }
-.setup-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: var(--sp-5); text-align: center }
-.setup-feat { padding: var(--sp-4) 10px; border-radius: var(--rad-lg); background: var(--s1); border: 1px solid var(--b1); backdrop-filter: blur(8px); transition: transform .2s var(--bounce), box-shadow .2s ease; box-shadow: var(--shadow-sm) }
+.setup-page { text-align: center; padding: var(--sp-7) var(--sp-5) var(--sp-5); max-width: 400px; margin: 0 auto }
+.setup-page h1 { font-size: var(--fs-display) }
+.setup-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--sp-4); margin-top: var(--sp-5); text-align: center }
+.setup-feat { padding: var(--sp-4) var(--sp-3); border-radius: var(--rad-lg); background: var(--s1); border: 1px solid var(--b1); backdrop-filter: blur(8px); transition: transform .2s var(--bounce), box-shadow .2s ease; box-shadow: var(--shadow-sm) }
 .setup-feat:hover { transform: translateY(-3px) scale(1.02); box-shadow: var(--shadow-md) }
-.setup-feat span { display: block; font-size: 28px; margin-bottom: 6px }
-.setup-feat b { display: block; font-size: var(--fs-caption); color: var(--t1); margin-bottom: 2px }
+.setup-feat span { display: block; font-size: calc(var(--fs-display) + 6px); margin-bottom: var(--sp-2) }
+.setup-feat b { display: block; font-size: var(--fs-caption); color: var(--t1); margin-bottom: var(--sp-1) }
 .setup-feat small { font-size: var(--fs-caption); color: var(--t3) }
-.setup-desc { color: var(--t2); font-size: 14px; margin: 0 0 var(--sp-5); line-height: 1.6 }
+.setup-desc { color: var(--t2); font-size: var(--fs-body); margin: 0 0 var(--sp-5); line-height: 1.6 }
 .setup-input { max-width: 280px; margin: 0 auto; border-radius: var(--rad) }
 .setup-input-alt { max-width: 280px; margin: var(--sp-2) auto 0; font-size: var(--fs-caption); border-radius: var(--rad) }
-.setup-cta { max-width: 280px; margin: var(--sp-4) auto 0; padding: 14px; font-size: var(--fs-body) }
-.setup-restore { max-width: 280px; margin: 10px auto 0; padding: var(--sp-3) }
+.setup-cta { max-width: 280px; margin: var(--sp-4) auto 0; padding: var(--sp-3); font-size: var(--fs-body) }
+.setup-restore { max-width: 280px; margin: var(--sp-3) auto 0; padding: var(--sp-3) }
 .setup-restore-more { display: flex; flex-direction: column }
 .setup-restore-more.hidden { display: none }
 .setup-footer { color: var(--t3); margin-top: var(--sp-4); font-size: var(--fs-caption) }
@@ -777,7 +802,10 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 .msg-area { flex: 1; overflow-y: auto; padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; contain: layout style paint; overscroll-behavior-y: contain; overflow-anchor: none }
 /* v3.6: Scroll anchor sentinel — keeps view pinned to bottom during prepend (research: Chrome/Firefox) */
 .msg-area .scroll-anchor { overflow-anchor: auto; height: 1px; flex-shrink: 0 }
-.msg-empty { text-align: center; color: var(--t3); font-size: 14px; padding: 80px 20px }
+.msg-empty, .empty-state { text-align: center; color: var(--t3); font-size: var(--fs-body); padding: var(--sp-7) var(--sp-5) }
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); margin: auto; max-width: 320px }
+.empty-state .empty-ico { width: 40px; height: 40px; color: var(--t3) }
+.empty-actions { display: flex; justify-content: center; gap: var(--sp-2); flex-wrap: wrap }
 
 /* ─── One-off component styles (extracted from cssText) ─── */
 .lock-overlay { position: fixed; inset: 0; width: 100vw; height: 100vh; max-width: none; max-height: none; margin: 0; padding: 0; border-radius: 0; box-shadow: none; background: rgba(5,5,5,.85); backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px); z-index: 99999; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: var(--sp-4); animation: overlayFade .3s ease }
@@ -969,8 +997,8 @@ del.md-del { opacity: .6 }
     --shadow-md: 0 4px 16px rgba(0,0,0,.06);
     --shadow-float: 0 8px 32px rgba(0,0,0,.1)
   }
-  :root.auto-theme .msg.me { background: linear-gradient(135deg, var(--g), var(--gd)); color: #fff }
-  :root.auto-theme .msg.them { background: rgba(255,255,255,.8); backdrop-filter: blur(8px) }
+  :root.auto-theme .msg.me { background: var(--bubble-self); color: #fff }
+  :root.auto-theme .msg.them { background: var(--bubble-other); backdrop-filter: blur(8px) }
   :root.auto-theme .ctx-menu, :root.auto-theme .mention-picker { background: rgba(255,255,255,.85); backdrop-filter: var(--glass); box-shadow: var(--shadow-float) }
   :root.auto-theme .install-banner { background: rgba(255,255,255,.9); backdrop-filter: blur(12px) }
   :root.auto-theme .btn-g, :root.auto-theme .btn-r, :root.auto-theme .folder-tab .bdg, :root.auto-theme .bdg-row, :root.auto-theme .acc-tab .bdg-acc, :root.auto-theme .label-chip.active, :root.auto-theme .i-highlight, :root.auto-theme .highlight-mark, :root.auto-theme .input-bar .send, :root.auto-theme .server-banner, :root.auto-theme .drop-overlay-text, :root.auto-theme .skip-to-content { color: #fff }
@@ -1032,9 +1060,9 @@ del.md-del { opacity: .6 }
 .is-android .conv-header { padding-top: max(var(--sp-3), env(safe-area-inset-top)) }
 .is-android .input-bar { padding-bottom: calc(10px + env(safe-area-inset-bottom) + var(--kb-offset)) }
 /* Android: larger border-radius (Material You) */
-.is-android .msg { border-radius: 24px }
-.is-android .msg.me { border-bottom-right-radius: 6px }
-.is-android .msg.them { border-bottom-left-radius: 6px }
+.is-android .msg { border-radius: var(--rad-bubble) }
+.is-android .msg.me { border-bottom-right-radius: var(--rad-sm) }
+.is-android .msg.them { border-bottom-left-radius: var(--rad-sm) }
 .is-android .modal { border-radius: var(--rad-lg) }
 /* Android: edge-to-edge status/nav bar transparent */
 .is-android.is-pwa .sidebar { padding-top: env(safe-area-inset-top) }
@@ -1273,7 +1301,9 @@ del.md-del { opacity: .6 }
         <div id="pin-banner" class="pin-banner hidden" role="status"></div>
         <div id="msg-messages" role="log" data-i18n-aria="ariaMessages" aria-live="polite" aria-relevant="additions" class="msg-area">
           <div id="drop-overlay" class="drop-overlay"><span class="drop-overlay-text" data-i18n="dropToSend">Drop to send file</span></div>
-          <div class="msg-empty" data-i18n-html="emptyContacts">Use the <b class="i-g">Add friend</b> button to add a contact.</div>
+          <div class="msg-empty empty-state">
+            <div data-i18n="emptyNoChats">No conversations yet.</div><div class="settings-note" data-i18n-html="emptyContacts">Use the <b class="i-g">Add friend</b> button to add a contact.</div><div class="empty-actions"><button type="button" class="btn btn-g" data-empty-action="add-contact" data-i18n="addContactTitle">Add friend</button></div>
+          </div>
         </div>
         <button class="scroll-fab hidden" id="scroll-fab" data-i18n-aria="ariaScrollBottom"><span data-icon="arrow-down"></span><span class="scroll-count"></span></button>
         <div id="typing-indicator" class="typing-ind" aria-live="polite"></div>
@@ -1444,7 +1474,7 @@ import { showContextMenu as _showContextMenuMod } from './src/app/context-menu.j
 import { createLightbox } from './src/app/lightbox.js'; window.__breezeLightbox = { createLightbox };
 import { createSmartReplies } from './src/app/smart-replies.js'; window.__breezeSmartReplies = { createSmartReplies };
 import { createChatSearch } from './src/app/chat-search.js'; window.__breezeChatSearch = { createChatSearch };
-import { createCallHistory } from './src/app/call-history.js'; window.__breezeCallHistory = { createCallHistory }; import { installSettingsHelp } from './src/app/settings-help.js'; window.__breezeSettingsHelp = { installSettingsHelp }; import { createCloudflareLink } from './src/app/cloudflare.js'; window.__breezeCloudflare = { createCloudflareLink };
+import { createCallHistory } from './src/app/call-history.js'; window.__breezeCallHistory = { createCallHistory }; import { installSettingsHelp } from './src/app/settings-help.js'; window.__breezeSettingsHelp = { installSettingsHelp }; import { createCloudflareLink } from './src/app/cloudflare.js'; window.__breezeCloudflare = { createCloudflareLink }; import { settingsPanelHtml } from './src/app/settings-panel.js'; window.__breezeSettingsPanel = { settingsPanelHtml };
 window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set() };
 </script>
 
@@ -2467,6 +2497,10 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     uiSelectContact: 'Select a contact',
     uiNoMatches: "No matches for {0}",
     uiNoResults: "No results for {0}",
+    emptyClearSearch: 'Clear search',
+    emptySearchAgain: 'Search again',
+    emptyNoChats: 'No conversations yet.',
+    emptyShowAllChats: 'Show all chats',
     searchResults: { one: "{0} result for \"{1}\"", other: "{0} results for \"{1}\"" },
     searchAllResults: { one: "{0} result across {1} chats", other: "{0} results across {1} chats" },
     uiAllCaughtUp: 'All caught up',
@@ -3259,8 +3293,8 @@ _appModulesReady.then(() => {
 // v3.6: Trusted Types — 'breeze-sanitizer' (named, via safeSetHTML) + 'default' (safety net sanitizing raw innerHTML/outerHTML under require-trusted-types-for 'script'). Fallback: same API, no TT.
 const _ttPolicy = (() => {
   // Sanitizer: strip dangerous tags/attrs while keeping safe markdown output
-  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input)$/i;
-  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
+  const SAFE_TAGS = /^(p|br|strong|em|b|i|a|code|pre|blockquote|ul|ol|li|span|div|img|del|s|sub|sup|h[1-6]|table|thead|tbody|tr|td|th|mark|button|input|label|select|option|section)$/i;
+  const SAFE_ATTRS = /^(href|target|rel|class|title|data-[a-z-]+|loading|alt|src|id|aria-[a-z]+|role|style|type|checked|selected|placeholder|maxlength|rows|cols|for|name|value|min|max|step|disabled|readonly|autocomplete|enterkeyhint|spellcheck|wrap|tabindex)$/i;
 
   // DOMParser.parseFromString(str,'text/html') is ITSELF TT-guarded: the browser auto-
   // invokes 'default's createHTML (= this function) on the string first, which calls
@@ -8471,6 +8505,15 @@ async function initMessenger(dbName) {
   function _setConvName(c) { if (_nameTools) _nameTools._setConvName(c); else if (c) { _DOM.get('msg-conv-name').textContent = contactDisplayName(c); _contactVerify?.paintHeader(c).catch(e => _dbg(e, 'verification-header')); } }
   const setContactNickname = _nameTools?.setContactNickname || (async () => {});
 
+  function _emptyState(text, actions = []) {
+    const d = document.createElement('div'); d.className = 'empty-state';
+    const p = document.createElement('div'); p.textContent = text; d.appendChild(p);
+    if (!actions.length) return d;
+    const row = document.createElement('div'); row.className = 'empty-actions';
+    for (const a of actions) { const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'btn ' + (a.primary ? 'btn-g' : 'btn-o'); btn.textContent = a.label; btn.onclick = a.onClick; row.appendChild(btn); }
+    d.appendChild(row); return d;
+  }
+
   async function renderContacts() {
     _requests?.refresh().catch(e => _dbg(e, 'requests-refresh'));
     renderSelfCard().catch(e => _dbg(e, 'self-card-render')); if (_listTab === 'calls') { await globalThis.__breezeCallHistoryUI?.render(); return; } // Calls mode: the history module owns the list surface
@@ -8743,37 +8786,25 @@ async function initMessenger(dbName) {
     }
     // v3.3: Empty state when no contacts in current filter/folder
     if (filtered.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'cmd-center';
       const folder = _activeFolder;
-      let emptyDoors = null;
-      if (_contactFilter) empty.textContent = t('uiNoMatches', '"' + _contactFilter + '"');
-      else if (folder === 'unread') empty.textContent = t('uiAllCaughtUp');
-      else if (folder === 'groups') empty.textContent = t('uiNoGroups');
-      else if (folder === 'labels') empty.textContent = _activeLabel ? t('labelFilterEmpty', _activeLabel) : t('labelNoneContacts');
+      const showAllAction = { label: t('emptyShowAllChats'), primary: true, onClick: () => document.querySelector('.folder-tab[data-folder="all"]')?.click() };
+      let text, actions = [];
+      if (_contactFilter) {
+        text = t('uiNoMatches', '"' + _contactFilter + '"');
+        const input = _DOM.get('contact-filter');
+        actions = [{ label: t('emptyClearSearch'), primary: true, onClick: () => { input.value = ''; _contactFilter = ''; renderContacts(); input.focus(); } }];
+      } else if (folder === 'unread') { text = t('uiAllCaughtUp'); actions = [showAllAction]; }
+      else if (folder === 'groups') { text = t('uiNoGroups'); actions = [{ label: t('addOptionGroup'), primary: true, onClick: () => _showAddContactPanel('group') }]; }
+      else if (folder === 'labels') { text = _activeLabel ? t('labelFilterEmpty', _activeLabel) : t('labelNoneContacts'); actions = [showAllAction]; }
       else {
-        empty.textContent = t('uiAddFirst');
-        // SHARE_PLAN stage 4 step 1: a brand-new user (no contacts at all)
-        // gets the two growth doors right here — invite and migrate —
-        // instead of having to discover /invite and /migrate. Shown only
-        // in this state; once the list grows past it, the same doors live
-        // in the settings panel.
-        if (contacts.length === 0) {
-          emptyDoors = document.createElement('div');
-          emptyDoors.className = 'cmd-center i-flex-c';
-          const invBtn = document.createElement('button');
-          invBtn.className = 'btn btn-g btn-sm';
-          invBtn.textContent = t('btnInviteFriend');
-          invBtn.onclick = () => { shareInvite(); };
-          const migBtn = document.createElement('button');
-          migBtn.className = 'btn btn-o btn-sm';
-          migBtn.textContent = t('btnMigrateApps');
-          migBtn.onclick = () => { showMigratePanel(); };
-          emptyDoors.append(invBtn, migBtn);
-        }
+        text = t('uiAddFirst');
+        if (contacts.length === 0) actions = [
+          { label: t('addContactTitle'), primary: true, onClick: () => _showAddContactPanel() },
+          { label: t('btnInviteFriend'), onClick: () => shareInvite() },
+          { label: t('btnMigrateApps'), onClick: () => showMigratePanel() },
+        ];
       }
-      frag.appendChild(empty);
-      if (emptyDoors) frag.appendChild(emptyDoors);
+      frag.appendChild(_emptyState(text, actions));
     }
     // The self card lives INSIDE the list (first child) so it scrolls with
     // it; move it into the fragment so replaceChildren keeps it on top.
@@ -12949,6 +12980,7 @@ async function initMessenger(dbName) {
   // path still funnels through _dispatchAddInput / shareInvite, so the
   // validation behind each is exactly the one the old surface used.
   function _showAddContactPanel() {
+    const initial = arguments[0];
     const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `
       <h3 id="${titleId}" class="i-m-0-12">${esc(t('addContactTitle'))}</h3>
@@ -12991,6 +13023,7 @@ async function initMessenger(dbName) {
     const createGrp = () => { const name = groupInput.value.trim(); if (name) done('group:' + name); };
     dlg.querySelector('.group-submit').onclick = createGrp;
     groupInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); createGrp(); } });
+    if (initial === 'group') dlg.querySelector('[data-choice="group"]').click();
   }
 
   async function resolveAndAdd(input, homeHintOverride) {
@@ -13658,6 +13691,7 @@ async function initMessenger(dbName) {
   window.showLightbox = function(src) { _lightbox?.showLightbox(src); };
   // v3.4: Event delegation for lightbox (no inline onclick)
   _DOM.get('msg-messages')?.addEventListener('click', (e) => {
+    if (e.target.closest('[data-empty-action="add-contact"]')) { _showAddContactPanel(); return; }
     // v3.6: Reply quote click → scroll to original message
     const quote = e.target.closest('.msg-quote[data-reply]');
     if (quote) {
@@ -14047,59 +14081,21 @@ async function initMessenger(dbName) {
     }
   }
   function _renderSettingsPanel(d) {
-      const _sendSoundEnabled = localStorage.getItem('brz-send-sound') !== '0';
-      const _notifSoundEnabled = localStorage.getItem('brz-notif-sound') !== '0';
-      // Stage-2 step 5: the home-relay rows, built by concatenation —
-      // a template literal nested inside the panel's template literal
-      // is exactly what this file's tooling (and a tired reader) loses
-      // track of.
-      const _relayRows = homeRelays().map(r =>
-        '<span>' + esc(r.label || r.url) + (isOriginRelay(r) ? ' ' + esc(t('relayOriginTag')) : '')
-        + ' <span class="i-t3-10" data-relay-fp="' + esc(r.url) + '">…</span>'
-        + (_relayBlockedUrls.has(r.url) ? ' ⚠' : '')
-        + (isOriginRelay(r) ? '' : ' <button class="btn btn-o btn-sm" data-action="remove-relay" data-url="' + esc(r.url) + '">' + t('relayRemoveBtn') + '</button>')
-        + '</span><br>').join('');
-      // Stage-2 step 6: the fan-out count, same concatenation discipline.
-      const _fanoutOpts = [1, 2, 3].map(n =>
-        '<option value="' + n + '"' + (_fanoutCount() === n ? ' selected' : '') + '>' + n + '</option>').join('');
-      // Power saving (phase 1): same concatenation discipline.
-      const _powerOpts = [['auto', 'powerAuto'], ['normal', 'powerNormal'], ['saver', 'powerSaver'], ['emergency', 'powerEmergency']].map(([v, k]) =>
-        '<option value="' + v + '"' + (_settings.powerMode === v ? ' selected' : '') + '>' + esc(t(k)) + '</option>').join('');
-      safeSetHTML(d, `<b class="i-g">${t('profileTitle')}</b><br>
-        <label class="i-cur">${t('yourDisplayName')} <input type="text" class="field settings-name-input" maxlength="64" value="${esc(myName)}"></label>
-        <button class="btn btn-g btn-sm" data-action="save-display-name">${t('profileSave')}</button><br>
-        <br><b class="i-g">${t('settingsPrivacy')}</b><br>
-        <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="rr-delay" ${_settings.readReceiptDelay ? 'checked' : ''}> ${t('rrDelayLabel')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="hide-typing" ${_privacyHideTyping ? 'checked' : ''}> ${t('hideTyping')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="relay-only" ${_settings.relayOnly ? 'checked' : ''}> ${t('relayOnly')}</label><br><label class="i-cur"><input type="checkbox" data-setting="kt-block" ${_settings.ktBlockOnTamper ? 'checked' : ''}> ${t('ktBlockLabel')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="show-peer-name" ${_settings.showPeerName !== false ? 'checked' : ''}> ${t('showPeerNameLabel')}</label><br><label class="i-cur"><input type="checkbox" data-setting="call-history-log" ${_settings.callHistoryLog !== false ? 'checked' : ''}> ${t('callHistoryLogLabel')}</label><br>
-        <br><b class="i-g">${t('settingsSound')}</b><br>
-        <label class="i-cur"><input type="checkbox" data-setting="notif-sound" ${_notifSoundEnabled ? 'checked' : ''}> ${t('notifSound')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="send-sound" ${_sendSoundEnabled ? 'checked' : ''}> ${t('sendSound')}</label><br>
-        <br><b class="i-g">${t('settingsNotif')}</b><br>
-        <label class="i-cur"><input type="checkbox" data-setting="focus" ${_focusActive() ? 'checked' : ''}> ${t('focusLabel')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="focus-strict" ${_settings.focusStrict ? 'checked' : ''}> ${t('focusStrictLabel')}</label><br>
-        <label class="i-cur"><input type="checkbox" data-setting="notif-perm" ${typeof Notification !== 'undefined' && Notification.permission === 'granted' ? 'checked' : ''}> ${t('enableNotif')}</label><br>
-        <br><b class="i-g">${t('settingsAccounts')}</b><br>
-        <label class="i-cur"><input type="checkbox" data-setting="auto-lock" ${localStorage.getItem('brz-autolock') === '1' ? 'checked' : ''}> ${t('autoLockLabel')}</label><br>
-        <br><div data-cloudflare-section><b class="i-g">${t('settingsCloudflare')}</b><br><span class="i-t3-10">${t('cfNote')}</span><br><span class="i-t3-10">${t('cfGuideText')} <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener noreferrer">${t('cfCreateTokenLink')}</a></span><br><label class="i-cur">${t('cfTokenLabel')} <input type="password" class="cloudflare-token-input" autocomplete="off" placeholder="${esc(t('cfTokenPlaceholder'))}"></label><br><button type="button" class="btn btn-g btn-sm" data-action="cloudflare-quickstart">${t('cfQuickSetup')}</button> <button type="button" class="btn btn-o btn-sm" data-action="cloudflare-save">${t('cfSave')}</button> <button type="button" class="btn btn-o btn-sm" data-action="cloudflare-verify">${t('cfVerify')}</button> <button type="button" class="btn btn-o btn-sm" data-action="cloudflare-setup">${t('cfSetup')}</button> <button type="button" class="btn btn-o btn-sm" data-action="cloudflare-disconnect">${t('cfDisconnect')}</button><br><span class="i-t3-10" data-cloudflare-status></span><br><span class="i-t3-10" data-cloudflare-setup-status></span></div>
-        <br><b class="i-g">${t('settingsShare')}</b><br>
-        <button class="btn btn-o btn-sm" data-action="invite-friend">${t('btnInviteFriend')}</button>
-        <button class="btn btn-o btn-sm" data-action="migrate-apps">${t('btnMigrateApps')}</button><br>
-        <br><b class="i-g">${t('settingsBackup')}</b><br>
-        <button class="btn btn-g btn-sm" data-action="backup">${t('backupBtn')}</button>
-        <button class="btn btn-o btn-sm" data-action="restore">${t('restoreBtn')}</button>
-        <button class="btn btn-o btn-sm" data-action="restore-file">${t('restoreFileBtn')}</button><br>
-        <label class="i-cur"><input type="checkbox" data-setting="auto-backup" ${_settings.autoBackup !== false ? 'checked' : ''}> ${t('autoBackupLabel')}</label><br>
-        <span class="i-t3-10" data-autobackup-status>…</span> <button class="btn btn-o btn-sm hidden" data-action="autobackup-arm">${t('autoBackupArmBtn')}</button><br>
-        <button class="btn btn-o btn-sm" data-action="migrate-device">${t('migrateDeviceBtn')}</button><br>
-        <br><b class="i-g">${t('settingsRelays')}</b><br>
-        ${_relayRows}
-        <button class="btn btn-o btn-sm" data-action="add-relay">${t('relayAddBtn')}</button><br>
-        <label class="i-cur">${t('relayFanoutLabel')} <select data-setting="fanout">${_fanoutOpts}</select></label><br>
-        <label class="i-cur">${t('powerModeLabel')} <select data-setting="power-mode">${_powerOpts}</select></label><br><br><b class="i-g">${t('tabBarSection')}</b><br><span class="i-t3-10">${t('tabChatsAlways')}</span><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-calls" ${_settings.tabCalls !== false ? 'checked' : ''}> ${t('tabShowCalls')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-contacts" ${_settings.tabContacts !== false ? 'checked' : ''}> ${t('tabShowContacts')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-self" ${_settings.tabSelf !== false ? 'checked' : ''}> ${t('tabShowSelf')}</label><br><label class="i-cur"><input type="checkbox" data-setting="tab-vis-settings" ${_settings.tabSettings !== false ? 'checked' : ''}> ${t('tabShowSettings')}</label><br>
-        <br><span class="i-t3-10">${t('settingsImmediate')}</span>`);
+      const renderSettings = globalThis.__breezeSettingsPanel?.settingsPanelHtml;
+      if (!renderSettings) return;
+      safeSetHTML(d, renderSettings({
+        t, esc, myName,
+        hideReadReceipts: _privacyHideReadReceipts, readReceiptDelay: !!_settings.readReceiptDelay,
+        hideTyping: _privacyHideTyping, relayOnly: _settings.relayOnly, ktBlock: _settings.ktBlockOnTamper,
+        showPeerName: _settings.showPeerName !== false, callHistoryLog: _settings.callHistoryLog !== false,
+        notifSound: localStorage.getItem('brz-notif-sound') !== '0', sendSound: localStorage.getItem('brz-send-sound') !== '0',
+        focus: _focusActive(), focusStrict: _settings.focusStrict, autoLock: localStorage.getItem('brz-autolock') === '1',
+        notifPerm: typeof Notification !== 'undefined' && Notification.permission === 'granted', autoBackup: _settings.autoBackup !== false,
+        fanout: _fanoutCount(), powerMode: ['auto', 'normal', 'saver', 'emergency'].includes(_settings.powerMode) ? _settings.powerMode : 'auto',
+        relays: homeRelays().map(r => ({ label: r.label || r.url, url: r.url, origin: isOriginRelay(r), blocked: _relayBlockedUrls.has(r.url) })),
+        tabCalls: _settings.tabCalls !== false, tabContacts: _settings.tabContacts !== false,
+        tabSelf: _settings.tabSelf !== false, tabSettings: _settings.tabSettings !== false,
+      }));
       // (The add-account door is the account tab bar — renderAccountTabs
       // renders it for a single account too, so Settings needs no button.)
       // SHARE_PLAN stage 4 step 1: the invite / migrate doors — the same
@@ -14184,7 +14180,7 @@ async function initMessenger(dbName) {
           const el = d.querySelector('[data-autobackup-status]');
           if (el) el.textContent = _autoBackupStatusText(st);
           const arm = d.querySelector('[data-action="autobackup-arm"]');
-          if (arm) arm.classList.toggle('hidden', !(st && (st.state === 'needpass' || st.state === 'error')));
+          if (arm) arm.closest('.settings-action-row')?.classList.toggle('hidden', !(st && (st.state === 'needpass' || st.state === 'error')));
         }).catch(e => _dbg(e, 'autobackup-status'));
       };
       fillAutoBackupStatus();
@@ -14199,7 +14195,7 @@ async function initMessenger(dbName) {
     if (!view || !body) return;
     body.replaceChildren();
     const d = document.createElement('div');
-    d.className = 'cmd-panel-mono';
+    d.className = 'settings-panel';
     body.appendChild(d);
     _renderSettingsPanel(d); _setActiveTab('settings');
     if (!_settingsViewOpen) {
@@ -14673,10 +14669,9 @@ async function initMessenger(dbName) {
       const matches = msgs.filter(m => m.text && !m.deleted && m.text.toLowerCase().includes(query));
       const box = _DOM.get('msg-messages');
       if (matches.length === 0) {
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        d.textContent = t('uiNoResults', '"' + query + '"');
-        box.appendChild(d); box.scrollTop = box.scrollHeight;
+        const input = _DOM.get('msg-input');
+        box.appendChild(_emptyState(t('uiNoResults', '"' + query + '"'), [{ label: t('emptySearchAgain'), primary: true, onClick: () => { input.value = '/search '; input.focus(); } }]));
+        box.scrollTop = box.scrollHeight;
       } else {
         box.replaceChildren();
         for (const m of matches.sort((a,b) => a.ts - b.ts)) {
@@ -14705,10 +14700,8 @@ async function initMessenger(dbName) {
       const matches = allMsgs.filter(m => m.text && !m.deleted && m.text.toLowerCase().includes(query));
       const box = _DOM.get('msg-messages');
       if (matches.length === 0) {
-        const d = document.createElement('div');
-        d.className = 'chat-empty';
-        d.textContent = t('uiNoResults', '"' + query + '"');
-        box.appendChild(d);
+        const input = _DOM.get('msg-input');
+        box.appendChild(_emptyState(t('uiNoResults', '"' + query + '"'), [{ label: t('emptySearchAgain'), primary: true, onClick: () => { input.value = '/searchall '; input.focus(); } }]));
       } else {
         box.replaceChildren();
         const grouped = {};

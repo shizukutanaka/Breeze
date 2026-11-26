@@ -62,6 +62,8 @@ export function installSettingsHelp(D) {
     return null;
   };
   const decoratedButton = (row, id) => {
+    const inside = row.closest?.('.settings-row')?.querySelector?.('.' + HELP_BUTTON_CLASS);
+    if (inside?.dataset?.helpFor === id) return inside;
     let n = row?.nextSibling;
     while (n && n.nodeType === 3 && !n.textContent.trim()) n = n.nextSibling;
     return n && n.nodeType === 1 && n.classList?.contains(HELP_BUTTON_CLASS) && n.dataset.helpFor === id ? n : null;
@@ -100,7 +102,9 @@ export function installSettingsHelp(D) {
         ev.stopPropagation();
         showHelp(labelText(row, el), hit.key);
       });
-      row.parentNode.insertBefore(btn, row.nextSibling);
+      const mount = row.closest?.('.settings-row');
+      if (mount) mount.appendChild(btn);
+      else row.parentNode.insertBefore(btn, row.nextSibling);
     }
   }
 
