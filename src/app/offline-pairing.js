@@ -289,7 +289,7 @@ export function createOfflinePairing(D) {
         <button class="btn btn-o btn-sm" data-op="close">${D.esc(D.t('uiClose'))}</button>`);
       const el = key => dlg.querySelector(`[data-op="${key}"]`);
       for (const name of ['output', 'input']) {
-        const area = document.createElement('textarea'); area.dataset.op = name; area.className = 'modal-input';
+        const area = document.createElement('textarea'); area.dataset.op = name; area.className = 'field modal-input';
         area.readOnly = name === 'output'; area.setAttribute('aria-label', D.t(name === 'output' ? 'opOutput' : 'opInput'));
         el(name + '-wrap').appendChild(area);
       }
@@ -310,9 +310,11 @@ export function createOfflinePairing(D) {
       el('import').onclick = load;
       el('input').oninput = () => { candidate = null; el('matches').checked = false; el('confirm').disabled = true; el('fingerprint').textContent = ''; };
       el('matches').onchange = () => { el('confirm').disabled = busy || !candidate || !el('matches').checked; };
+      const compare = document.createElement('button'); compare.type = 'button'; compare.className = 'btn btn-o'; compare.textContent = D.t('safetyNumber'); compare.hidden = true; dlg.appendChild(compare);
       el('confirm').onclick = () => run(async () => {
         if (!candidate || !el('matches').checked) fail();
-        await confirm(candidate); candidate = null; el('status').textContent = D.t('opConfirmed');
+        const contact = await confirm(candidate); candidate = null; el('status').textContent = D.t('opConfirmed');
+        compare.hidden = !D.compare; compare.onclick = async () => { try { dlg.close(); await D.compare?.(contact); } catch(e) { D.log(e); } };
       });
       el('copy').onclick = () => run(async () => { await navigator.clipboard.writeText(own.code); el('status').textContent = D.t('rvCopied'); });
       const canScan = !!D.qr?.startScan && typeof BarcodeDetector !== 'undefined';

@@ -21,10 +21,17 @@ describe('electron badge interval', () => {
     expect(html).toContain('indexedDB.open(dbName, DB_VER)');
   });
 
-  it('still counts .cbadge elements and updates the native badge and title', () => {
+  it('still counts .bdg-row elements and updates the native badge and title', () => {
     const block = badgeBlock();
-    expect(block).toContain('.cbadge');
+    expect(block).toContain('.bdg-row');
     expect(block).toContain('window.breeze.setBadge(total)');
     expect(block).toContain('_updateTitle(total)');
+  });
+
+  it('gates the recount by power mode before touching the DOM', () => {
+    const block = badgeBlock();
+    const gate = 'if (_powerPresenceOff()) return;';
+    expect(block).toContain(gate);
+    expect(block.indexOf(gate)).toBeLessThan(block.indexOf("querySelectorAll('.bdg-row')"));
   });
 });

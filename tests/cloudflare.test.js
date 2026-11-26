@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCloudflareLink, CLOUDFLARE_LINK_KEY } from '../src/app/cloudflare.js';
+import worker from '../_worker.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const html = readFileSync(join(root, 'index.html'), 'utf8');
@@ -455,10 +456,217 @@ describe('served worker source', () => {
 });
 
 
+describe('unconfigured first-run quickstart and brand-new account setup', () => {
+  const CF = 'https://api.cloudflare.com/client/v4';
+  const ACCOUNT = 'acct-new';
+  const WORKER_SOURCE = 'export default { async fetch() { return new Response("ok"); } };\n';
+
+  function fullFreshFetch({ missingSubdomain = false, registerFails = false } = {}) {
+    let registeredSub = missingSubdomain ? null : 'fresh-acct';
+    return async (url, opts = {}) => {
+      if (url === '/server/breeze-worker.js') {
+        return { ok: true, status: 200, text: async () => WORKER_SOURCE };
+      }
+      if (registeredSub && url === `https://breeze.${registeredSub}.workers.dev/api/health`) {
+        return cfResponse({ ok: true });
+      }
+      if (!url.startsWith(CF)) throw new Error('unexpected URL: ' + url);
+      const path = url.slice(CF.length);
+      if (path === '/user/tokens/verify') {
+        return cfResponse({ success: true, result: { id: 'tok-1', status: 'active' }, errors: [], messages: [] });
+      }
+      if (path === '/accounts') {
+        return cfResponse({ success: true, result: [{ id: ACCOUNT, name: 'Fresh Account' }], errors: [], messages: [] });
+      }
+      if (path.startsWith(`/accounts/${ACCOUNT}/storage/kv/namespaces`)) {
+        if (opts.method === 'POST') return cfResponse({ success: true, result: { id: 'kv-new' }, errors: [], messages: [] });
+        return cfResponse({ success: true, result: [], result_info: { page: 1, total_pages: 1 }, errors: [], messages: [] });
+      }
+      if (path === `/accounts/${ACCOUNT}/workers/scripts/breeze` && opts.method === 'PUT') {
+        return cfResponse({ success: true, result: { id: 'script-new' }, errors: [], messages: [] });
+      }
+      if (path === `/accounts/${ACCOUNT}/workers/scripts/breeze/subdomain` && opts.method === 'POST') {
+        if (!registeredSub) {
+          return cfResponse({ success: false, errors: [{ message: 'workers.dev subdomain not found' }], messages: [], result: null }, { ok: false, status: 404 });
+        }
+        return cfResponse({ success: true, result: { enabled: true }, errors: [], messages: [] });
+      }
+      if (path === `/accounts/${ACCOUNT}/workers/subdomain`) {
+        if (opts.method === 'PUT') {
+          if (registerFails) return cfResponse({ success: false, errors: [{ message: 'subdomain denied' }], messages: [], result: null }, { ok: false, status: 403 });
+          const body = JSON.parse(opts.body);
+          registeredSub = body.subdomain;
+          return cfResponse({ success: true, result: { subdomain: registeredSub }, errors: [], messages: [] });
+        }
+        if (!registeredSub) {
+          return cfResponse({ success: false, errors: [{ message: 'subdomain not found' }], messages: [], result: null }, { ok: false, status: 404 });
+        }
+        return cfResponse({ success: true, result: { subdomain: registeredSub }, errors: [], messages: [] });
+      }
+      throw new Error('unexpected Cloudflare path: ' + path);
+    };
+  }
+
+  it('connectAndSetup provisions end-to-end from a completely unconfigured state and invokes onServerReady', async () => {
+    const ready = [];
+    const store = new Map();
+    const calls = { fetch: [], toast: [] };
+    const setupSection = new FakeSection();
+    setupSection.quickstart = new FakeControl();
+    const origQs = setupSection.querySelector.bind(setupSection);
+    setupSection.querySelector = (sel) => sel === '[data-action="cloudflare-quickstart"]' ? setupSection.quickstart : origQs(sel);
+    const setupToggle = new FakeControl();
+    const panelClasses = new Set(['hidden']);
+    const setupPanel = {
+      classList: {
+        toggle: (cls) => { if (panelClasses.has(cls)) { panelClasses.delete(cls); return false; } panelClasses.add(cls); return true; },
+      },
+    };
+    const setupEntry = {
+      querySelector: (sel) => {
+        if (sel === '[data-action="cloudflare-setup-toggle"]') return setupToggle;
+        if (sel === '[data-cloudflare-setup-panel]') return setupPanel;
+        if (sel === '[data-cloudflare-section]') return setupSection;
+        return null;
+      },
+    };
+    const setupRoot = {
+      querySelector: (sel) => sel === '[data-cloudflare-setup-entry]' ? setupEntry : sel === '[data-cloudflare-section]' ? setupSection : null,
+      querySelectorAll: (sel) => sel === '[data-cloudflare-section]' ? [setupSection] : [],
+    };
+    const link = createCloudflareLink({
+      t: (key, ...args) => args.length ? `${key}(${args.join('|')})` : key,
+      esc: (s) => String(s ?? ''),
+      dbPut: async (_s, v, k) => { store.set(k, JSON.parse(JSON.stringify(v))); return true; },
+      dbGet: async (_s, k) => store.has(k) ? JSON.parse(JSON.stringify(store.get(k))) : null,
+      dbDel: async (_s, k) => { store.delete(k); },
+      showToast: (msg, type) => calls.toast.push({ msg, type }),
+      safeSetHTML: (el, v) => { el.textContent = v; },
+      domGet: (id) => id === 'msg-setup' ? setupRoot : null,
+      fetch: async (url, opts) => { calls.fetch.push({ url, opts }); return fullFreshFetch()(url, opts); },
+      onServerReady: async (dep) => { ready.push(dep); },
+    });
+    link.scan();
+    // Toggle opens the panel on the unconfigured first-run screen
+    setupToggle.click();
+    expect(panelClasses.has('hidden')).toBe(false);
+
+    const res = await link.connectAndSetup(TOKEN);
+    expect(res).toMatchObject({ ok: true, serverUrl: 'https://breeze.fresh-acct.workers.dev' });
+    expect(ready).toHaveLength(1);
+    expect(ready[0]).toMatchObject({ serverUrl: 'https://breeze.fresh-acct.workers.dev', verified: true });
+    expect(setupSection.setupStatus.textContent).toBe('cfSetupDone(https://breeze.fresh-acct.workers.dev)');
+    for (const c of calls.fetch.filter((x) => !x.url.startsWith(CF))) {
+      expect(c.opts?.headers?.Authorization).toBeUndefined();
+    }
+  });
+
+  it('connectAndSetup with empty token and no saved record fails without network calls', async () => {
+    const { link, calls } = makeLink(async () => { throw new Error('must not call fetch'); });
+    const res = await link.connectAndSetup('   ');
+    expect(res).toMatchObject({ ok: false, reason: 'cfErrTokenRequired' });
+    expect(calls.fetch).toHaveLength(0);
+  });
+
+  it('automatically registers a workers.dev subdomain for a brand-new Cloudflare account', async () => {
+    const { link, calls } = makeLink(fullFreshFetch({ missingSubdomain: true }));
+    const res = await link.connectAndSetup(TOKEN);
+    expect(res.ok).toBe(true);
+    expect(res.serverUrl).toMatch(/^https:\/\/breeze\.breeze-[0-9a-f]{8}\.workers\.dev$/);
+    const putSub = calls.fetch.find((c) => c.url === CF + `/accounts/${ACCOUNT}/workers/subdomain` && c.opts.method === 'PUT');
+    expect(putSub).toBeTruthy();
+    expect(JSON.parse(putSub.opts.body).subdomain).toMatch(/^breeze-[0-9a-f]{8}$/);
+  });
+
+  it('reports the Cloudflare API error honestly if registering a workers.dev subdomain fails', async () => {
+    const { link } = makeLink(fullFreshFetch({ missingSubdomain: true, registerFails: true }));
+    const res = await link.connectAndSetup(TOKEN);
+    expect(res).toMatchObject({ ok: false, step: 'subdomain', reason: 'subdomain denied' });
+  });
+});
+
+describe('same-origin /api/cf-proxy worker route and proxyBase client wiring', () => {
+  it('routes Cloudflare API calls through proxyBase and never sends Authorization to worker source or health', async () => {
+    const seen = [];
+    const store = new Map();
+    const link = createCloudflareLink({
+      t: (k, ...a) => a.length ? `${k}(${a.join('|')})` : k,
+      esc: (s) => String(s ?? ''),
+      dbPut: async (_s, v, k) => { store.set(k, JSON.parse(JSON.stringify(v))); return true; },
+      dbGet: async (_s, k) => store.has(k) ? JSON.parse(JSON.stringify(store.get(k))) : null,
+      dbDel: async (_s, k) => { store.delete(k); },
+      showToast: () => {},
+      safeSetHTML: () => {},
+      domGet: () => null,
+      proxyBase: 'https://breeze.example/api/cf-proxy',
+      fetch: async (url, opts = {}) => {
+        seen.push({ url, opts });
+        if (url === '/server/breeze-worker.js') return { ok: true, status: 200, text: async () => 'export default {};' };
+        if (url === 'https://breeze.proxied.workers.dev/api/health') return cfResponse({ ok: true });
+        if (url === 'https://breeze.example/api/cf-proxy/user/tokens/verify') return cfResponse({ success: true, result: { id: 't1', status: 'active' }, errors: [], messages: [] });
+        if (url === 'https://breeze.example/api/cf-proxy/accounts') return cfResponse({ success: true, result: [{ id: 'acct-p1', name: 'Proxied' }], errors: [], messages: [] });
+        if (url === 'https://breeze.example/api/cf-proxy/accounts/acct-p1/storage/kv/namespaces') return cfResponse({ success: true, result: [{ id: 'kv-p1', title: 'breeze-presence' }], result_info: { page: 1, total_pages: 1 }, errors: [], messages: [] });
+        if (url === 'https://breeze.example/api/cf-proxy/accounts/acct-p1/workers/scripts/breeze') return cfResponse({ success: true, result: { id: 'breeze' }, errors: [], messages: [] });
+        if (url === 'https://breeze.example/api/cf-proxy/accounts/acct-p1/workers/scripts/breeze/subdomain') return cfResponse({ success: true, result: { enabled: true }, errors: [], messages: [] });
+        if (url === 'https://breeze.example/api/cf-proxy/accounts/acct-p1/workers/subdomain') return cfResponse({ success: true, result: { subdomain: 'proxied' }, errors: [], messages: [] });
+        throw new Error('unexpected url: ' + url);
+      },
+    });
+    const res = await link.connectAndSetup(TOKEN);
+    expect(res).toMatchObject({ ok: true, serverUrl: 'https://breeze.proxied.workers.dev' });
+    const proxyCalls = seen.filter((c) => c.url.startsWith('https://breeze.example/api/cf-proxy/'));
+    expect(proxyCalls.length).toBeGreaterThanOrEqual(6);
+    for (const c of seen.filter((x) => !x.url.startsWith('https://breeze.example/api/cf-proxy/'))) {
+      expect(c.opts?.headers?.Authorization).toBeUndefined();
+    }
+  });
+
+  it('rejects non-allowlisted paths (403) and missing Bearer tokens (401) in _worker.js /api/cf-proxy', async () => {
+    const blocked = await worker.fetch(new Request('https://breeze.test/api/cf-proxy/zones/123/dns_records', {
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + TOKEN },
+    }), {});
+    expect(blocked.status).toBe(403);
+
+    const noAuth = await worker.fetch(new Request('https://breeze.test/api/cf-proxy/user/tokens/verify', {
+      method: 'GET',
+    }), {});
+    expect(noAuth.status).toBe(401);
+  });
+
+  it('forwards allowlisted /api/cf-proxy requests statelessly to api.cloudflare.com with no-store', async () => {
+    const origFetch = globalThis.fetch;
+    const forwarded = [];
+    globalThis.fetch = async (url, init) => {
+      forwarded.push({ url, init });
+      return new Response(JSON.stringify({ success: true, result: { status: 'active' }, errors: [], messages: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    };
+    try {
+      const res = await worker.fetch(new Request('https://breeze.test/api/cf-proxy/user/tokens/verify', {
+        method: 'GET',
+        headers: { Authorization: 'Bearer ' + TOKEN, 'CF-Connecting-IP': '198.51.100.10' },
+      }), {});
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Cache-Control')).toBe('no-store');
+      expect(forwarded).toHaveLength(1);
+      expect(forwarded[0].url).toBe('https://api.cloudflare.com/client/v4/user/tokens/verify');
+      expect(forwarded[0].init.headers.Authorization).toBe('Bearer ' + TOKEN);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});
+
 describe('cloudflare linking wiring', () => {
   it('is bridged, installed with host deps, rendered in settings, and precached', () => {
     expect(html).toContain("import { createCloudflareLink } from './src/app/cloudflare.js'; window.__breezeCloudflare = { createCloudflareLink };");
     expect(html).toContain('globalThis.__breezeCloudflare?.createCloudflareLink({ t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet:');
+    expect(html).toContain("proxyBase: (API || (location.origin + '/api')) + '/cf-proxy'");
+    expect(html).toContain('onServerReady:');
+    expect(html).toContain('data-action="cloudflare-quickstart"');
     expect(html).toContain('data-action="cloudflare-save"');
     expect(html).toContain('data-action="cloudflare-verify"');
     expect(html).toContain('data-action="cloudflare-setup"');
