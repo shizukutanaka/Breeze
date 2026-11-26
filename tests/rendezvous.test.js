@@ -232,13 +232,13 @@ describe('deployed rendezvous wiring and relay preservation', () => {
     expect(trickle.indexOf('if (manual) return;')).toBeLessThan(trickle.indexOf('_signal('));
     expect(setup).toContain("if (manual && peerState.connState !== 'CLOSED') peerState.manualRecovery()");
     const relay = html.slice(end, html.indexOf('  // PRESENCE POLLING', end));
-    expect(relay).toContain('if (!API) return;');
+    expect(relay).toContain('if (!(globalThis.__brzApiReady?.() ?? !!API)) return;');
     expect(relay).toContain("await _sendSignedSDP(sigRoom, 'offer', pc.localDescription)");
     expect(relay).toContain('peerState._sigPoll = startSignalPoll(');
     expect(relay).toContain('contact.sigPub !== wrapper.sigPub');
     expect(relay).toContain('verifySignature(wrapper.sdp, wrapper.sig, wrapper.sigPub)');
     const untouched = html.slice(end, html.indexOf('  // ===== Presence heartbeat', end)) + '  // ===== Presence heartbeat (v3.3: adaptive — slower in background) =====\n';
-    expect(createHash('sha256').update(untouched).digest('hex')).toBe('8279ea88d86baf102a2fca4595bfe9fd092ea4f0859d38bce1a3dfdba0fa55c2'); // Includes persisted verification invalidation on a rejected SDP signing pin.
+    expect(createHash('sha256').update(untouched).digest('hex')).toBe('352a1e29b0f19ca508e408a35df21e9cace7350fade4578cffcbe3ec3c586ef4'); // Includes persisted verification invalidation on a rejected SDP signing pin.
   });
   it('runs actual connectPeer setup with no API and never trickles / starts polling in manual mode', async () => {
     vi.useFakeTimers();

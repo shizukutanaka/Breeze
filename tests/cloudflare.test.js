@@ -587,6 +587,36 @@ describe('unconfigured first-run quickstart and brand-new account setup', () => 
 });
 
 describe('same-origin /api/cf-proxy worker route and proxyBase client wiring', () => {
+  it('null proxyBase fails honestly without network, and a lazy proxyBase is re-resolved after configuration', async () => {
+    const calls = [];
+    const store = new Map();
+    let proxy = null;
+    const link = createCloudflareLink({
+      t: (k, ...a) => a.length ? `${k}(${a.join('|')})` : k,
+      esc: (x) => String(x ?? ''),
+      dbPut: async (_s, v, k) => { store.set(k, JSON.parse(JSON.stringify(v))); return true; },
+      dbGet: async (_s, k) => store.has(k) ? JSON.parse(JSON.stringify(store.get(k))) : null,
+      dbDel: async (_s, k) => { store.delete(k); },
+      showToast: () => {}, safeSetHTML: () => {}, domGet: () => null,
+      proxyBase: () => proxy,
+      fetch: async (url, opts) => {
+        calls.push({ url, opts });
+        if (url === 'https://relay.example/api/cf-proxy/user/tokens/verify') return cfResponse({ success: true, result: { id: 't1', status: 'active' }, errors: [], messages: [] });
+        if (url === 'https://relay.example/api/cf-proxy/accounts') return cfResponse({ success: true, result: [{ id: 'acct', name: 'Acct' }], errors: [], messages: [] });
+        throw new Error('unexpected url: ' + url);
+      },
+    });
+    await link.saveToken(TOKEN);
+    expect(await link.verify()).toMatchObject({ ok: false, reason: 'cfErrNoProxy' });
+    expect(calls).toEqual([]);
+    proxy = 'https://relay.example/api/cf-proxy';
+    expect(await link.verify()).toMatchObject({ ok: true, accounts: ['Acct'] });
+    expect(calls.map((c) => c.url)).toEqual([
+      'https://relay.example/api/cf-proxy/user/tokens/verify',
+      'https://relay.example/api/cf-proxy/accounts',
+    ]);
+  });
+
   it('routes Cloudflare API calls through proxyBase and never sends Authorization to worker source or health', async () => {
     const seen = [];
     const store = new Map();
@@ -665,7 +695,7 @@ describe('cloudflare linking wiring', () => {
   it('is bridged, installed with host deps, rendered in settings, and precached', () => {
     expect(html).toContain("import { createCloudflareLink } from './src/app/cloudflare.js'; window.__breezeCloudflare = { createCloudflareLink };");
     expect(html).toContain('globalThis.__breezeCloudflare?.createCloudflareLink({ t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet:');
-    expect(html).toContain("proxyBase: (API || (location.origin + '/api')) + '/cf-proxy'");
+    expect(html).toContain("proxyBase: () => globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? ((globalThis.__brzApiBase?.() || '') ? (globalThis.__brzApiBase?.() || '') + '/cf-proxy' : null) : (API || (location.origin + '/api')) + '/cf-proxy'");
     expect(html).toContain('onServerReady:');
     const panel = settingsPanelHtml({ t: (key) => key, esc: (x) => String(x), myName: '', fanout: 2, powerMode: 'auto', relays: [] });
     for (const action of ['cloudflare-quickstart', 'cloudflare-save', 'cloudflare-verify', 'cloudflare-setup', 'cloudflare-disconnect']) {

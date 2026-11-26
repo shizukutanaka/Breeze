@@ -64,7 +64,7 @@ mkdir -p "$APP"
 
 # --- Allowlist: root web + Worker files (Cloudflare Pages deploy unit) ---
 ROOT_FILES=(
-  index.html _worker.js sw.js manifest.json
+  index.html no-default-server-flag.js _worker.js sw.js manifest.json
   icon-192.png icon-512.png
   _headers _redirects _routes.json
   404.html 404.js robots.txt sitemap.xml
@@ -88,6 +88,18 @@ for dir in src/crypto src/app locales server; do
   mkdir -p "$APP/$dir"
   cp "$dir"/* "$APP/$dir/"
 done
+
+# Release assets are distribution artifacts, not a placement the operator
+# implicitly endorses as their relay. Bundle the deployment-time flag and
+# load it before the first module script; the repository's own index.html
+# remains untouched, so source/self-host checkouts keep the legacy behavior.
+if ! grep -q 'src="./no-default-server-flag.js"' "$APP/index.html"; then
+  awk '!done && /<script type="module">/ { print "  <script src=\"./no-default-server-flag.js\"></script>"; done=1 } { print }'     "$APP/index.html" > "$APP/index.html.tmp"
+  mv "$APP/index.html.tmp" "$APP/index.html"
+fi
+grep -c 'src="./no-default-server-flag.js"' "$APP/index.html" | grep -q '^1$' || {
+  echo "✗ failed to inject no-default-server flag exactly once" >&2; exit 1;
+}
 
 # --- Leak guard: the staging tree must hold no local state or secrets ---
 if find "$APP" \( -name '.env' -o -name '*.db' -o -name '*.db-wal' -o -name '*.db-shm' \
@@ -119,6 +131,11 @@ Bare Node (requires Node >= 24, no npm install needed):
 
 Verify the download against SHA256SUMS.txt on the Release page:
   sha256sum -c SHA256SUMS.txt
+
+Distribution builds open with no server configured. After deployment,
+open the app, add your relay URL under Settings → Home relays, and use
+that explicit relay. The unmodified repository checkout does not include
+this default-server suppression flag.
 EOF
 
 # --- Pack: sorted entry order, no extra file attributes ---
