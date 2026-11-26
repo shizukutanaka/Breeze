@@ -1,7 +1,7 @@
 const VERSION = '3.8.0';
 const CACHE = 'breeze-v' + VERSION + '-safety-number-v2';
 const ASSETS = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png',
-  '/src/app/device-alerts.js', '/src/app/device-keys.js',
+  '/src/app/device-alerts.js', '/src/app/device-keys.js', '/src/app/device-revocation.js',
   // Stage-3 step 3: the PQ prekey helper module closure index.html imports
   // at runtime (INTEGRATION.md §0(A)) — precached so a first offline boot
   // still mints PQ key material instead of degrading to classical bundles.

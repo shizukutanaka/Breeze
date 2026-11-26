@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { createDirectAckWaiter } from '../src/app/direct-ack.js';
 import { poolMap } from '../src/app/group-call.js';
 
+globalThis._deviceRevocation = { allowed: async () => null, admit: async () => true, wrap: async body => body, unwrap: async body => body, targets: async () => null };
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
 const sw = readFileSync(join(HERE, '..', 'sw.js'), 'utf8');
