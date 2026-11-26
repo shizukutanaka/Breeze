@@ -203,7 +203,7 @@
   "serverNotConfigured": "Server konfiqurasiya olunmayıb: KV binding tələb olunur. README quraşdırmasına əməl edin. P2P və mesaj relesi əlçatan deyil.",
   "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "Əvvəlcə messencerdə şəxsiyyət yaradın",
   "deleted": "Mesaj silindi",

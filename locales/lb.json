@@ -203,7 +203,7 @@
   "videoCall": "Phonon::",
   "serverNotConfigured": "De Server gouf net configuréiert: D' KV- binding bräuch. Dofir musst dir d' README- Configuratioun benotzen.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "Eng Identität am Message uleeën",
   "deleted": "Noriicht ewechgeholl",

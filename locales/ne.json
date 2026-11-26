@@ -163,7 +163,7 @@
   "serverNotConfigured": "सर्भर कन्फिगर गरिएको छैन: KV बाइन्डिङ आवश्यक छ। README सेटअप पछ्याउनुहोस्। P2P र सन्देश रिले उपलब्ध छैन।",
   "serverNoDefault": "कुनै सर्भर कन्फिगर गरिएको छैन। सेटिङहरू → होम रिलेमा आफ्नो रिले थप्नुहोस्, वा पहिले Breeze लाई स्व-होस्ट गर्नुहोस्। सेटिङहरू खोल्न यो ब्यानरमा ट्याप गर्नुहोस्।",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "पहिले मेसेन्जरमा आफ्नो पहिचान बनाउनुहोस्",
   "deleted": "सन्देश मेटाइयो",

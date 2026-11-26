@@ -203,7 +203,7 @@
   "serverNotConfigured": "സെർവർ കോൺഫിഗർ ചെയ്തിട്ടില്ല: KV ബൈൻഡിംഗ് ആവശ്യമാണ്. README സജ്ജീകരണം പിന്തുടരുക. P2P-യും സന്ദേശ റിലേയും ലഭ്യമല്ല.",
   "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "ആദ്യം മെസഞ്ചറിൽ ഒരു ഐഡന്റിറ്റി സൃഷ്ടിക്കുക",
   "deleted": "സന്ദേശം ഇല്ലാതാക്കി",

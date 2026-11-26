@@ -202,7 +202,7 @@
   "serverNotConfigured": "ဆာဗာ မပြင်ဆင်ထားပါ: KV binding လိုအပ်ပါသည်။ README စနစ်ထည့်သွင်းမှုကို လိုက်နာပါ။ P2P နှင့် မက်ဆေ့ချ် ရီလေး မရနိုင်ပါ။",
   "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "မက်ဆေ့ချ်ပို့သူတွင် အမှတ်အသား တစ်ခု အရင် ဖန်တီးပါ",
   "deleted": "မက်ဆေ့ချ်ကို ဖျက်ပြီးပါပြီ",

@@ -1838,7 +1838,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     // Errors
     serverNotConfigured: 'Server not configured: KV binding required. Follow README setup. P2P and message relay unavailable.', serverNoDefault: 'No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.',
     gateServerTitle: 'A server is required',
-    gateServerDesc: 'Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.',
+    gateServerDesc: 'Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.',
     gateAddServer: 'Add your server',
     noIdentity: 'Create an identity in the messenger first',
     // Misc
@@ -4749,8 +4749,7 @@ async function initMessenger(dbName) {
     const active = globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true && !globalThis.__breezeMock?.enabled?.() && homeRelays().length === 0;
     const setupVisible = !setup.classList.contains('hidden');
     const mainVisible = !main.classList.contains('hidden');
-    const inviteLanding = P.has('add') || P.has('join');
-    const setupGated = active && setupVisible && !inviteLanding;
+    const setupGated = active && setupVisible;
     const mainGated = active && mainVisible;
     const overlayWasHidden = overlay.classList.contains('hidden');
     panel.classList.toggle('hidden', !setupGated);
@@ -8295,10 +8294,6 @@ async function initMessenger(dbName) {
       // name their home relay (an invite link's origin, a pasted relay
       // URL). It is the FIRST stored home — the plan's rank-1 carrier.
       const home = sanitizeHomeList(homeHint);
-      if (home.length && homeRelays().length === 0) {
-        try { await addHomeRelay({ url: home[0].url, pin: home[0].pin || '', label: '' }); }
-        catch(e) { _dbg(e, 'server-gate-invite-adopt'); }
-      }
       const existing = await dbGet('contacts', id);
       if (existing) {
         // An existing record keeps its stored home (user-confirmed

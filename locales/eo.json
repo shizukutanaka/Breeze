@@ -203,7 +203,7 @@
   "videoCall": "Video-voko",
   "serverNotConfigured": "Servilo ne agordita: KV- ligo bezonatas. Sekvis ADF- agordo. P2P kaj mesaĝo ne estas disponebla.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "Krei identecon en la mesaĝilo unue",
   "deleted": "Mesaĝo forigita",

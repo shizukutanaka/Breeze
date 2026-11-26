@@ -163,7 +163,7 @@
   "serverNotConfigured": "ସର୍ଭର ବିନ୍ୟାସ ହୋଇନାହିଁ: KV ବନ୍ଧନ ଆବଶ୍ୟକ | README ସେଟଅପ୍ ଅନୁସରଣ କରନ୍ତୁ | P2P ଏବଂ ବାର୍ତ୍ତା ରିଲେ ଉପଲବ୍ଧ ନାହିଁ |",
   "serverNoDefault": "କୌଣସି ସର୍ଭର ବିନ୍ୟାସ କରାଯାଇନାହିଁ | ସେଟିଂସମୂହ → ହୋମ୍ ରିଲେରେ ଆପଣଙ୍କର ରିଲେ ଯୋଡନ୍ତୁ, କିମ୍ବା ପ୍ରଥମେ Breezeକୁ ସେଲ୍‌ଫ୍-ହୋଷ୍ଟ କରନ୍ତୁ | ସେଟିଂସମୂହ ଖୋଲିବାକୁ ଏହି ବ୍ୟାନରକୁ ଟ୍ୟାପ୍ କରନ୍ତୁ |",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "ପ୍ରଥମେ ମେସେଞ୍ଜରରେ ଏକ ପରିଚୟ ସୃଷ୍ଟି କରନ୍ତୁ |",
   "deleted": "ବାର୍ତ୍ତା ବିଲୋପ ହେଲା |",

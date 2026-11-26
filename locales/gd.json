@@ -205,7 +205,7 @@
   "videoCall": "glaodh video",
   "serverNotConfigured": "Cha deach am frithealaiche a chumail: Ceangal KV. Lean air stèidheachadh README. Cha ghabh P2P is teachdaireachd leasachadh.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "Cruthaich céannacht san teachdaireachd an toiseach",
   "deleted": "Chaidh a sguabadh às na beachdan",

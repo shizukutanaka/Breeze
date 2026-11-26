@@ -205,7 +205,7 @@
   "videoCall": "Video klic",
   "serverNotConfigured": "Strežnik ni nastavljen: KV vezava je potrebna. Sledi nastavitvi README. P2P in sporočilo ni na voljo.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "Najprej ustvari identiteto v sporočilniku",
   "deleted": "Sporočilo izbrisano",

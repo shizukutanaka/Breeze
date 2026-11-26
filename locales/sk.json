@@ -165,7 +165,7 @@
   "serverNotConfigured": "Server not configured: KV binding required. Follow README setup. P2P and message relay unavailable.",
   "serverNoDefault": "Nie je nakonfigurovaný žiadny server. Pridajte svoje relé v časti Nastavenia → Domáce relé, alebo si najprv sami hosťujte Breeze. Ťuknutím na tento banner otvoríte Nastavenia.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "Vytvorte si identitu v poslovi ako prvý",
   "deleted": "Správa vymazaná",

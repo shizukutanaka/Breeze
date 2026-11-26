@@ -163,7 +163,7 @@
   "serverNotConfigured": "સર્વર ગોઠવેલ નથી: KV બંધન જરૂરી. README સેટઅપને અનુસરો. P2P અને સંદેશ રિલે અનુપલબ્ધ.",
   "serverNoDefault": "કોઈ સર્વર ગોઠવેલો નથી. સેટિંગ્સ → હોમ રિલેમાં તમારું રિલે ઉમેરો, અથવા પહેલા Breeze ને સેલ્ફ-હોસ્ટ કરો. સેટિંગ્સ ખોલવા આ બેનર પર ટેપ કરો.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "પહેલા મેસેન્જરમાં ઓળખ બનાવો",
   "deleted": "સંદેશ કાઢી નાખ્યો",

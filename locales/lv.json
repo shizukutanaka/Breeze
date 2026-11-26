@@ -164,7 +164,7 @@
   "serverNotConfigured": "Server not configured: KV binding required. Follow README setup. P2P and message relay unavailable.",
   "serverNoDefault": "Nav konfigurēts neviens serveris. Pievienojiet savu releju sadaļā Iestatījumi → Mājas releji vai vispirms mitiniet Breeze paši. Pieskarieties šim banerim, lai atvērtu Iestatījumus.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "Vispirms izveidot identitāti sūtītājā",
   "deleted": "Ziņojums svītrots",

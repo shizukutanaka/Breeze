@@ -203,7 +203,7 @@
   "serverNotConfigured": "ਸਰਵਰ ਕੌਂਫਿਗਰ ਨਹੀਂ: KV ਬਾਈਂਡਿੰਗ ਚਾਹੀਦੀ ਹੈ। README ਸੈੱਟਅੱਪ ਦੀ ਪਾਲਣਾ ਕਰੋ। P2P ਅਤੇ ਸੁਨੇਹਾ ਰਿਲੇਅ ਉਪਲਬਧ ਨਹੀਂ।",
   "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "ਪਹਿਲਾਂ ਮੈਸੇਂਜਰ ਵਿੱਚ ਇੱਕ ਪਛਾਣ ਬਣਾਓ",
   "deleted": "ਸੁਨੇਹਾ ਮਿਟਾਇਆ ਗਿਆ",

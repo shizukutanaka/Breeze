@@ -1,6 +1,7 @@
 // Server-required gate: distribution builds with no implicit relay must hold
 // both first-run and established sessions at an add-server gate until one home
-// relay exists, while invite landings and showroom mocks stay outside the gate.
+// relay exists. Invite landings are gated too (an invite is not a server), while
+// the showroom mock stays outside the gate.
 import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -146,17 +147,17 @@ describe('server-required gate state', () => {
     expect(h.els['msg-server-gate'].classes.has('hidden')).toBe(true);
   });
 
-  it.each(['add', 'join'])('an invite landing (%s) keeps the first-run flow ungated', (param) => {
+  it.each(['add', 'join'])('an invite landing (%s) is still gated: an invite is not a server', (param) => {
     globalThis.__BREEZE_NO_DEFAULT_SERVER__ = true;
     const h = gateHarness({ relays: [] }, { params: [param] });
     h._updateServerGate();
-    expect(h.els['msg-server-gate-panel'].classes.has('hidden')).toBe(true);
-    expect(h.els['b-msg-setup-random'].classes.has('hidden')).toBe(false);
-    expect(h.els['b-msg-setup-restore-toggle'].classes.has('hidden')).toBe(false);
+    expect(h.els['msg-server-gate-panel'].classes.has('hidden')).toBe(false);
+    expect(h.els['b-msg-setup-random'].classes.has('hidden')).toBe(true);
+    expect(h.els['b-msg-setup-restore-toggle'].classes.has('hidden')).toBe(true);
   });
 });
 
-describe('invite home adoption', () => {
+describe('invite home is never adopted as my server', () => {
   const PUB = 'TARGETPUB000' + 't'.repeat(32);
   const existing = { id: PUB.slice(0, 12), pubB64: PUB, name: 'Target', unread: 0 };
 
@@ -185,28 +186,17 @@ describe('invite home adoption', () => {
     };
   }
 
-  it('adopts the invite rank-1 home only while the user has no home relay', async () => {
+  it('stores the invite home on the contact only; my relays stay untouched', async () => {
     const empty = [];
     const first = buildAddContact({ relays: empty });
     await first.addContact(PUB, 'Target', [{ url: RELAY, pin: 'pin-1' }, { url: 'https://relay-two.example', pin: 'pin-2' }]);
-    expect(first.adopted).toEqual([{ url: RELAY, pin: 'pin-1', label: '' }]);
-    expect(empty).toEqual([{ url: RELAY, pin: 'pin-1', label: '' }]);
+    expect(first.adopted).toEqual([]);
+    expect(empty).toEqual([]);
 
     const existingRelays = [{ url: 'https://mine.example', pin: 'mine-pin', label: 'mine' }];
     const second = buildAddContact({ relays: existingRelays });
     await second.addContact(PUB, 'Target', [{ url: RELAY, pin: 'pin-1' }]);
     expect(second.adopted).toEqual([]);
     expect(existingRelays).toEqual([{ url: 'https://mine.example', pin: 'mine-pin', label: 'mine' }]);
-  });
-
-  it('defaults a missing pin to an empty string and continues if adoption fails', async () => {
-    const missingPin = buildAddContact({ relays: [] });
-    await missingPin.addContact(PUB, 'Target', [{ url: RELAY }]);
-    expect(missingPin.adopted).toEqual([{ url: RELAY, pin: '', label: '' }]);
-
-    const failure = buildAddContact({ relays: [], adoptError: new Error('settings unavailable'), preexisting: false });
-    await expect(failure.addContact(PUB, 'Target', [{ url: RELAY, pin: 'pin-1' }])).resolves.toBeUndefined();
-    expect(failure.debug.map(x => x.ctx)).toContain('server-gate-invite-adopt');
-    expect(failure.contacts.get(existing.id)).toMatchObject({ id: existing.id, pubB64: PUB, name: 'Target' });
   });
 });

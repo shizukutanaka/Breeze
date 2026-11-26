@@ -202,7 +202,7 @@
   "serverNotConfigured": "服务器未配置：需要 KV 绑定。请按 README 进行设置。P2P 和消息中继不可用。",
   "serverNoDefault": "No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.",
   "gateServerTitle": "A server is required",
-  "gateServerDesc": "Breeze has no official server. Add your own server to start. If someone invited you, open their invite link instead — their server becomes yours.",
+  "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
   "noIdentity": "请先在信使中创建身份",
   "deleted": "消息已删除",
