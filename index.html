@@ -5304,7 +5304,9 @@ async function initMessenger(dbName) {
     bar.classList.add('active'); // .offline-bar is display:none until .active (shared convention)
     bar.onclick = async () => { _settings.focusUntil = 0; _settings.focusStrict = false; await saveSettings(); _updateFocusBanner(); showToast(t('focusOff'), 'info'); };
     // Re-render every minute so the countdown is honest, and self-clear on expiry.
-    _focusTimer = setTimeout(_updateFocusBanner, MS.MIN);
+    // The chain is display-only (expiry is enforced by _focusActive), so it must
+    // never wake the device more often than the listening floor of the power mode.
+    _focusTimer = setTimeout(_updateFocusBanner, Math.max(MS.MIN, (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0)));
   }
 
   // ═══ Quiet messenger: one decision point for "should this interrupt the human?" ═══
