@@ -24,8 +24,6 @@ Kutoka [ukurasa wa kupakua](https://github.com/shizukutanaka/Breeze/releases/lat
 
 Kila faili inaambatana na namba za kulinganisha (SHA256SUMS.txt). Ikiwa una wasiwasi, unaweza kuthibitisha kama namba za faili uliyopakua zinalingana.
 
-> **Kuhusu ukurasa wa mfano**: Mfano wa kuangalia jinsi inavyofanya kazi (https://breeze-469.pages.dev/) umetolewa. Kilichowekwa hapo ni programu ile ile, lakini mfano unaweza kubadilika au kusimama bila taarifa. Kwa matumizi halisi, tafadhali tumia uliyoiweka kwenye seva yako mwenyewe. Ulichoweka kwenye seva yako mwenyewe hakiathiriwi hata mfano ukisimama.
-
 ### Mipangilio ya kwanza
 
 1. Fungua programu.
@@ -233,7 +231,6 @@ Ikiwa itashindwa katikati ya usasishaji (kama kulinganisha faili hakulingani), *
 | Msimbo wa uthibitisho wa simu haulingani | Kata simu na upige tena. Usiendelee ukiwa haulingani. |
 | Umesahau nenosiri | Urejeshaji hauwezekani. Tengeneza utambulisho mpya na umwambie mwenzako tena. |
 | Umepoteza kifaa | Ikiwa una akiba, unaweza kurejesha kwenye kifaa kipya. Ikiwa huna, unakuwa utambulisho mpya. |
-| Ukurasa wa mfano haufunguki | Mfano unaweza kusimama bila taarifa. Tafadhali tumia uliyoiweka kwenye seva yako mwenyewe. |
 
 Ripoti za kasoro, tafadhali ziende kwenye [ukurasa wa Issue](https://github.com/shizukutanaka/Breeze/issues).
 

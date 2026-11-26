@@ -24,8 +24,6 @@ Scegli dalla [pagina di download](https://github.com/shizukutanaka/Breeze/releas
 
 Ogni file è accompagnato da un valore di controllo (SHA256SUMS.txt). Se sei preoccupato, puoi verificare che il valore del file che hai scaricato coincida.
 
-> **Sulla pagina di esempio**: viene fornito un esempio per verificare come funziona (https://breeze-469.pages.dev/). Ciò che vi è installato è lo stesso software, ma l'esempio può cambiare o fermarsi senza preavviso. Per un uso reale, usa ciò che è installato sul tuo server, per favore. Ciò che è installato sul tuo server non risente se l'esempio si ferma.
-
 ### Prima configurazione
 
 1. Apri l'app.
@@ -233,7 +231,6 @@ Se qualcosa fallisce durante l'aggiornamento (per esempio, la verifica del file 
 | I codici di conferma della chiamata non coincidono | Interrompi la chiamata e richiama. Non continuare mentre non coincidono. |
 | Hai dimenticato la frase segreta | Il recupero è impossibile. Crea una nuova identità e avvisa di nuovo i tuoi interlocutori. |
 | Hai perso il dispositivo | Se hai un backup, puoi recuperare su un nuovo dispositivo. Altrimenti, sarà una nuova identità. |
-| La pagina di esempio non si apre | L'esempio può fermarsi senza preavviso. Usa ciò che è installato sul tuo server, per favore. |
 
 Le segnalazioni di malfunzionamenti vanno alla [pagina delle Issue](https://github.com/shizukutanaka/Breeze/issues), per favore.
 

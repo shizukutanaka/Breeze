@@ -24,8 +24,6 @@ Dari [halaman unduhan](https://github.com/shizukutanaka/Breeze/releases/latest),
 
 Setiap file disertai nilai untuk verifikasi (SHA256SUMS.txt). Jika Anda mau, Anda dapat memeriksa apakah nilai file yang Anda unduh cocok.
 
-> **Tentang halaman contoh**: Sebuah halaman contoh untuk memeriksa cara kerjanya (https://breeze-469.pages.dev/) disediakan. Perangkat lunak yang dihosting di sana sama, tetapi halaman contoh dapat berubah atau berhenti tanpa pemberitahuan. Untuk penggunaan sebenarnya, silakan gunakan versi yang dihosting di server Anda sendiri. Versi yang dihosting di server Anda sendiri tidak terpengaruh jika halaman contoh berhenti.
-
 ### Pengaturan pertama
 
 1. Buka aplikasinya.
@@ -233,7 +231,6 @@ Jika sesuatu gagal selama pembaruan (misalnya verifikasi file tidak cocok), **pe
 | Kode verifikasi panggilan tidak cocok | Putuskan panggilan dan telepon kembali. Jangan melanjutkan selagi tidak cocok. |
 | Lupa frasa sandi | Pemulihan tidak mungkin dilakukan. Buat identitas baru dan beritahu orang lain lagi. |
 | Kehilangan perangkat | Jika Anda memiliki cadangan, Anda dapat memulihkannya di perangkat baru. Jika tidak, itu akan menjadi identitas baru. |
-| Halaman contoh tidak terbuka | Halaman contoh dapat berhenti tanpa pemberitahuan. Silakan gunakan versi yang dihosting di server Anda sendiri. |
 
 Untuk laporan bug, silakan kunjungi [halaman Issues](https://github.com/shizukutanaka/Breeze/issues).
 

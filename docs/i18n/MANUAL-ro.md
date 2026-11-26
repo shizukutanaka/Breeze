@@ -24,8 +24,6 @@ De pe [pagina de descărcare](https://github.com/shizukutanaka/Breeze/releases/l
 
 Fiecare fișier are atașată o valoare numerică de verificare (SHA256SUMS.txt). Cei care sunt îngrijorați pot verifica dacă valoarea fișierului descărcat coincide.
 
-> **Despre pagina de probă**: O probă pentru verificarea modului de funcționare (https://breeze-469.pages.dev/) este pusă la dispoziție. Ceea ce se află acolo este același software, dar proba se poate schimba sau opri fără notificare. Pentru utilizarea reală, folosiți o copie instalată pe propriul server. O copie de pe propriul server nu este afectată dacă proba se oprește.
-
 ### Configurarea inițială
 
 1. Deschideți aplicația.
@@ -233,7 +231,6 @@ Dacă pe parcursul actualizării apare o eroare (de exemplu valoarea de verifica
 | Codul de verificare a apelului nu coincide | Închideți apelul și apelați din nou. Nu continuați fără coincidență. |
 | Ați uitat fraza de acces | Restaurarea nu este posibilă. Creați o identitate nouă și anunțați din nou cealaltă persoană. |
 | Ați pierdut dispozitivul | Dacă există o copie de rezervă, puteți recupera pe un dispozitiv nou. Dacă nu, va fi o identitate nouă. |
-| Pagina de probă nu se deschide | Proba se poate opri fără notificare. Folosiți o copie instalată pe propriul server. |
 
 Raportările de probleme se fac, vă rugăm, pe [pagina Issues](https://github.com/shizukutanaka/Breeze/issues).
 
