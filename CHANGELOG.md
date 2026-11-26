@@ -4,6 +4,13 @@
 
 ### Security
 
+- **Sealed Sender retries fail closed.** Capable-peer delivery retries, redundant copies
+  and alternate-home fallbacks keep Sealed Sender v2, including the first-contact identity
+  header. Only a successful legacy capability answer permits sender-visible fallback;
+  unavailable capabilities or failed sealing keep the message queued. Persisted pre-change
+  queues are resealed at send time; existing v2 wires stay byte-identical across retries.
+  Added deployed-path leak/migration/failure tests and browser retry wiretap coverage.
+
 - **Certified device revocation and group authors.** Root-signed monotonic checkpoints,
   consent-backed device ownership, bounded E2EE checkpoint/head gossip and persistent
   stale-view alerts. Capable contacts reject revoked device sessions and group authors;
