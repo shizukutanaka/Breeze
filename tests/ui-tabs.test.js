@@ -69,12 +69,13 @@ describe('bottom tab bar markup', () => {
     expect(ja.helpSettings).toBe('設定');
   });
   it('the chats tab carries the unread badge, styled like the folder badges', () => {
-    expect(bar).toContain('<span class="badge" id="tab-badge-chats"></span>');
-    expect(html).toContain('.folder-tab .badge, .tab-btn .badge {');
-    expect(html).toContain('.folder-tab .badge:empty, .tab-btn .badge:empty { display: none }');
+    expect(bar).toContain('<span class="bdg" id="tab-badge-chats"></span>');
+    expect(html).toContain('<span class="bdg" id="badge-all"></span>');
+    expect(html).toContain('.bdg {');
+    expect(html).toContain('.bdg:empty { display: none }');
   });
   it('the calls tab carries the missed-call badge in the same badge slot', () => {
-    expect(bar).toContain('<span class="badge" id="tab-badge-calls"></span>');
+    expect(bar).toContain('<span class="bdg" id="tab-badge-calls"></span>');
   });
 });
 

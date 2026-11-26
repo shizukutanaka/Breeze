@@ -88,7 +88,7 @@ html.theme-transitioning, html.theme-transitioning *, html.theme-transitioning *
 }
 }
 .light .msg.me { background: var(--gd); color: #fff }
-.light .btn-g, .light .btn-r, .light .folder-tab .badge, .light .ftcount, .light .cbadge, .light .label-chip.active, .light .i-highlight, .light .highlight-mark, .light .input-bar .send, .light .server-banner, .light .acc-tab .acc-badge, .light .drop-overlay-text, .light .skip-to-content { color: #fff }
+.light .btn-g, .light .btn-r, .light .folder-tab .bdg, .light .bdg-row, .light .acc-tab .bdg-acc, .light .label-chip.active, .light .i-highlight, .light .highlight-mark, .light .input-bar .send, .light .server-banner, .light .drop-overlay-text, .light .skip-to-content { color: #fff }
 .light ::selection { color: #fff }
 .light .msg-status.failed { color: #fff }
 .light input, .light textarea, .light select { background: var(--s2); color: var(--t1) }
@@ -139,18 +139,18 @@ h1 em { font-style: normal; color: var(--g) }
 h2 { font-size: var(--fs-title); font-weight: 700; letter-spacing: -.02em }
 
 /* ─── Inputs ─── */
-textarea, input[type=password], input[type=text], select {
-  width: 100%; padding: 14px var(--sp-4); background: var(--s2); border: none;
+textarea, input[type=password], input[type=text], select, .field {
+  width: 100%; padding: calc(var(--sp-3) + 2px) var(--sp-4); background: var(--s2); border: none;
   border-radius: var(--rad); color: var(--t1); font-size: var(--fs-body);
   outline: none; transition: var(--ease)
 }
-input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0 0 0 2px var(--g) }
+input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3); box-shadow: 0 0 0 2px var(--g) }
 
 /* ─── Buttons ─── */
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
   gap: 6px; padding: var(--sp-3) var(--sp-5); border: none; border-radius: var(--rad-full);
-  font-size: 14px; font-weight: 600; cursor: pointer;
+  font-size: calc(var(--fs-sub) + 1px); font-weight: 600; cursor: pointer;
   transition: transform .15s var(--bounce), background var(--ease-smooth), box-shadow .2s ease;
   min-height: var(--touch); letter-spacing: -.01em;
   -webkit-tap-highlight-color: transparent;
@@ -192,14 +192,16 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
   flex: 1; padding: var(--sp-2) 0; border: none; background: transparent;
   color: var(--t3); font-size: var(--fs-caption); font-weight: 600; cursor: pointer;
   transition: background .15s ease, color .15s ease, transform .1s var(--bounce);
-  border-radius: 10px; min-height: 36px
+  border-radius: calc(var(--rad-sm) + 2px); min-height: calc(var(--touch) - 12px)
 }
 .folder-tab.active { color: var(--t1); background: var(--s1); box-shadow: var(--shadow-sm) }
 .folder-tab:hover:not(.active) { color: var(--t1) }
 .folder-tab:active { transform: scale(.95) }
-.folder-tab .badge, .tab-btn .badge { background: var(--g); color: #000; font-size: var(--fs-caption); border-radius: var(--rad-full); padding: 2px 6px; margin-left: var(--sp-1); font-weight: 700; min-width: 16px; text-align: center; display: inline-block; vertical-align: middle }
-.folder-tab .badge:empty, .tab-btn .badge:empty { display: none }
-.ftcount { font-size: var(--fs-caption); background: var(--g); color: #000; padding: 2px 6px; border-radius: var(--rad-full); margin-left: var(--sp-1); font-weight: 700 }
+.bdg { background: var(--g); color: #000; font-size: var(--fs-caption); border-radius: var(--rad-full); padding: 2px 6px; margin-left: var(--sp-1); font-weight: 700; min-width: 16px; text-align: center; display: inline-block; vertical-align: middle }
+.bdg:empty { display: none }
+.bdg-row { padding: 2px 7px; margin: var(--sp-1) 0 0; min-width: initial; text-align: inherit; vertical-align: baseline }
+.bdg-count { display: inline; min-width: initial; text-align: inherit; vertical-align: baseline }
+.bdg-acc { position: absolute; top: -4px; right: -4px; height: 16px; border-radius: var(--rad-sm); background: var(--r); margin: 0; padding: 0 var(--sp-1); display: flex; align-items: center; justify-content: center; pointer-events: none; animation: badgePop .3s var(--bounce) }
 
 /* ─── Contact list ─── */
 .contact {
@@ -238,7 +240,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .contact .info .preview { font-size: var(--fs-caption); color: var(--t3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px }
 .contact .meta { text-align: right; flex-shrink: 0 }
 .contact .meta .time { font-size: var(--fs-caption); color: var(--t3) }
-.cbadge { display: inline-block; background: var(--g); color: #000; font-size: var(--fs-caption); font-weight: 700; padding: 2px 7px; border-radius: var(--rad-full); margin-top: var(--sp-1) }
 .contact.unread .info .name { font-weight: 700 }
 .contact.unread .info .preview { color: var(--t1); font-weight: 600 }
 .contact.unread .meta .time { color: var(--g); font-weight: 700 }
@@ -386,7 +387,7 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
   font-size: var(--fs-title); color: var(--t3);
   min-width: var(--touch); min-height: var(--touch);
   display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; transition: background .15s ease, transform .1s var(--bounce)
+  border-radius: var(--rad-full); transition: background .15s ease, transform .1s var(--bounce)
 }
 .input-bar .tool:hover { background: var(--s2) }
 .input-bar .tool:active { transform: scale(.88) }
@@ -396,8 +397,8 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
   line-height: 1.5; max-height: 100px; overflow-y: auto; padding: 10px 0
 }
 .input-bar .send {
-  background: var(--g); color: #000; border: none; border-radius: 50%;
-  width: 44px; height: 44px; font-size: var(--fs-title); font-weight: 700;
+  background: var(--g); color: #000; border: none; border-radius: var(--rad-full);
+  width: calc(var(--touch) - 4px); height: calc(var(--touch) - 4px); font-size: var(--fs-title); font-weight: 700;
   cursor: pointer; transition: transform .15s var(--bounce), background .15s ease, box-shadow .15s ease;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   box-shadow: 0 2px 10px rgba(52,211,153,.3)
@@ -579,7 +580,6 @@ input:focus, textarea:focus, select:focus { background: var(--s3); box-shadow: 0
 .acc-tab.active { border-color: var(--g); background: var(--s2); box-shadow: 0 0 0 3px rgba(52,211,153,.2) }
 .acc-tab:hover:not(.active) { background: var(--s2); transform: scale(1.12) }
 .acc-tab:active { transform: scale(.9) }
-.acc-tab .acc-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; border-radius: var(--rad-sm); background: var(--r); color: #000; font-size: var(--fs-caption); font-weight: 700; display: flex; align-items: center; justify-content: center; padding: 0 var(--sp-1); pointer-events: none; animation: badgePop .3s var(--bounce) }
 @keyframes badgePop { from { transform: scale(0) } to { transform: scale(1) } }
 .acc-tab .acc-shortcut { position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%; background: var(--s3); color: var(--t3); font-size: var(--fs-caption); display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity .2s }
 .acc-tabs:hover .acc-shortcut { opacity: 1 }
@@ -627,7 +627,7 @@ dialog .modal-title { font-weight: 700; font-size: var(--fs-body); color: var(--
 dialog .modal-desc { font-size: var(--fs-sub); color: var(--t2); margin-bottom: var(--sp-3); line-height: 1.5; text-align: center }
 dialog .modal-actions { display: flex; gap: var(--sp-2); justify-content: center; margin-top: var(--sp-4) }
 dialog .modal-actions .btn { flex: 1 }
-dialog .modal-input { width: 100%; padding: 10px 14px; border: 1px solid var(--b1); border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: 14px; margin-bottom: var(--sp-1); outline: none; transition: border-color .2s ease; box-sizing: border-box }
+dialog .modal-input { width: 100%; padding: calc(var(--sp-2) + 2px) calc(var(--sp-3) + 2px); border: 1px solid var(--b1); border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: calc(var(--fs-sub) + 1px); margin-bottom: var(--sp-1); outline: none; transition: border-color .2s ease; box-sizing: border-box }
 dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(52,211,153,.15) }
   position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100;
   display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px)
@@ -642,7 +642,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
 .modal-title { font-weight: 700; font-size: var(--fs-body); color: var(--t1); margin-bottom: var(--sp-3); line-height: 1.5 }
 .modal-actions { display: flex; gap: var(--sp-2); justify-content: center }
 .modal-actions .btn { flex: 1 }
-.modal-input { width: 100%; padding: 10px 14px; border: 1px solid var(--b1); border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: 14px; margin-bottom: var(--sp-3); outline: none; transition: border-color .2s ease }
+.modal-input { width: 100%; padding: calc(var(--sp-2) + 2px) calc(var(--sp-3) + 2px); border: 1px solid var(--b1); border-radius: var(--rad); background: var(--s2); color: var(--t1); font-size: calc(var(--fs-sub) + 1px); margin-bottom: var(--sp-3); outline: none; transition: border-color .2s ease }
 .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(52,211,153,.15) }
 .legal-section { margin-top: var(--sp-4) }
 /* Positioning belongs to .toast-container, NOT here. A toast is only ever created by
@@ -929,7 +929,7 @@ del.md-del { opacity: .6 }
 .md-link { color: inherit; text-decoration: underline }
 
 /* ─── Contact filter ─── */
-.contact-filter { padding: var(--sp-2) 14px; font-size: var(--fs-sub); border-radius: 10px; background: var(--s2); border: 1px solid var(--b1); transition: border-color .15s ease, box-shadow .15s ease }
+.contact-filter { padding: var(--sp-2) calc(var(--sp-3) + 2px); font-size: var(--fs-sub); border-radius: calc(var(--rad-sm) + 2px); background: var(--s2); border: 1px solid var(--b1); transition: border-color .15s ease, box-shadow .15s ease }
 .contact-filter:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(52,211,153,.12) }
 .contact-filter-wrap { padding: var(--sp-2) var(--sp-3) }
 .clickable { cursor: pointer }
@@ -971,7 +971,7 @@ del.md-del { opacity: .6 }
   :root.auto-theme .msg.them { background: rgba(255,255,255,.8); backdrop-filter: blur(8px) }
   :root.auto-theme .ctx-menu, :root.auto-theme .mention-picker { background: rgba(255,255,255,.85); backdrop-filter: var(--glass); box-shadow: var(--shadow-float) }
   :root.auto-theme .install-banner { background: rgba(255,255,255,.9); backdrop-filter: blur(12px) }
-  :root.auto-theme .btn-g, :root.auto-theme .btn-r, :root.auto-theme .folder-tab .badge, :root.auto-theme .ftcount, :root.auto-theme .cbadge, :root.auto-theme .label-chip.active, :root.auto-theme .i-highlight, :root.auto-theme .highlight-mark, :root.auto-theme .input-bar .send, :root.auto-theme .server-banner, :root.auto-theme .acc-tab .acc-badge, :root.auto-theme .drop-overlay-text, :root.auto-theme .skip-to-content { color: #fff }
+  :root.auto-theme .btn-g, :root.auto-theme .btn-r, :root.auto-theme .folder-tab .bdg, :root.auto-theme .bdg-row, :root.auto-theme .acc-tab .bdg-acc, :root.auto-theme .label-chip.active, :root.auto-theme .i-highlight, :root.auto-theme .highlight-mark, :root.auto-theme .input-bar .send, :root.auto-theme .server-banner, :root.auto-theme .drop-overlay-text, :root.auto-theme .skip-to-content { color: #fff }
   :root.auto-theme ::selection { color: #fff }
   :root.auto-theme .msg-status.failed { color: #fff }
 }
@@ -1056,7 +1056,7 @@ del.md-del { opacity: .6 }
    the bar shows only while the sidebar (contact list) is shown — opening a
    conversation or the settings panel hides the sidebar, which hides the bar. */
 #msg-tabbar { display: none }
-.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: var(--touch); padding: 6px 0; background: none; border: none; color: var(--t3); font: inherit; font-size: var(--fs-caption); cursor: pointer }
+.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: var(--touch); padding: calc(var(--sp-1) + 2px) 0; background: none; border: none; color: var(--t3); font: inherit; font-size: var(--fs-caption); cursor: pointer }
 .tab-btn .tab-ico { font-size: 20px; line-height: 1.1 }
 .tab-btn.active { color: var(--g) }
 #msg-sidebar.list-contacts .folder-tabs, #msg-sidebar.list-contacts .label-filter { display: none } #msg-sidebar.list-calls .folder-tabs, #msg-sidebar.list-calls .label-filter, #msg-sidebar.list-calls .contact-filter-wrap { display: none } .call-history-bar { display: flex; justify-content: flex-end; padding: var(--sp-2) var(--sp-3) } .call-history-empty { padding: var(--sp-5) var(--sp-3); text-align: center; color: var(--t3) } .call-back-btn { align-self: center; margin-left: var(--sp-2) }
@@ -1188,10 +1188,10 @@ del.md-del { opacity: .6 }
   <div id="msg-setup" class="hidden setup-page">
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
-    <input type="text" id="msg-name-random" class="setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
+    <input type="text" id="msg-name-random" class="field setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup-random" data-i18n="setupRandom"></button>
-    <input type="text" id="msg-name" class="setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="next">
-    <input type="text" id="msg-alias" class="setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" autocapitalize="none" enterkeyhint="done" spellcheck="false">
+    <input type="text" id="msg-name" class="field setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="next">
+    <input type="text" id="msg-alias" class="field setup-input-alt" data-i18n-ph="breezeId" data-i18n-aria="ariaBreezeId" maxlength="20" pattern="[a-z0-9_]+" autocomplete="off" autocapitalize="none" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-o setup-restore" id="b-msg-setup" data-i18n="createFree"></button>
     <button class="btn btn-o setup-restore hidden" id="b-msg-setup-simple" data-i18n="setupSimple"></button>
     <button class="btn btn-o setup-restore" id="b-msg-setup-restore-toggle" data-i18n="setupRestoreToggle" aria-expanded="false" aria-controls="setup-restore-more"></button>
@@ -1228,14 +1228,14 @@ del.md-del { opacity: .6 }
         <div id="msg-short-id" class="sidebar-id" role="button" tabindex="0" data-i18n-title="ttClickToCopy"></div>
         <button class="btn btn-o btn-sm request-button" id="b-msg-requests" data-i18n="mrTitle">Requests</button>
         <div class="folder-tabs" id="folder-tabs" role="tablist">
-          <button class="folder-tab active" data-folder="all" role="tab" aria-selected="true" data-i18n-aria="ariaFolderAll"><span data-i18n="folderAll">All</span> <span class="badge" id="badge-all"></span></button>
-          <button class="folder-tab" data-folder="unread" role="tab" data-i18n-aria="ariaFolderUnread"><span data-i18n="folderUnread">Unread</span> <span class="badge" id="badge-unread"></span></button>
-          <button class="folder-tab" data-folder="groups" role="tab" data-i18n-aria="ariaFolderGroups"><span data-i18n="folderGroups">Groups</span> <span class="badge" id="badge-groups"></span></button>
+          <button class="folder-tab active" data-folder="all" role="tab" aria-selected="true" data-i18n-aria="ariaFolderAll"><span data-i18n="folderAll">All</span> <span class="bdg" id="badge-all"></span></button>
+          <button class="folder-tab" data-folder="unread" role="tab" data-i18n-aria="ariaFolderUnread"><span data-i18n="folderUnread">Unread</span> <span class="bdg" id="badge-unread"></span></button>
+          <button class="folder-tab" data-folder="groups" role="tab" data-i18n-aria="ariaFolderGroups"><span data-i18n="folderGroups">Groups</span> <span class="bdg" id="badge-groups"></span></button>
           <button class="folder-tab" data-folder="labels" role="tab" id="folder-labels" data-i18n-aria="ariaFolderLabels"><span data-i18n="folderLabels">Labels</span></button>
         </div>
         <div id="label-filter" class="label-filter hidden"></div>
         <div class="contact-filter-wrap">
-          <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaFilterContacts" class="contact-filter" autocomplete="off" enterkeyhint="search">
+          <input id="contact-filter" type="text" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaFilterContacts" class="field contact-filter" autocomplete="off" enterkeyhint="search">
         </div>
         <div id="msg-contacts" role="list" data-i18n-aria="ariaContacts" class="contact-list">
           <div id="msg-self-card" class="contact self-card hidden" role="button" tabindex="0" data-i18n-aria="profileTitle"></div>
@@ -1329,8 +1329,8 @@ del.md-del { opacity: .6 }
 
     <!-- Bottom tab bar (mobile list view only; CSS-gated, see #msg-tabbar) -->
     <nav id="msg-tabbar" role="navigation" data-i18n-aria="ariaMainNav">
-      <button class="tab-btn active" id="tab-chats" aria-current="page" data-action="tab-chats" data-i18n-aria="tabChats"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span><span><span data-i18n="tabChats">Chats</span> <span class="badge" id="tab-badge-chats"></span></span></button>
-      <button class="tab-btn" id="tab-calls" data-action="tab-calls" data-i18n-aria="tabCalls"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><span><span data-i18n="tabCalls">Calls</span> <span class="badge" id="tab-badge-calls"></span></span></button>
+      <button class="tab-btn active" id="tab-chats" aria-current="page" data-action="tab-chats" data-i18n-aria="tabChats"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span><span><span data-i18n="tabChats">Chats</span> <span class="bdg" id="tab-badge-chats"></span></span></button>
+      <button class="tab-btn" id="tab-calls" data-action="tab-calls" data-i18n-aria="tabCalls"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><span><span data-i18n="tabCalls">Calls</span> <span class="bdg" id="tab-badge-calls"></span></span></button>
       <button class="tab-btn" id="tab-contacts" data-action="tab-contacts" data-i18n-aria="ariaContacts"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span data-i18n="ariaContacts">Contacts</span></button>
       <button class="tab-btn" id="tab-self" data-action="tab-self" data-i18n-aria="tabSelf"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span data-i18n="tabSelf">My card</span></button>
       <button class="tab-btn" id="tab-settings" data-action="tab-settings" data-i18n-aria="helpSettings"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span data-i18n="helpSettings">Settings</span></button>
@@ -2778,7 +2778,7 @@ function showPrompt(title, defaultVal = '', opts = {}) {
   return new Promise(resolve => {
     const [dlg, titleId] = _makeDialog(); // a11y: accessible name from the title; showModal() handles the rest
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(title)}</div>
-      <input class="modal-input" type="${opts.type || 'text'}" value="${esc(defaultVal)}" placeholder="${esc(opts.placeholder || '')}" autocomplete="${esc(opts.autocomplete || 'off')}" aria-labelledby="${titleId}">
+      <input class="field modal-input" type="${opts.type || 'text'}" value="${esc(defaultVal)}" placeholder="${esc(opts.placeholder || '')}" autocomplete="${esc(opts.autocomplete || 'off')}" aria-labelledby="${titleId}">
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${opts.okText || t('ok')}</button>
@@ -2823,8 +2823,8 @@ function _promptRecoveryPhraseNew(phrase, okText) {
     const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('recoveryPhraseTitle'))}</div>
       <div class="modal-desc">${esc(t('recoveryPhraseDesc'))}</div>
-      <textarea class="modal-input" rows="3" readonly aria-labelledby="${titleId}">${esc(phrase)}</textarea>
-      <label class="modal-desc">${esc(t('recoveryPassLabel'))}<input class="modal-input" type="password" placeholder="${esc(t('recoveryPassLabel'))}" autocomplete="new-password" aria-label="${esc(t('recoveryPassLabel'))}"></label>
+      <textarea class="field modal-input" rows="3" readonly aria-labelledby="${titleId}">${esc(phrase)}</textarea>
+      <label class="modal-desc">${esc(t('recoveryPassLabel'))}<input class="field modal-input" type="password" placeholder="${esc(t('recoveryPassLabel'))}" autocomplete="new-password" aria-label="${esc(t('recoveryPassLabel'))}"></label>
       <label class="modal-desc"><input type="checkbox" class="rp-saved"> ${esc(t('recoverySaved'))}</label>
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
@@ -2851,9 +2851,9 @@ function _promptRecoveryPhraseRestore() {
   return new Promise(resolve => {
     const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('recoveryRestoreTitle'))}</div>
-      <label class="modal-desc">${esc(t('recoveryPhraseLabel'))}<textarea class="modal-input rp-phrase" rows="3" placeholder="${esc(t('recoveryPhraseLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-labelledby="${titleId}"></textarea></label>
-      <label class="modal-desc">${esc(t('recoveryPassLabel'))}<input class="modal-input rp-pass" type="password" placeholder="${esc(t('recoveryPassLabel'))}" autocomplete="current-password" aria-label="${esc(t('recoveryPassLabel'))}"></label>
-      <label class="modal-desc">${esc(t('recoveryKitFileLabel'))}<input class="modal-input rp-kit" type="file" accept="application/json,.json"></label>
+      <label class="modal-desc">${esc(t('recoveryPhraseLabel'))}<textarea class="field modal-input rp-phrase" rows="3" placeholder="${esc(t('recoveryPhraseLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-labelledby="${titleId}"></textarea></label>
+      <label class="modal-desc">${esc(t('recoveryPassLabel'))}<input class="field modal-input rp-pass" type="password" placeholder="${esc(t('recoveryPassLabel'))}" autocomplete="current-password" aria-label="${esc(t('recoveryPassLabel'))}"></label>
+      <label class="modal-desc">${esc(t('recoveryKitFileLabel'))}<input class="field modal-input rp-kit" type="file" accept="application/json,.json"></label>
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${t('restoreBtn')}</button>
@@ -2884,8 +2884,8 @@ function _promptSimpleRecoveryNew() {
     const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('simpleTitle'))}</div>
       <div class="modal-desc">${esc(t('simpleNewDesc'))}</div>
-      <label class="modal-desc">${esc(t('simpleAccountLabel'))}<input class="modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}"></label>
-      <label class="modal-desc">${esc(t('simplePassLabel'))}<input class="modal-input rp-pass" type="password" placeholder="${esc(t('simplePassLabel'))}" autocomplete="new-password" aria-label="${esc(t('simplePassLabel'))}"></label>
+      <label class="modal-desc">${esc(t('simpleAccountLabel'))}<input class="field modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}"></label>
+      <label class="modal-desc">${esc(t('simplePassLabel'))}<input class="field modal-input rp-pass" type="password" placeholder="${esc(t('simplePassLabel'))}" autocomplete="new-password" aria-label="${esc(t('simplePassLabel'))}"></label>
       <label class="modal-desc"><input type="checkbox" class="rp-saved"> ${esc(t('simpleSaved'))}</label>
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
@@ -2916,8 +2916,8 @@ function _promptSimpleRecoveryRestore() {
     const [dlg, titleId] = _makeDialog();
     safeSetHTML(dlg, `<div class="modal-title" id="${titleId}">${esc(t('simpleRestoreTitle'))}</div>
       <div class="modal-desc">${esc(t('simpleRestoreDesc'))}</div>
-      <label class="modal-desc">${esc(t('simpleAccountLabel'))}<input class="modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}"></label>
-      <label class="modal-desc">${esc(t('simplePassLabel'))}<input class="modal-input rp-pass" type="password" placeholder="${esc(t('simplePassLabel'))}" autocomplete="current-password" aria-label="${esc(t('simplePassLabel'))}"></label>
+      <label class="modal-desc">${esc(t('simpleAccountLabel'))}<input class="field modal-input rp-account" type="text" placeholder="${esc(t('simpleAccountLabel'))}" autocomplete="off" autocapitalize="none" spellcheck="false" aria-label="${esc(t('simpleAccountLabel'))}"></label>
+      <label class="modal-desc">${esc(t('simplePassLabel'))}<input class="field modal-input rp-pass" type="password" placeholder="${esc(t('simplePassLabel'))}" autocomplete="current-password" aria-label="${esc(t('simplePassLabel'))}"></label>
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
         <button class="btn btn-g btn-sm" value="ok">${t('restoreBtn')}</button>
@@ -4103,7 +4103,7 @@ function renderAccountTabs() {
     const unreadCount = _crossAccountUnread[acc.id] || 0;
     if (unreadCount > 0 && !isActive) {
       const badge = document.createElement('span');
-      badge.className = 'acc-badge';
+      badge.className = 'bdg bdg-acc';
       badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
       tab.appendChild(badge);
     }
@@ -6472,7 +6472,7 @@ async function initMessenger(dbName) {
   }
 
   // UNIFIED RELAY SEND (v3)
-  // Sends via Sealed Sender first, falls back to standard relay
+  // Capable peers stay sealed across delivery failures and retries.
   // v3.1: Message retry queue — auto-retry failed sends
   const _retryQueue = [];
   let _retryTimer = null;
@@ -6682,7 +6682,7 @@ async function initMessenger(dbName) {
   // AAD binding to+ts. The relay sees only {to, ts, ratchet ciphertext, sealed blob}.
   // Capability-gated ('seal-v2' in prekey-bundle caps, read via /prekey/status, which
   // consumes NO one-time prekey); un-upgraded peers get the legacy envelope, and the
-  // /msg fallback + offline retry queue stay legacy (SECURITY.md).
+  // retries and relay fallbacks use the same capability-gated wire builder.
   const SEAL_INFO = 'breeze-seal-v2';
   // Metadata padding frame (mirror of src/crypto/seal.js): without it, se.ct's length
   // revealed the exact metadata byte length to the relay. The frame lives inside the
@@ -6740,18 +6740,26 @@ async function initMessenger(dbName) {
   // cached 5 min — the cache TTL IS the downgrade window: a peer that stops advertising
   // seal-v2 (version rollback, identity re-registration) receives sealed envelopes it
   // ack+skips until the cache expires, so keep the window as short as the other caches.
-  // Any failure answers "no" — the message still delivers, just legacy-shaped.
+  // An unavailable or malformed capability answer is unknown, never legacy.
   const _sealCapsCache = new Map();
   async function _peerSealV2(peerId) {
-    try {
-      const c = _sealCapsCache.get(peerId);
-      if (c && Date.now() - c.ts < 5 * MS.MIN) return c.ok;
-      const resp = await postAPIRaw('/prekey/status', { userId: peerId });
-      const data = resp?.ok ? await resp.json() : null;
-      const ok = Array.isArray(data?.caps) && data.caps.includes(CAPS_SEAL_V2);
-      _sealCapsCache.set(peerId, { ok, ts: Date.now() });
-      return ok;
-    } catch { return false; }
+    const c = _sealCapsCache.get(peerId);
+    if (c && Date.now() - c.ts < 5 * MS.MIN) return c.ok;
+    const contact = await dbGet('contacts', peerId).catch(() => null);
+    const homes = sanitizeHomeList(contact?.home);
+    if (!homes.some(isOriginRelay)) homes.push({ url: _servingRelayUrl(), pin: '' });
+    for (const entry of homes) {
+      try {
+        const resp = isOriginRelay(entry) ? await postAPIRaw('/prekey/status', { userId: peerId }) : await _contactRelayPost(entry, '/prekey/status', { userId: peerId });
+        const data = resp?.ok ? await resp.json() : null;
+        if (typeof data?.identityKey !== 'string' || data.identityKey.slice(0, 12) !== peerId || (data.caps !== undefined && !Array.isArray(data.caps))) continue;
+        const ok = data.caps?.includes(CAPS_SEAL_V2) || false;
+        _sealCapsCache.set(peerId, { ok, pub: data.identityKey, ts: Date.now() });
+        return ok;
+      } catch(e) { _dbg(e, 'seal-cap'); }
+    }
+    if (c?.ok) return true;
+    throw new Error('Sealed sender capability unavailable');
   }
 
   // ONE fan-out for every kind of outgoing content. Three near-identical copies of this loop
@@ -6996,9 +7004,12 @@ async function initMessenger(dbName) {
   // the identical sealed envelope (the fan-out's whole premise).
   // Extracted verbatim from relaySend's legacy path, which now calls
   // this too — one seal, however many deposits.
-  async function _buildWire(to, payload, sealPub, msgTs) {
+  async function _buildWire(to, payload, sealPub, msgTs, previous) {
+    if (previous?.sv === 2 && previous.se && previous.to === to && previous.ts === msgTs) return { to, ts: msgTs, payload: previous.payload, sv: 2, se: previous.se };
     let wire = payload;
-    if (sealPub && CONFIG.SEAL_V2_ENABLED && await _peerSealV2(to)) {
+    if (await _peerSealV2(to)) {
+      sealPub ||= (await dbGet('contacts', to).catch(() => null))?.pubB64 || _sealCapsCache.get(to)?.pub;
+      if (!CONFIG.SEAL_V2_ENABLED || !sealPub || sealPub.slice(0, 12) !== to) throw new Error('Sealed sender key unavailable');
       const { to: _t, ts: _ts, payload: _p, ...meta } = payload;
       // Session-bootstrap leak: the first message of a session wraps the ratchet ciphertext
       // in a plaintext X3DH header whose `ik` IS the sender's identity key — so a sealed
@@ -7007,17 +7018,13 @@ async function initMessenger(dbName) {
       let wirePayload = payload.payload;
       try { const pkm = JSON.parse(wirePayload); if (pkm?.t === 'pkm' && pkm.ik) { meta._pkik = pkm.ik; delete pkm.ik; wirePayload = JSON.stringify(pkm); } } catch {}
       const se = await sealMeta(sealPub, meta, to, msgTs);
-      if (se) wire = { to, ts: msgTs, payload: wirePayload, sv: 2, se };
+      if (!se) throw new Error('Sealed sender encryption failed');
+      wire = { to, ts: msgTs, payload: wirePayload, sv: 2, se };
     }
     return wire;
   }
 
-  // One copy at one relay, sealed first with the plain fallback —
-  // relaySend's per-relay discipline. A 429 carrying the per-mailbox
-  // gate's code defers THIS relay's copy only: the plain queue would
-  // be a different mailbox path, and the plan's rule is that one
-  // relay's limit never touches the others. Any other sealed failure
-  // falls through to plain exactly like the legacy path.
+  // Only a legacy wire may fall back to the sender-visible mailbox.
   // SHARE_PLAN stage 6, client side of the cost model: when a relay
   // refuses a deposit because the free quota is spent, say so once per
   // episode — details to the audit log, the user gets the way out
@@ -7028,6 +7035,10 @@ async function initMessenger(dbName) {
     showToast(t('toastQuotaExceeded'), 'error');
   } }) || null;
   function _noteQuota(r) { if (r && r.quota) _quotaNotice?.note(r.quota); }
+
+  function _queueRelaySend(to, payload, sealPub, extra = {}) {
+    if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, sealPub, attempts: 0, ...extra }); _saveRetryQueue(); scheduleRetry(); }
+  }
 
   async function _depositCopy(entry, to, wire, payload) {
     // A pin mismatch is conclusive for the session: the copy is
@@ -7054,6 +7065,7 @@ async function initMessenger(dbName) {
         if (rej?.kind === 'limited') return { ok: false, limited: true };
       }
     } catch(e) { _dbg(e, 'fanout-sealed'); }
+    if (wire.sv === 2) return { ok: false };
     try {
       const resp = await post('/msg/send', payload);
       if (resp?.ok) { const d = await resp.json().catch(() => ({})); return { ok: true, ack: !!d.ack }; }
@@ -7109,15 +7121,9 @@ async function initMessenger(dbName) {
     // Stage 6 step 2: a multi-relay account asserts its home list in
     // the envelope (sealed for v2 peers); default-only stays identical.
     if (payload && !payload.groupId && !payload.isGroupSK && Array.isArray(_settings.relays) && _settings.relays.length) payload = { ...payload, fromRelays: _myHomeWire() };
-    if (_isOffline) { if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } registerBackgroundSync(); return; }
+    if (_isOffline) { _queueRelaySend(to, payload, sealPub); registerBackgroundSync(); return; }
     const msgTs = payload.ts;
-    // Stage-2 step 6: redundant deposit at the contact's home relays.
-    // Resolved per send (stored home outranks the bundle hint; the
-    // caps gate lives in _resolveSendTargets). The fan-out engages
-    // only when the resolution names something beyond "primary only"
-    // — including the single non-primary home of a legacy contact —
-    // and the legacy body below then runs VERBATIM, so an account
-    // whose contacts have no homes sees byte-identical behaviour.
+    // Stored homes outrank bundle hints; one wire is shared by all copies.
     let fanTargets = [];
     let homeCandidates = [];
     try {
@@ -7126,8 +7132,10 @@ async function initMessenger(dbName) {
       homeCandidates = resolved.homes;
       fanTargets = homeCandidates.slice(0, resolved.fan);
     } catch(e) { _dbg(e, 'relay-targets'); fanTargets = []; homeCandidates = []; }
+    let wire;
+    try { wire = await _buildWire(to, payload, sealPub, msgTs); }
+    catch(e) { _dbg(e, 'seal-wire'); _queueRelaySend(to, payload, sealPub); return; }
     if (!(fanTargets.length === 0 || (fanTargets.length === 1 && isOriginRelay(fanTargets[0])))) {
-      const wire = await _buildWire(to, payload, sealPub, msgTs);
       let anyAck = false;
       let anyDeposited = false;
       const owed = [];
@@ -7168,15 +7176,13 @@ async function initMessenger(dbName) {
       // wire bytes, so the copies stay identical.
       if (anyAck && msgTs) updateMsgStatus(msgTs, 'deposited');
       if (owed.length) {
-        if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, wire: JSON.stringify(wire), relays: owed, attempts: 0 }); _saveRetryQueue(); }
+        _queueRelaySend(to, payload, sealPub, { wire: JSON.stringify(wire), relays: owed });
         scheduleRetry();
       }
       return;
     }
     // Sealed Sender (preferred — and with v2, actually sealed: see sealMeta above).
-    // The sealing itself lives in _buildWire (step 6) so the fan-out path
-    // deposits the identical bytes at every relay; behaviour here is unchanged.
-    const wire = await _buildWire(to, payload, sealPub, msgTs);
+    // Every relay receives the identical capability-gated wire bytes.
     try {
       const resp = await postAPIRaw('/sealed/send', { to, envelope: JSON.stringify(wire) });
       if (resp.ok) {
@@ -7193,12 +7199,21 @@ async function initMessenger(dbName) {
           // exhausted quota. Queue the message as owed instead and
           // tell the user once why delivery is waiting.
           _quotaNotice?.note(rej);
-          if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+          _queueRelaySend(to, payload, sealPub, { wire: JSON.stringify(wire) });
           scheduleRetry();
           return;
         }
       }
     } catch(e) { _dbg(e, 'sealed'); }
+
+    if (wire.sv === 2) {
+      for (const entry of homeCandidates.slice(fanTargets.length)) {
+        const r = await _depositCopy(entry, to, wire, payload);
+        _noteQuota(r);
+        if (r.ok && !r.withheld) { if (r.ack && msgTs) updateMsgStatus(msgTs, 'deposited'); _noteRelayFailover(fanTargets[0], entry); return; }
+      }
+      _queueRelaySend(to, payload, sealPub, { wire: JSON.stringify(wire) }); return;
+    }
     // Standard relay fallback (DEPRECATED path — servers announce it via the
     // Deprecation response header and can disable it with PLAIN_PATH_DISABLED)
     try {
@@ -7226,13 +7241,13 @@ async function initMessenger(dbName) {
           // promise a retry in seconds for a window that resets in
           // hours. Queue as owed and surface the quota notice instead.
           _quotaNotice?.note(rej);
-          if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+          _queueRelaySend(to, payload, sealPub);
           scheduleRetry();
           return;
         }
         const retryAfter = (parseInt(resp.headers.get('Retry-After') || '5') || 5) * MS.SEC;
         showToast(t('toastRateLimit') + ' ' + Math.ceil(retryAfter/MS.SEC) + 's', 'info');
-        setTimeout(() => { if (_retryQueue.length < 50) { _retryQueue.unshift({ to, payload, attempts: 0 }); _saveRetryQueue(); scheduleRetry(); } }, retryAfter);
+        setTimeout(() => _queueRelaySend(to, payload, sealPub), retryAfter);
         return;
       }
       throw new Error('relay-' + resp.status);
@@ -7254,7 +7269,7 @@ async function initMessenger(dbName) {
           return;
         }
       }
-      if (_retryQueue.length < 50) { _retryQueue.push({ to, payload, attempts: 0 }); _saveRetryQueue(); }
+      _queueRelaySend(to, payload, sealPub);
       scheduleRetry();
     }
   }
@@ -7278,41 +7293,23 @@ async function initMessenger(dbName) {
         showToast(t('toastDeliveryFailed'), 'error');
         _updateOutboxBadge(); _saveRetryQueue(); return;
       }
-      item.attempts++;
-      // Stage-2 step 6: a fan-out item owes copies to specific relays
-      // (item.relays) and carries the exact wire bytes (item.wire) so
-      // the retried copies stay identical to the ones already placed.
-      // Each relay succeeds or stays owed independently; the item
-      // leaves the queue when no relay is owed, and the shared
-      // dead-letter path above bounds it at 3 attempts like any item.
-      if (item.wire && Array.isArray(item.relays) && item.relays.length) {
+      try {
+        let previous;
+        try { previous = JSON.parse(item.wire); } catch {}
+        const wireObj = await _buildWire(item.to, item.payload, item.sealPub, item.payload.ts, previous);
+        item.wire = JSON.stringify(wireObj);
+        item.attempts++;
+        const targets = Array.isArray(item.relays) && item.relays.length ? item.relays : [{ url: _servingRelayUrl(), pin: '' }];
         let anyAck = false;
         const still = [];
-        const wireObj = (() => { try { return JSON.parse(item.wire); } catch { return null; } })();
-        if (wireObj) {
-          for (const entry of item.relays) {
-            const r = await _depositCopy(entry, item.to, wireObj, item.payload);
-            _noteQuota(r);
-            if (r.ok) { if (r.ack) anyAck = true; }
-            else still.push(entry);
-          }
-        } else {
-          still.push(...item.relays); // unparseable wire: keep owing rather than drop a copy
+        for (const entry of targets) {
+          const r = await _depositCopy(entry, item.to, wireObj, item.payload);
+          _noteQuota(r);
+          if (r.ok) { if (r.ack) anyAck = true; }
+          else still.push(entry);
         }
         if (anyAck && item.payload?.ts) updateMsgStatus(item.payload.ts, 'deposited');
         if (still.length) { item.relays = still; _retryQueue.push(item); }
-        _updateOutboxBadge(); _saveRetryQueue();
-        if (_retryQueue.length > 0) scheduleRetry();
-        return;
-      }
-      try {
-        // v3.6: Retry via sealed sender first (privacy-preserving), fall back to standard relay
-        let sent = false;
-        try {
-          const resp = await postAPIRaw('/sealed/send', { to: item.to, envelope: JSON.stringify(item.payload) });
-          if (resp.ok) sent = true;
-        } catch {}
-        if (!sent) await postAPIRaw('/msg/send', item.payload);
       } catch(e) { _retryQueue.push(item); _saveRetryQueue(); }
       _updateOutboxBadge(); _saveRetryQueue();
       if (_retryQueue.length > 0) scheduleRetry();
@@ -7644,7 +7641,7 @@ async function initMessenger(dbName) {
       // Save unread count for cross-account badge
       try {
         const activeId = getActiveAccountId();
-        const contacts = document.querySelectorAll('.cbadge');
+        const contacts = document.querySelectorAll('.bdg-row');
         let totalUnread = 0;
         contacts.forEach(b => { totalUnread += parseInt(b.textContent) || 0; });
         _crossAccountUnread[activeId] = totalUnread;
@@ -8467,9 +8464,9 @@ async function initMessenger(dbName) {
     document.querySelectorAll('.folder-tab').forEach(tab => {
       const f = tab.dataset.folder;
       const cnt = counts[f] || 0;
-      const existing = tab.querySelector('.ftcount');
+      const existing = tab.querySelector('.bdg-count');
       if (cnt > 0 && f !== 'all') {
-        if (existing) existing.textContent = cnt; else { const s = document.createElement('span'); s.className = 'ftcount'; s.textContent = cnt; tab.appendChild(s); }
+        if (existing) existing.textContent = cnt; else { const s = document.createElement('span'); s.className = 'bdg bdg-count'; s.textContent = cnt; tab.appendChild(s); }
       } else if (existing) existing.remove();
     });
     // v3.4: Section headers (Gmail-style time grouping) for "All" tab
@@ -8529,7 +8526,7 @@ async function initMessenger(dbName) {
       else if (draftText) previewText = `<span class="color-r">${t('draftLabel')}:</span> ${esc(draftText.slice(0, 30))}`;
       else if (c.isGroup && c.lastMsgSender && c.lastMsg) previewText = `<span class="color-t2">${esc(contactDisplayName({ name: c.lastMsgSender }))}:</span> ${esc(c.lastMsg)}`;
       else previewText = esc(c.lastMsg || '');
-      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${typeof _contactVerify !== 'undefined' && _contactVerify ? await _contactVerify.label(c, true) : ''}${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${_nameTools?.warningHtml(c) || ''}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="cbadge">${c.unread}</span>` : ''}</div>`);
+      safeSetHTML(div, `<div class="avatar" style="background:${avatarBg}">${initial}${presenceDot}</div><div class="info"><div class="name">${typeof _contactVerify !== 'undefined' && _contactVerify ? await _contactVerify.label(c, true) : ''}${prefix}${esc(contactDisplayName(c))}${contactPeerNameHtml(c)}${_nameTools?.warningHtml(c) || ''}${labelHtml}</div><div class="preview">${previewText}</div></div><div class="meta">${lastTime ? `<div class="time">${lastTime}</div>` : ''}${c.unread > 0 ? `<span class="bdg bdg-row">${c.unread}</span>` : ''}</div>`);
       div.onclick = () => openConversation(c);
       // v3.6: Swipe-left-to-archive on contact (iOS Mail/WhatsApp pattern)
       if (IS_TOUCH) {
@@ -10445,7 +10442,7 @@ async function initMessenger(dbName) {
   const _originalTitle = document.title;
   function updateTabTitle() {
     try {
-      const contacts = document.querySelectorAll('.cbadge');
+      const contacts = document.querySelectorAll('.bdg-row');
       let total = 0;
       contacts.forEach(el => { const n = parseInt(el.textContent); if (n > 0) total += n; });
       _unreadTotal = total;
@@ -12616,7 +12613,7 @@ async function initMessenger(dbName) {
     function schedulePresence() {
       if (_presenceTimer) clearTimeout(_presenceTimer);
       const interval = document.hidden ? CONFIG.PRESENCE_BG_INTERVAL_MS : CONFIG.PRESENCE_INTERVAL_MS;
-      _presenceTimer = setTimeout(() => { if (!_powerPresenceOff()) beat(); if (activeContact) updateConvStatus(activeContact); schedulePresence(); }, interval);
+      _presenceTimer = setTimeout(() => { if (!_powerPresenceOff()) { beat(); if (activeContact) updateConvStatus(activeContact); } schedulePresence(); }, interval);
     }
     schedulePresence();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) { if (!_powerPresenceOff()) beat(); schedulePresence(); } }, { signal: _ac.signal });
@@ -12919,14 +12916,14 @@ async function initMessenger(dbName) {
       </div>
       <div class="add-form add-form-contact hidden">
         <span class="i-tiny-meta">${esc(t('addContact')).replace(/\n/g, '<br>')}</span>
-        <input type="text" class="modal-input add-input" placeholder="${esc(t('addContactPh'))}">
+        <input type="text" class="field modal-input add-input" placeholder="${esc(t('addContactPh'))}">
         <div class="nudge-actions">
           <button type="button" class="btn btn-g btn-sm add-submit">${esc(t('addBtn'))}</button>
         </div>
         <div class="add-scan"></div>
       </div>
       <div class="add-form add-form-group hidden">
-        <input type="text" class="modal-input group-input" placeholder="${esc(t('groupNamePrompt'))}">
+        <input type="text" class="field modal-input group-input" placeholder="${esc(t('groupNamePrompt'))}">
         <div class="nudge-actions">
           <button type="button" class="btn btn-g btn-sm group-submit">${esc(t('addOptionGroup'))}</button>
         </div>
@@ -13537,7 +13534,7 @@ async function initMessenger(dbName) {
       ${contact.alias ? '<div class="text-xs color-t3 mb-2">@' + esc(contactDisplayName({ name: contact.alias })) + '</div>' : ''}
       ${peerName ? '<div class="text-xs color-t3 mb-2">' + esc(t('peerNameLabel')) + ': ' + esc(peerName) + '</div>' : ''}
       <label class="i-tiny-meta">${esc(t('nicknameLabel'))}</label>
-      <input class="modal-input" type="text" maxlength="64" value="${contact.nameLocked ? esc(contactDisplayName(contact)) : ''}" placeholder="${esc(contactDisplayName({ name: contact.profileName || contact.name || '' }))}" autocomplete="off">
+      <input class="field modal-input" type="text" maxlength="64" value="${contact.nameLocked ? esc(contactDisplayName(contact)) : ''}" placeholder="${esc(contactDisplayName({ name: contact.profileName || contact.name || '' }))}" autocomplete="off">
       <div class="i-tiny-meta">${esc(t('nicknameLocalNote'))}</div>
       <div class="modal-actions">
         <button class="btn btn-o btn-sm" value="cancel">${t('cancel')}</button>
@@ -14022,7 +14019,7 @@ async function initMessenger(dbName) {
       const _powerOpts = [['auto', 'powerAuto'], ['normal', 'powerNormal'], ['saver', 'powerSaver'], ['emergency', 'powerEmergency']].map(([v, k]) =>
         '<option value="' + v + '"' + (_settings.powerMode === v ? ' selected' : '') + '>' + esc(t(k)) + '</option>').join('');
       safeSetHTML(d, `<b class="i-g">${t('profileTitle')}</b><br>
-        <label class="i-cur">${t('yourDisplayName')} <input type="text" class="settings-name-input" maxlength="64" value="${esc(myName)}"></label>
+        <label class="i-cur">${t('yourDisplayName')} <input type="text" class="field settings-name-input" maxlength="64" value="${esc(myName)}"></label>
         <button class="btn btn-g btn-sm" data-action="save-display-name">${t('profileSave')}</button><br>
         <br><b class="i-g">${t('settingsPrivacy')}</b><br>
         <label class="i-cur"><input type="checkbox" data-setting="hide-rr" ${_privacyHideReadReceipts ? 'checked' : ''}> ${t('hideReadReceipts')}</label><br>
@@ -15717,9 +15714,10 @@ if (PLATFORM === 'electron' && window.breeze) {
   // timers on switch, and is out of scope here — referencing it threw a ReferenceError
   // the moment this block stopped being dead code).
   setInterval(async () => {
+    if (_powerPresenceOff()) return;
     try {
       // Simple approach: read unread count from contact list DOM
-      const badges = document.querySelectorAll('.cbadge');
+      const badges = document.querySelectorAll('.bdg-row');
       let total = 0;
       badges.forEach(b => { total += parseInt(b.textContent) || 0; });
       window.breeze.setBadge(total);

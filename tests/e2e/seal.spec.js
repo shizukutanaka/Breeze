@@ -24,7 +24,7 @@ async function addAndOpen(page, pubB64) {
   await expect(page.locator('#msg-input-bar')).toBeVisible();
 }
 
-test('the relay never sees who sent a message (sealed-v2 wiretap)', async ({ browser }) => {
+test('the relay never sees who sent a message, including a failed send and retry (sealed-v2 wiretap)', async ({ browser }) => {
   const ctx1 = await browser.newContext(ip(90));
   const ctx2 = await browser.newContext(ip(91));
   // Keep this wiretap on the relay path; a direct persistence ACK skips the deposit.
@@ -35,9 +35,11 @@ test('the relay never sees who sent a message (sealed-v2 wiretap)', async ({ bro
 
   // The wiretap: every sealed envelope either browser hands the relay.
   const sealedBodies = [];
+  const plainBodies = [];
   for (const page of [P, Q]) {
     page.on('request', (r) => {
       if (r.url().includes('/api/sealed/send')) sealedBodies.push(r.postData() || '');
+      if (r.url().includes('/api/msg/send')) plainBodies.push(r.postData() || '');
     });
   }
 
@@ -45,6 +47,13 @@ test('the relay never sees who sent a message (sealed-v2 wiretap)', async ({ bro
   const pubQ = await createIdentity(Q, 'Wiretap-Receiver');
   await addAndOpen(P, pubQ);
   await addAndOpen(Q, pubP);
+
+  let rejectedEnvelope;
+  await P.route('**/api/sealed/send', route => {
+    if (rejectedEnvelope) return route.continue();
+    rejectedEnvelope = route.request().postData();
+    return route.fulfill({ status: 503, json: { error: 'Temporary outage' } });
+  });
 
   // P → Q, then Q → P (both directions must seal from the very first message).
   const msg1 = 'over the wire one ' + Date.now();
@@ -58,6 +67,9 @@ test('the relay never sees who sent a message (sealed-v2 wiretap)', async ({ bro
 
   // Delivery worked and at least two sealed envelopes crossed the wire...
   expect(sealedBodies.length).toBeGreaterThanOrEqual(2);
+  expect(rejectedEnvelope).toBeTruthy();
+  expect(sealedBodies.filter(body => body === rejectedEnvelope).length).toBeGreaterThanOrEqual(2);
+  expect(plainBodies).toEqual([]);
   // The identity keys as the raw byte-array text they would appear as inside a JSON payload —
   // this is exactly how the X3DH bootstrap header used to expose the sender on first contact.
   const rawBytes = (pub) => Array.from(atob(pub), (c) => c.charCodeAt(0)).join(',');

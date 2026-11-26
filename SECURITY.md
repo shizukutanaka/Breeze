@@ -515,8 +515,17 @@ separate, explicitly-scoped future work if it's wanted.
   cleartext inside the stored JSON — "the Worker doesn't parse it" was an implementation
   choice, not a guarantee; treat pre-v2 traffic as sender-visible to the relay. v2 is
   capability-negotiated (`seal-v2` in the prekey-bundle caps, read via `/prekey/status`
-  which consumes no one-time prekey): messages to un-upgraded peers, the `/msg` fallback
-  path, and the offline retry queue still use legacy envelopes and remain sender-visible.
+  which consumes no one-time prekey). Only peers whose successful status answer lacks
+  `seal-v2` use sender-visible legacy envelopes or `/msg` fallback. Capable-peer retries,
+  redundant copies and alternate-home fallbacks stay v2; a failed seal or unavailable
+  capability answer queues the message, never authorizes a plaintext downgrade. Restored
+  pre-change queue entries are resealed before deposit; valid queued v2 wires are reused
+  unchanged. A cached positive capability survives refresh failure; an expired negative
+  answer cannot authorize legacy traffic during an outage. Sealing/capability failures
+  do not exhaust delivery attempts; transport exhaustion retains the existing dead-letter
+  queue. Old device-only entries can recover the recipient key from a successful status
+  answer whose identity matches the addressed 12-character key prefix. Capability
+  discovery remains relay-reported, not an authenticated anti-stripping protocol.
   The relay still sees recipient, timing, and message size (padded to size buckets —
   256 / 1024 / 4096 B, then multiples of 4096, since D02 — so only the bucket leaks).
   Cover traffic was considered and rejected in D02 (constant dummy traffic would burn the
@@ -777,7 +786,7 @@ Protocol, vectors and limits: [Group author signatures](docs/GROUP_AUTHOR_SIG.md
 - **No phone/email**: Identity = cryptographic key pair
 - **Client-side encryption**: All crypto operations in browser WebCrypto API
 - **Forward secrecy**: Every message uses a unique ephemeral key via Double Ratchet
-- **Sealed Sender v2**: sender metadata encrypted to the recipient (ECIES-style); the server cannot identify the sender of a v2 envelope — legacy envelopes (old peers, `/msg` fallback, retry queue) remain sender-visible
+- **Sealed Sender v2**: sender metadata encrypted to the recipient (ECIES-style), including retries and alternate-relay fallbacks; only capability-confirmed legacy peers use sender-visible envelopes. Unknown capabilities or failed sealing defer delivery rather than downgrade. The relay still sees routing, timing, size buckets and network-origin metadata.
 - **Key change warning**: 3 decrypt failures → yellow banner (MITM detection)
 - **P2P-only mode**: Functions without server when P2P connections are active
 - **Dual-path delivery**: P2P direct + sealed sender relay with dedup

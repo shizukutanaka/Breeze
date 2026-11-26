@@ -51,8 +51,8 @@ test('a "no reply needed" message arrives in full but raises no unread badge', a
   const normal = 'ordinary message ' + Date.now();
   await A.locator('#msg-input').fill(normal);
   await A.locator('#b-msg-send').click();
-  await expect(B.locator('#msg-contacts .cbadge')).toBeVisible({ timeout: 20_000 });
-  const baseline = parseInt((await B.locator('#msg-contacts .cbadge').first().textContent()) || '0', 10);
+  await expect(B.locator('#msg-contacts .bdg-row')).toBeVisible({ timeout: 20_000 });
+  const baseline = parseInt((await B.locator('#msg-contacts .bdg-row').first().textContent()) || '0', 10);
   expect(baseline).toBeGreaterThan(0);
 
   // Now the same thing marked "no reply needed": delivered, but the badge must not move.
@@ -68,7 +68,7 @@ test('a "no reply needed" message arrives in full but raises no unread badge', a
   await expect.poll(async () => (await readMessages(B)).some((m) => (m.text || '').includes(quiet)), { timeout: 20_000 }).toBe(true);
 
   // ... and the unread count did not grow.
-  const after = parseInt((await B.locator('#msg-contacts .cbadge').first().textContent()) || '0', 10);
+  const after = parseInt((await B.locator('#msg-contacts .bdg-row').first().textContent()) || '0', 10);
   expect(after).toBe(baseline);
 
   // The toggle is one-shot: it resets after sending so it can never silently mute a thread.
@@ -127,7 +127,7 @@ test('focus mode suppresses the alert but keeps the unread count honest', async 
   await B.locator('#b-msg-send').click();
 
   // Unread still accrues — focus hides the interruption, never the information.
-  await expect(A.locator('#msg-contacts .cbadge')).toBeVisible({ timeout: 20_000 });
+  await expect(A.locator('#msg-contacts .bdg-row')).toBeVisible({ timeout: 20_000 });
   expect(await A.evaluate(() => window.__notifs)).toBe(0);
 
   // Tapping the banner ends focus.
