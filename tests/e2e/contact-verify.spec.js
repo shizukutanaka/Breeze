@@ -7,11 +7,17 @@ async function contactRow(page) {
   await expect(page.locator('#msg-input-bar')).toBeVisible();
   return row;
 }
-async function compare(page, id) {
+async function compare(page, id, { groups = 12, screenshot = false } = {}) {
   await page.locator('#msg-input').fill('/verify'); await page.locator('#msg-input').press('Enter');
   const modal = page.locator('.overlay.overlay-dark').filter({ has: page.locator('[data-verify-contact]') });
   await expect(modal.locator('#kt-audit-status')).not.toHaveText('Checking key history...');
   const mark = modal.locator('[data-verify-contact]'); await expect(mark).toBeEnabled();
+  const number = await modal.locator('.i-safety-num').textContent();
+  expect(number.split(' ')).toHaveLength(groups);
+  expect(await modal.locator('.verification-modal').evaluate(el => getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)');
+  expect((await modal.locator('.verification-modal').boundingBox()).width).toBeLessThanOrEqual(400);
+  await expect(modal.locator('canvas')).toBeVisible();
+  if (screenshot) await page.screenshot({ path: '/Users/devin/safety-number-v2-verification.png' });
   await mark.click(); await expect(modal.locator('[role="status"]')).toHaveText('✓ Verified');
   await modal.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(page.locator('#msg-conv-name [data-contact-verification]')).toHaveText('✓ Verified');
@@ -21,6 +27,7 @@ async function compare(page, id) {
     const get = db.transaction('identity').objectStore('identity').get('verify:' + id);
     return new Promise(resolve => { get.onsuccess = () => { db.close(); resolve(get.result?.verified); }; });
   }, id)).toBe(true);
+  return number;
 }
 
 test('verify → reload → verified; missing signing pin → persistent warning/send block → re-verify → send', async ({ browser }) => {
@@ -39,9 +46,18 @@ test('verify → reload → verified; missing signing pin → persistent warning
   await b.locator('#msg-input').fill('signed reply'); await b.locator('#b-msg-send').click();
   await expect(a.locator('#msg-messages')).toContainText('signed reply', { timeout: 20_000 });
   const id = bob.slice(0, 12);
-  await compare(a, id);
+  let legacy = true;
+  await a.route('**/api/prekey/status', async route => {
+    const response = await route.fetch(), data = await response.json();
+    if (legacy && Array.isArray(data.caps)) data.caps = data.caps.filter(c => c !== 'safety-number-v2');
+    await route.fulfill({ response, json: data });
+  });
+  await compare(a, id, { groups: 6 });
+  legacy = false;
   await a.reload(); await contactRow(a);
   await expect(a.locator('#msg-conv-name [data-contact-verification]')).toHaveText('✓ Verified');
+  const number = await compare(a, id, { screenshot: true });
+  expect(await compare(b, alice.slice(0, 12))).toBe(number);
   await expect(a.locator('#msg-contacts [data-contact-verification="verified"]')).toHaveCount(1);
   await a.screenshot({ path: '/Users/devin/contact-verify-verified.png' });
   const signingPin = await a.evaluate(async id => {

@@ -436,35 +436,39 @@ symmetric-only (content verified, sender unattributed).
 
 ## 6b. Safety number — out-of-band MITM verification (key fingerprint)
 
-Two users compare a 60-digit number over an independent channel (voice, in
-person, QR). Matching numbers prove neither party's identity key was swapped by
-a malicious relay — the only protocol-level defense against an active MITM that
-substitutes pre-key bundles (X3DH alone cannot prevent it without a trust root).
+The deployed contact-verification display uses `src/app/safety-number.js`, importing
+`src/crypto/fingerprint.js` directly as ESM (no inline copy). Both parties must advertise
+`safety-number-v2` in their prekey capabilities. Opening comparison refreshes the peer
+capability hint; missing/failed capability lookup selects legacy. V2 is display-only:
+the existing `BreezeContactVerification` both-key binding and separate domain-separated
+both-key comparison remain unchanged. Existing verified contacts stay verified.
 
-Algorithm (`src/crypto/fingerprint.js`, faithful to Signal's
-NumericFingerprintGenerator):
-- Per party: `H₀ = SHA-512(version ‖ identityKey ‖ stableId)`, then
-  `Hₙ = SHA-512(Hₙ₋₁ ‖ identityKey)` for **5200 iterations**; the first 30 bytes
-  → six 5-digit chunks (`byteArray5 % 100000`) = 30 digits per party.
-- The two per-party fingerprints are concatenated in **sorted** order, so both
-  participants compute the identical 60-digit string regardless of who is local.
-- The iterated hash makes grinding a colliding substitute key ~5200× more
-  expensive per candidate; 60 shown digits ≈ 112 bits vs the legacy single-hash
-  `safetyNumber()` in index.html (one SHA-256 over 12 bytes, ~40 bits shown).
+The reference's default format version is 0 (distinct from the UI's “v2” generation).
+Per party, `H₀ = uint16be(0) ‖ encryptionPublicKeyBytes ‖ UTF8(stableId)` is an
+**unhashed** seed. Repeat `H = SHA-512(H ‖ encryptionPublicKeyBytes)` exactly 5200 times.
+The stable identifier is the first 12 characters of that party's canonical base64
+encryption public key, matching its existing Breeze contact ID. The first 30 hash bytes
+yield six 5-digit chunks (each five-byte integer modulo 100000). Sort and concatenate
+the two parties' 30-digit strings into twelve groups. The legacy display remains six
+groups from the first 12 bytes of SHA-256 over sorted base64 encryption keys: **96 bits**,
+not 40 bits. V2 is an enhancement, not remediation of a feasible legacy collision attack.
 
-Impl: `src/crypto/fingerprint.js` (`createFingerprint` → `safetyNumber` /
-`fingerprintFor` / `scannable` / `verifyScannable`). The scannable path is the
-stronger verification: `scannable()` encodes `version(1) ‖ myFp(30) ‖ peerFp(30)`
-as base64 (a QR payload, mirroring Signal's CombinedFingerprints) and
-`verifyScannable()` cross-matches a peer's scanned code (scanned.local == my
-remote ∧ scanned.remote == my local) in constant time — comparing the full
-30-byte fingerprints rather than the 40-bit-per-chunk display truncation, so it
-is immune to the digit-skipping errors of manual comparison. Tests:
-`tests/fingerprint.test.js` (17 — format, symmetry, determinism, MITM-substitution
-visibility, stableId binding, iteration binding, bytes≡base64, full 5200-round
-run; scannable: encoding length, cross-party match, MITM reject, malformed/
-version-mismatch reject, stableId binding). **Implemented (module).** Gap: migrate
-index.html `safetyNumber()`/`showSafetyNumber()` onto it (browser-validated pass).
+Comparison QRs use `breeze-verify:` plus compact JSON
+`{v:1|2,number,bothKeys}`, containing the displayed number and the existing symmetric
+both-key comparison. They are bounded to 512 characters and require canonical format,
+known version and both comparisons to match. A version mismatch asks both users to use
+the legacy display; it is not a key-change signal. V2 has an explicit legacy-display
+button to handle stale/asymmetric capability hints without false MITM alarms.
+Display capabilities are not trusted identity proofs; key verification still requires
+an independent channel and the unchanged fresh-key/revision checks on confirmation.
+
+The reference's `scannable/verifyScannable` raw 30-byte fingerprint codec remains
+available but is **not** this application's QR wire format: application QRs also bind
+the separate signing-key comparison. The v1 offline pairing invitation and nonce-bound
+pairing comparison are unchanged for old strict parsers. After bootstrap the pairing
+screen offers negotiated contact verification; without capability information it is legacy.
+Tests cover reference vectors, deployed bridge parity, mixed-version symmetry,
+versioned QR validation and preservation of both-key verification across upgrades.
 
 ## 6c. Call signalling (stage 5)
 

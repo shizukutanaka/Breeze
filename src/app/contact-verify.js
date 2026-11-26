@@ -1,3 +1,6 @@
+import { comparisonQR, compareQR, legacySafetyNumber } from './safety-number.js';
+export { negotiatedSafetyNumber } from './safety-number.js';
+
 const utf8 = new TextEncoder();
 const hex = bytes => Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
 function pins(contact) {
@@ -123,16 +126,40 @@ export function createContactVerify(D) {
     const fresh = await D.get('contacts', contact.id);
     if (!fresh || fresh.isGroup) return;
     const s = await state(fresh), expected = { binding: s.binding, revision: s.revision || 0 };
-    const num = await D.safetyNumber(fresh.pubB64);
+    let num = await D.safetyNumber(fresh.pubB64);
     let combined = '';
     try { combined = await contactSafetyNumber(D.local(), fresh); } catch { /* cannot confirm without both pins */ }
     const overlay = document.createElement('div'); overlay.className = 'overlay overlay-dark';
-    D.safeSetHTML(overlay, `<div class="modal"><div class="i-emoji-lg">🔐</div><div class="fw-700 text-sm mb-2">${D.t('safetyNumber')}</div><div class="i-safety-num">${D.esc(num || '')}</div><div class="text-xs color-t3 mb-3">${D.t('safetyDesc')}</div><div class="text-xs mb-3" id="kt-audit-status">${D.esc(D.t('ktChecking'))}</div></div>`);
+    D.safeSetHTML(overlay, `<div class="modal verification-modal"><div class="i-emoji-lg">🔐</div><div class="fw-700 text-sm mb-2">${D.t('safetyNumber')}</div><div class="i-safety-num">${D.esc(num || '')}</div><div class="text-xs color-t3 mb-3">${D.t('safetyDesc')}</div><div class="text-xs mb-3" id="kt-audit-status">${D.esc(D.t('ktChecking'))}</div></div>`);
     const modal = overlay.firstElementChild;
     const both = document.createElement('p'); both.className = 'text-xs'; both.textContent = D.t('cvCompare') + (combined ? '\n' + combined : '\n' + D.t('cvMissingPin')); modal.appendChild(both);
     const strict = document.createElement('label'), checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = s.strict !== false;
     strict.append(checkbox, document.createTextNode(D.t('cvStrict'))); modal.appendChild(strict);
     const result = document.createElement('p'); result.setAttribute('role', 'status'); result.textContent = D.t(labelKey(s)); modal.appendChild(result);
+    const version = document.createElement('p'); version.className = 'text-xs color-t3'; version.textContent = D.t(num.split(' ').length === 12 ? 'snV2' : 'snLegacy'); modal.appendChild(version);
+    let stopScan;
+    const closeScan = () => { stopScan?.(); stopScan = null; };
+    const qr = document.createElement('div'); qr.className = 'qr-code';
+    const paintQR = () => {
+      qr.replaceChildren();
+      if (combined && D.qr) { try { const code = D.qr.generateQR(comparisonQR(num, combined)); code.className = 'qr-code'; qr.appendChild(code); } catch(e) { D.dbg(e, 'verification-qr'); } }
+    };
+    if (D.qr && combined) {
+      const toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'btn btn-o btn-sm'; toggle.textContent = D.t('snUseLegacy'); toggle.disabled = num.split(' ').length !== 12;
+      toggle.onclick = async () => { try { closeScan(); num = await legacySafetyNumber(D.local().pubB64, fresh.pubB64); overlay.querySelector('.i-safety-num').textContent = num; version.textContent = D.t('snLegacy'); toggle.disabled = true; paintQR(); } catch(e) { D.dbg(e, 'verification-legacy'); } };
+      modal.append(toggle, qr); paintQR();
+      if (typeof BarcodeDetector !== 'undefined') {
+        const scan = document.createElement('button'); scan.type = 'button'; scan.className = 'btn btn-o btn-sm'; scan.textContent = D.t('scanQR');
+        scan.onclick = () => { closeScan(); stopScan = D.qr.startScan({ container: qr, onResult: async value => {
+          closeScan();
+          const outcome = compareQR(value, comparisonQR(num, combined));
+          if (outcome !== 'match') { result.textContent = D.t(outcome === 'version' ? 'snVersion' : 'snMismatch'); return; }
+          try { await verify(fresh, 'safety-number', expected); result.textContent = D.t('cvVerified'); }
+          catch(e) { D.dbg(e, 'verification-scan'); result.textContent = D.t('cvFailed'); }
+        }, onError: e => { D.dbg(e, 'verification-camera'); result.textContent = D.t('toastCameraFail'); } }); };
+        modal.appendChild(scan);
+      }
+    }
     const mark = document.createElement('button'); mark.type = 'button'; mark.className = 'btn btn-g btn-sm'; mark.dataset.verifyContact = fresh.id; mark.textContent = D.t('cvMark'); mark.disabled = !combined; modal.appendChild(mark);
     checkbox.onchange = async () => { try { await setStrict(fresh, checkbox.checked); } catch(e) { D.dbg(e, 'verification-strict'); result.textContent = D.t('cvFailed'); } };
     mark.onclick = async () => {
@@ -141,8 +168,9 @@ export function createContactVerify(D) {
       catch(e) { D.dbg(e, 'verification-mark'); result.textContent = D.t('cvFailed'); }
       finally { mark.disabled = !combined; }
     };
-    const close = document.createElement('button'); close.type = 'button'; close.className = 'btn btn-o btn-sm'; close.textContent = D.t('close'); close.onclick = () => overlay.remove(); modal.appendChild(close);
-    overlay.onclick = e => { if (e.target === overlay) overlay.remove(); }; document.body.appendChild(overlay);
+    const dismiss = () => { closeScan(); overlay.remove(); };
+    const close = document.createElement('button'); close.type = 'button'; close.className = 'btn btn-o btn-sm'; close.textContent = D.t('close'); close.onclick = dismiss; modal.appendChild(close);
+    overlay.onclick = e => { if (e.target === overlay) dismiss(); }; document.body.appendChild(overlay);
     try {
       const audit = await D.auditKeys(fresh), el = overlay.querySelector('#kt-audit-status');
       const key = !audit ? 'ktUnavailable' : audit.verdict === 'tampered' ? 'ktTampered' : audit.verdict === 'rolled' ? 'ktRolled' : 'ktOk';

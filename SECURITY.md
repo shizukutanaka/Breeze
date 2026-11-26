@@ -149,10 +149,26 @@ root-signed per-device signing keys and remote push-subscription revocation are 
 ## Persisted contact verification
 
 `/verify` can record an explicit comparison of the new **both-key** safety number.
-The existing encryption-only number is unchanged; the additional comparison uses
+The encryption-only display negotiates `safety-number-v2` through prekey capabilities:
+both supporting clients use the single-sourced 5200-round SHA-512, identifier-bound
+60-digit reference. Otherwise the unchanged 96-bit legacy number is shown. Missing or
+unavailable capabilities select legacy; opening comparison refreshes the peer hint.
+Capabilities are display hints, not identity authentication. Differing/stale hints never
+invalidate a verification record: versions are labeled, v2 offers a legacy comparison
+button, and a QR version mismatch requests a common legacy display, not a MITM alarm.
+The additional both-key comparison uses
 SHA-256 over a versioned, domain-separated canonical array of both participants'
 full encryption and Ed25519 public pins, sorted lexicographically. Both clients
 must support this display. A missing signing pin cannot be confirmed.
+
+New `breeze-verify:` QR payloads explicitly bind display version, the displayed number
+and the separate both-key comparison. Scanning requires all three to match before the
+normal fresh-key/revision-checked verification write. Invalid or mismatched codes do not
+mark a contact verified or invalidate existing verification. These are local comparison
+codes, never links to navigate. The existing v1 in-person invitation QR, strict capability
+allowlist and nonce-bound pairing number remain byte-compatible. After that bootstrap a
+Safety Number button opens negotiated contact verification; offline peers remain legacy
+until capability information is available. Display changes never alter stored both-key pins.
 
 Account-local `identity:verify:<contact id>` records bind the full encryption and
 signing pins with SHA-256 (`BreezeContactVerification`, version 1), timestamp and

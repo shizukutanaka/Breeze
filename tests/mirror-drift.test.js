@@ -34,6 +34,8 @@ import { createPQXDH, nobleKem768 } from '../src/crypto/pq.js';
 import { mintPQPreKey, pqSeedRecord, pqPublicKeyFromSeed, pqSecretKeyFromSeed } from '../src/crypto/pqkey.js';
 import { createFranking } from '../src/crypto/franking.js';
 import { sealMeta as refSealMeta, unsealMeta as refUnsealMeta } from '../src/crypto/seal.js';
+import { createFingerprint } from '../src/crypto/fingerprint.js';
+import { negotiatedSafetyNumber } from '../src/app/safety-number.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -1163,8 +1165,7 @@ describe('getGroupSenderKey freezes format from the negotiated decision, not the
 // references that were NEVER wired into the deployed index.html/_worker.js
 // (each says "to be migrated … in a browser-validated pass"). Green tests +
 // polished docs make the codebase LOOK more secure than the shipped artifact —
-// e.g. the deployed safety number is still a single SHA-256 over 12 bytes while
-// fingerprint.js implements Signal's iterated 5200×SHA-512 (un-deployed).
+// Graduated modules instead have deployed bridge or inline-parity guards below.
 //
 // This guard pins that "reference-only" status. Each marker below is a string
 // that WILL necessarily appear in the deployed file once its module is migrated
@@ -1293,7 +1294,6 @@ describe('franking mirror (I17) — inline _frankCommit vs franking.js', () => {
 
 describe('reference-drift tracking — modules that are tested references, NOT yet deployed', () => {
   const REFERENCE_ONLY = [
-    { module: 'fingerprint.js (Signal iterated 5200×SHA-512 safety number)', marker: 'fingerprintBytes' },
     // franking.js's COMMITMENT math GRADUATED to deployed (inline _frankKey/_frankCommit) — see the
     // "franking mirror" block above for its parity guard. Only the module factory and the
     // relay-side verifyReport helper stay reference-only; the deployed relay check is the Worker's
@@ -1327,19 +1327,18 @@ describe('reference-drift tracking — modules that are tested references, NOT y
     });
   }
 
-  // Behavioural pin on the un-migrated safety number. This deliberately locks the
-  // CURRENT (weaker) inline algorithm: a single SHA-256 over the sorted pubkeys,
-  // displayed as 6 space-separated 5-digit groups (~30 digits). It is NOT an
-  // endorsement — it's a tripwire: migrating onto fingerprint.js (60 digits,
-  // iterated SHA-512) changes this output and fails the test, forcing a deliberate,
-  // documented swap rather than a silent drift in a security-display string.
-  it('inline safetyNumber still uses the legacy single-SHA-256 format (6×5 digits)', () => {
+  // Fingerprints graduated through ESM rather than a second inline crypto copy.
+  it('deployed safetyNumber bridge negotiates the single-sourced reference, retaining mixed-version legacy symmetry', async () => {
     const sn = html.indexOf('async function safetyNumber(peerPubB64)');
-    const body = html.slice(sn, html.indexOf('\n  }', sn));
-    expect(body).toContain("digest('SHA-256'");      // single hash, not iterated SHA-512
-    expect(body).not.toContain('SHA-512');
-    expect(body).toContain("for (let i = 0; i < 6; i++)"); // 6 displayed groups
-    expect(body).not.toContain('fingerprintBytes');  // reference fn not inlined
+    const body = html.slice(sn, html.indexOf('\n  }', sn) + 4);
+    expect(sn).toBeGreaterThan(0);
+    expect(html).toContain('window.__breezeContactVerify = { createContactVerify, negotiatedSafetyNumber }');
+    expect(html).toContain("caps.push('safety-number-v2')");
+    const local = Buffer.alloc(32, 1).toString('base64'), peer = Buffer.alloc(32, 2).toString('base64');
+    const run = remoteCaps => new Function('globalThis', 'myPubB64', '_peerRelayInfo', '_relayInfoCache', '_dbg', body + '; return safetyNumber;')({ __breezeContactVerify: { negotiatedSafetyNumber } }, local, async () => ({ caps: remoteCaps }), new Map(), e => { throw e; })(peer);
+    expect(await run(['safety-number-v2'])).toBe(await createFingerprint().safetyNumber(local, peer, { localId: local.slice(0, 12), remoteId: peer.slice(0, 12) }));
+    expect(await run([])).toBe(await negotiatedSafetyNumber(peer, local));
+    expect(readFileSync(join(HERE, '../src/app/safety-number.js'), 'utf8')).toContain("import { createFingerprint } from '../crypto/fingerprint.js'");
   });
 });
 
