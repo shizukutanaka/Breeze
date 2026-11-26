@@ -1803,7 +1803,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     voiceCall: 'Voice call',
     videoCall: 'Video call',
     // Errors
-    serverNotConfigured: 'Server not configured: KV binding required. Follow README setup. P2P and message relay unavailable.',
+    serverNotConfigured: 'Server not configured: KV binding required. Follow README setup. P2P and message relay unavailable.', serverNoDefault: 'No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.',
     noIdentity: 'Create an identity in the messenger first',
     // Misc
     deleted: 'Message deleted',
@@ -2614,7 +2614,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     cmdCryptoPqHybrid: 'Hybrid plan: X25519 + ML-KEM-768 (when available)',
     cmdCryptoFwdSec: '✓ Each message uses unique key',
     cmdCryptoCompression: '✗ off by design (avoids CRIME/BREACH)',
-    cmdInfoFilesBookmarks: "📎 Files: {0} | 🔖 Bookmarks: {1}", settingsCloudflare: 'Your Cloudflare', cfTokenLabel: 'Cloudflare API token', cfTokenPlaceholder: 'Paste API token', cfSave: 'Save', cfVerify: 'Verify connection', cfDisconnect: 'Disconnect', cfStatusNone: 'Not connected.', cfStatusSaved: 'Token saved on this device, but not verified yet.', cfStatusVerifying: 'Verifying connection…', cfStatusConnected: 'Connected as {0}. Token status: {1}.', cfStatusConnectedNoAccounts: 'Token verified. Token status: {0}; no accounts are visible to this token.', cfStatusError: 'Connection check failed: {0}', cfErrInvalidToken: 'invalid or expired token', cfErrTokenNotActive: "token is not active (status: {0})", cfErrNetwork: 'network error', cfErrApi: 'Cloudflare API error', cfErrNoToken: 'no Cloudflare token is saved', cfErrStorage: 'could not access on-device storage', cfErrTokenRequired: 'paste a Cloudflare API token first', cfSaved: 'Cloudflare token saved on this device.', cfDisconnected: 'Cloudflare connection removed from this device.', cfSetup: 'Set up server', cfUpdate: 'Update server', cfSetupRunning: 'Setting up server: {0}…', cfSetupFailed: 'Server setup failed while {0}: {1}', cfSetupDone: 'Server ready and health-checked: {0}. Add it as a home relay from the Relays section.', cfSetupUnverified: 'Worker deployed at {0}, but the health check did not answer ({1}). Add it as a home relay only after checking it.', cfStepAccount: 'resolving the account', cfStepKv: 'finding or creating KV storage', cfStepSource: 'loading the server worker source', cfStepUpload: 'uploading the worker', cfStepSubdomain: 'enabling the workers.dev address', cfStepHealth: 'checking server health', cfErrNoAccount: 'no Cloudflare account is visible to this token', cfErrNoSubdomain: 'Cloudflare did not return a workers.dev subdomain', cfErrWorkerSource: 'could not load the bundled worker source', cfErrHealth: 'the health check did not answer ok', cfErrHttp: 'HTTP {0}', cfNote: "The token is stored only on this device. Browser requests pass statelessly through this origin's /api/cf-proxy to Cloudflare's API without being logged or stored. Verified relays with a relay key are added to Home Relays automatically.", helpSetCloudflareSave: "Stores the Cloudflare API token only in this device's IndexedDB settings store. It is sent only to Cloudflare's API as a Bearer token, never to Breeze relays. Server setup needs a token with account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.", helpSetCloudflareVerify: "Calls Cloudflare's token verification and account list APIs with the token saved on this device, then shows the real token status and account names or the actual error. The token is sent only to Cloudflare's API. Server setup needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.", helpSetCloudflareDisconnect: "Deletes the saved Cloudflare API token from this device's IndexedDB settings store and clears the shown connection state. It does not revoke the token, and it does not delete the Worker, KV namespace, or any other resource from your Cloudflare account.", helpSetCloudflareSetup: "Creates or reuses the breeze-presence KV namespace, uploads the bundled Breeze Worker as the breeze script with the required KV binding, enables its workers.dev address, and checks /api/health. The token needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit. The server URL is stored on this device only; add it as a home relay from Relays if you want to use it. Setup does not configure optional secrets for push notifications, TURN, or the relay identity key, so those features stay off or in their default fallback until configured in the Cloudflare dashboard.", cfSetupToggle: 'Set up your own Cloudflare server', cfGuideText: 'Create an API token with Account Settings: Read, Workers Scripts: Edit, and Workers KV Storage: Edit, then paste it below.', cfCreateTokenLink: 'Open Cloudflare API Tokens ↗', cfQuickSetup: 'Connect & set up server', helpSetCloudflareQuick: 'Saves the pasted Cloudflare API token on this device, verifies the account, creates the KV namespace and workers.dev subdomain if needed, deploys the Breeze Worker, and checks /api/health in one step.',
+    cmdInfoFilesBookmarks: "📎 Files: {0} | 🔖 Bookmarks: {1}", settingsCloudflare: 'Your Cloudflare', cfTokenLabel: 'Cloudflare API token', cfTokenPlaceholder: 'Paste API token', cfSave: 'Save', cfVerify: 'Verify connection', cfDisconnect: 'Disconnect', cfStatusNone: 'Not connected.', cfStatusSaved: 'Token saved on this device, but not verified yet.', cfStatusVerifying: 'Verifying connection…', cfStatusConnected: 'Connected as {0}. Token status: {1}.', cfStatusConnectedNoAccounts: 'Token verified. Token status: {0}; no accounts are visible to this token.', cfStatusError: 'Connection check failed: {0}', cfErrInvalidToken: 'invalid or expired token', cfErrTokenNotActive: "token is not active (status: {0})", cfErrNetwork: 'network error', cfErrApi: 'Cloudflare API error', cfErrNoProxy: 'Cloudflare setup needs a configured Breeze relay for the API proxy. Add a home relay first, or self-host Breeze and run setup there.', cfErrNoToken: 'no Cloudflare token is saved', cfErrStorage: 'could not access on-device storage', cfErrTokenRequired: 'paste a Cloudflare API token first', cfSaved: 'Cloudflare token saved on this device.', cfDisconnected: 'Cloudflare connection removed from this device.', cfSetup: 'Set up server', cfUpdate: 'Update server', cfSetupRunning: 'Setting up server: {0}…', cfSetupFailed: 'Server setup failed while {0}: {1}', cfSetupDone: 'Server ready and health-checked: {0}. Add it as a home relay from the Relays section.', cfSetupUnverified: 'Worker deployed at {0}, but the health check did not answer ({1}). Add it as a home relay only after checking it.', cfStepAccount: 'resolving the account', cfStepKv: 'finding or creating KV storage', cfStepSource: 'loading the server worker source', cfStepUpload: 'uploading the worker', cfStepSubdomain: 'enabling the workers.dev address', cfStepHealth: 'checking server health', cfErrNoAccount: 'no Cloudflare account is visible to this token', cfErrNoSubdomain: 'Cloudflare did not return a workers.dev subdomain', cfErrWorkerSource: 'could not load the bundled worker source', cfErrHealth: 'the health check did not answer ok', cfErrHttp: 'HTTP {0}', cfNote: "The token is stored only on this device. Browser requests pass statelessly through this origin's /api/cf-proxy to Cloudflare's API without being logged or stored. Verified relays with a relay key are added to Home Relays automatically.", helpSetCloudflareSave: "Stores the Cloudflare API token only in this device's IndexedDB settings store. It is sent only to Cloudflare's API as a Bearer token, never to Breeze relays. Server setup needs a token with account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.", helpSetCloudflareVerify: "Calls Cloudflare's token verification and account list APIs with the token saved on this device, then shows the real token status and account names or the actual error. The token is sent only to Cloudflare's API. Server setup needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit permissions.", helpSetCloudflareDisconnect: "Deletes the saved Cloudflare API token from this device's IndexedDB settings store and clears the shown connection state. It does not revoke the token, and it does not delete the Worker, KV namespace, or any other resource from your Cloudflare account.", helpSetCloudflareSetup: "Creates or reuses the breeze-presence KV namespace, uploads the bundled Breeze Worker as the breeze script with the required KV binding, enables its workers.dev address, and checks /api/health. The token needs account read (list accounts), Workers Scripts edit, and Workers KV Storage edit. The server URL is stored on this device only; add it as a home relay from Relays if you want to use it. Setup does not configure optional secrets for push notifications, TURN, or the relay identity key, so those features stay off or in their default fallback until configured in the Cloudflare dashboard.", cfSetupToggle: 'Set up your own Cloudflare server', cfGuideText: 'Create an API token with Account Settings: Read, Workers Scripts: Edit, and Workers KV Storage: Edit, then paste it below.', cfCreateTokenLink: 'Open Cloudflare API Tokens ↗', cfQuickSetup: 'Connect & set up server', helpSetCloudflareQuick: 'Saves the pasted Cloudflare API token on this device, verifies the account, creates the KV namespace and workers.dev subdomain if needed, deploys the Breeze Worker, and checks /api/health in one step.',
     mockBanner: 'Demo (mock) — no real communication takes place',
     mockUnavailable: 'Not available in this demo',
     mockSelfName: 'Demo User',
@@ -3230,8 +3230,8 @@ window.addEventListener('offline', () => {
 });
 // v3.1: Notify server when page closes (sendBeacon for reliable delivery)
 window.addEventListener('beforeunload', () => {
-  if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-    if (!globalThis.__breezeMock?.enabled?.()) try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
+  if ((globalThis.__brzApiReady?.() ?? !!API) && typeof myId !== 'undefined' && myId) {
+    if (!globalThis.__breezeMock?.enabled?.()) try { navigator.sendBeacon((globalThis.__brzApiBase?.() ?? API) + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
   }
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
@@ -3245,8 +3245,8 @@ window.addEventListener('beforeunload', () => {
 // v3.1: Pause polling when tab hidden (save battery)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
-    if (typeof API !== 'undefined' && API && typeof myId !== 'undefined' && myId) {
-      if (!globalThis.__breezeMock?.enabled?.()) try { navigator.sendBeacon(API + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
+    if ((globalThis.__brzApiReady?.() ?? !!API) && typeof myId !== 'undefined' && myId) {
+      if (!globalThis.__breezeMock?.enabled?.()) try { navigator.sendBeacon((globalThis.__brzApiBase?.() ?? API) + '/presence', JSON.stringify({ ids: [myId], offline: true })); } catch(e) {}
     }
   }
 });
@@ -3289,7 +3289,12 @@ function toggleTheme() {
 
 // i18n: auto-detect browser language
 
-const API = location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '' : location.origin + '/api';
+const API = globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? '' : (location.hostname === 'localhost' || location.hostname === '127.0.0.1' ? '' : location.origin + '/api');
+// No-default-server builds keep API empty and resolve the first CONFIGURED home relay
+// dynamically; the global seams let code extracted outside initMessenger share that resolution.
+function _apiBase() { return globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? (globalThis.__breezeNoDefaultPrimaryApi?.() || '') : API; }
+function _apiReady() { return globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? !!_apiBase() : !!API; }
+globalThis.__brzApiBase = _apiBase; globalThis.__brzApiReady = _apiReady;
 const P = new URLSearchParams(location.search);
 // manifest.json registers web+breeze: as a protocol handler → /?join=%s, where %s is the
 // ENTIRE activated URL (e.g. "web+breeze:abc123"), not the bare token real invite links pass
@@ -3508,7 +3513,7 @@ let _turnCredential = null; // v3.6: { iceServers: [...], ttl, provider } — fr
 try { _userId = localStorage.getItem('brz-uid') || ''; } catch(e) { _dbg(e); }
 
 // If arriving via ?join=token, show group info on setup screen
-if (joinToken && API) {
+if (joinToken && (globalThis.__brzApiReady?.() ?? !!API)) {
   postAPIRaw('/group/info', { token: joinToken })
     .then(r => r.ok ? r.json() : null)
     .then(data => {
@@ -3834,6 +3839,10 @@ const _relayPinGate = { blocked: false, checking: false, attesting: false, verdi
 
 // API helper (DRY for 48+ POST calls): returns Response, not auto-parsed, so callers can check .ok/.status; opts forwarded for signal etc.
 async function postAPIRaw(path, body, opts = {}) {
+  if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) {
+    const post = globalThis.__breezeNoDefaultPrimaryPost;
+    return post ? post(path, body, opts) : null;
+  }
   if (!_relayPinGate.attesting) {
     if (_relayPinGate.blocked) return null;
     if (_relayPinGate.verdict) {
@@ -4407,9 +4416,9 @@ async function initMessenger(dbName) {
   let _serverOk = false;
   let _clockOffset = 0; // v3.6: Server time - client time (ms), for anti-replay compliance
   function correctedNow() { return Date.now() + _clockOffset; } // Use for all outgoing timestamps
-  if (API) {
+  if ((globalThis.__brzApiReady?.() ?? !!API)) {
     try {
-      const r = await fetchT(API + '/health');
+      const r = await fetchT((globalThis.__brzApiBase?.() ?? API) + '/health');
       if (r.ok) {
         _serverOk = true;
         // v3.6: Clock drift detection + correction (critical for ±5min anti-replay)
@@ -4507,7 +4516,7 @@ async function initMessenger(dbName) {
   // a session whose check is never reached cannot hang. Arming is a
   // no-op without an API (nothing to call, nothing to pin).
   function _armRelayPinGate() {
-    if (!API) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API)) return;
     _relayPinGate.blocked = false;
     _relayPinGate.verdict = new Promise((resolve) => { _relayPinGate._settleVerdict = resolve; });
   }
@@ -4518,15 +4527,19 @@ async function initMessenger(dbName) {
     if (settle) settle();
   }
   async function checkRelayPin() {
-    if (!API) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API)) return;
     // A fresh verdict for THIS account/session: the gate is re-earned
     // below (an account switch lands here with the previous account's
     // verdict still latched, and that account's pin is not this one's).
     _relayPinGate.blocked = false;
     _relayPinGate.checking = true;
     try {
-      const r = await fetchT(API + '/health').catch(() => null);
+      const r = await fetchT((globalThis.__brzApiBase?.() ?? API) + '/health').catch(() => null);
       const health = r?.ok ? await r.json().catch(() => null) : null;
+      if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) {
+        if (health) { _serverOk = true; if (health.serverTime) _clockOffset = Math.max(-3600000, Math.min(3600000, health.serverTime - Date.now())); if (health.features) window._serverFeatures = health.features; }
+        return; // added relays carry explicit pins; postAPIRelay/ensureRelayVerified enforces them per call
+      }
       const relayKey = typeof health?.relayKey === 'string' && health.relayKey ? health.relayKey : null;
       if (!relayKey) { _relayPinFp = ''; return; } // pre-step-4 relay: legacy trust, nothing to pin
       _relayPinFp = await relayFingerprint(relayKey);
@@ -4628,14 +4641,14 @@ async function initMessenger(dbName) {
       seen.add(url);
       const pin = typeof e.pin === 'string' ? e.pin : '';
       const label = typeof e.label === 'string' ? e.label.slice(0, 64) : '';
-      if (url === origin) { if (pin && !originPin) originPin = pin; originLabel = label; continue; }
+      if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true && url === origin) { if (pin && !originPin) originPin = pin; originLabel = label; continue; }
       added.push({ url, pin, label });
     }
-    return [{ url: origin, pin: originPin, label: originLabel }, ...added];
+    return globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? added : [{ url: origin, pin: originPin, label: originLabel }, ...added];
   }
   // Stage 6 step 2: my home list in the wire shape (url + pin only).
   function _myHomeWire() { return homeRelays().map(r => ({ url: r.url, ...(r.pin ? { pin: r.pin } : {}) })); }
-  function isOriginRelay(relay) { return !!relay && relay.url === _servingRelayUrl(); }
+  function isOriginRelay(relay) { return !!relay && relay.url === (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? homeRelays()[0]?.url : _servingRelayUrl()); }
   // The resolver: a relay entry -> the base its API paths hang off.
   // The serving origin resolves to the legacy API const UNTOUCHED —
   // that is what keeps every shell (web, localhost dev, desktop) on
@@ -4643,6 +4656,7 @@ async function initMessenger(dbName) {
   // special case; an added relay is addressed as <origin>/api, the
   // only prefix the worker routes.
   function relayApiBase(relay) {
+    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) return relay?.url ? relay.url + '/api' : '';
     if (!relay || isOriginRelay(relay)) return API;
     return relay.url + '/api';
   }
@@ -4707,10 +4721,20 @@ async function initMessenger(dbName) {
   // delegates to postAPIRaw itself, gate and all, so the primary
   // path is the pre-step-5 code path byte for byte.
   async function postAPIRelay(relay, path, body, opts = {}) {
-    if (!relay || isOriginRelay(relay)) return postAPIRaw(path, body, opts);
+    if (!relay || (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true && isOriginRelay(relay))) return postAPIRaw(path, body, opts);
     if (_relayBlockedUrls.has(relay.url)) return null;
     if (!await ensureRelayVerified(relay)) return null;
     return fetchT(relayApiBase(relay) + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
+  }
+  globalThis.__breezeNoDefaultPrimaryApi = () => homeRelays()[0] ? relayApiBase(homeRelays()[0]) : '';
+  globalThis.__breezeNoDefaultPrimaryPost = (path, body, opts = {}) => homeRelays()[0] ? postAPIRelay(homeRelays()[0], path, body, opts) : null;
+  function _updateNoDefaultBanner() {
+    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true) return;
+    const banner = _DOM.get('msg-server-banner'); if (!banner) return;
+    if (homeRelays().length) { if (banner.dataset.noDefault) { banner.classList.add('hidden'); delete banner.dataset.noDefault; banner.onclick = null; } return; }
+    const setup = _DOM.get('msg-setup'); if (setup && banner.parentElement?.id === 'msg-main') setup.parentElement.insertBefore(banner, setup);
+    banner.dataset.noDefault = '1'; banner.classList.remove('hidden'); banner.textContent = t('serverNoDefault');
+    banner.onclick = () => { openSettingsView(); requestAnimationFrame(() => document.querySelector('[data-action="add-relay"]')?.scrollIntoView({ block: 'center' })); };
   }
   // The add-flow's probe (settings UI): classify a pasted URL
   // before anything is stored. An added relay must attest — a
@@ -4720,7 +4744,7 @@ async function initMessenger(dbName) {
   async function attestNewRelay(rawUrl) {
     const url = _normalizeRelayUrl(rawUrl);
     if (!url) return { error: 'invalid' };
-    if (url === _servingRelayUrl()) return { error: 'self' };
+    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true && url === _servingRelayUrl()) return { error: 'self' };
     if (homeRelays().some(r => r.url === url)) return { error: 'duplicate' };
     const r = await _relayAttestCheck(url + '/api', null);
     if (r.verdict === 'keyless') return { error: 'keyless' };
@@ -5257,11 +5281,13 @@ async function initMessenger(dbName) {
       if (localStorage.getItem('brz-wallpaper')) _settings.wallpaper = localStorage.getItem('brz-wallpaper');
       if (document.body.classList.contains('light')) _settings.theme = 'light';
     } catch(e) { _dbg(e, 'load-settings'); }
+    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) _updateNoDefaultBanner();
   }
   async function saveSettings() {
     try {
       if (!db.objectStoreNames.contains('settings')) return;
       await dbPut('settings', _settings, 'app');
+      if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) _updateNoDefaultBanner();
       // Sync to localStorage for backward compat
       localStorage.setItem('brz-notif-sound', _settings.sound ? '1' : '0');
       localStorage.setItem('brz-hide-rr', _settings.hideReadReceipts ? '1' : '0');
@@ -5342,7 +5368,7 @@ async function initMessenger(dbName) {
   // absence is now _dbg'd + counted once per boot (D20 channel, /security) and the wipe check retries ~30s.
   const _dataLifecycle = () => globalThis.__breezeDataLifecycle?.createDataLifecycle({
     settings: () => _settings, MS, dbGetAll, db: () => db, replayCache: _replayCache, auditLog, _dbg,
-    api: () => API, myId: () => myId, postAPIRaw, queueAuth, showToast, t, CONFIG, reload: () => location.reload() });
+    api: () => (globalThis.__brzApiBase?.() ?? API), myId: () => myId, postAPIRaw, queueAuth, showToast, t, CONFIG, reload: () => location.reload() });
   const _dlState = { bumped: false, wipeRetries: 0 };
   const _dlMiss = (name) => { _dbg(null, 'data-lifecycle bridge missing: ' + name + ' skipped'); if (!_dlState.bumped) { _dlState.bumped = true; _diagBump('dataLifecycleBridgeMissing'); } };
   async function enforceRetentionPolicy() { const b = _dataLifecycle(); if (!b) { _dlMiss('enforceRetentionPolicy'); return; } return b.enforceRetentionPolicy(); }
@@ -5599,7 +5625,7 @@ async function initMessenger(dbName) {
     try { localStorage.setItem('brz-uid', myId); } catch(e) { _dbg(e); }
     _userId = myId;
     let registeredAlias = '';
-    if (API) { // v3: Generate and upload PreKeys for X3DH
+    if ((globalThis.__brzApiReady?.() ?? !!API)) { // v3: Generate and upload PreKeys for X3DH
       try {
         await ensureSigningReady(); // must precede generatePreKeyBundle() or edIdentityKey/signedPreKeySig get omitted (E2E-found)
         const bundle = await generatePreKeyBundle();
@@ -5966,7 +5992,7 @@ async function initMessenger(dbName) {
     const fetchHomes = supplied ? [] : sanitizeHomeList(fetchContact?.home);
     const candidates = [...fetchHomes];
     if (supplied) candidates.push(null);
-    else if (!candidates.some(e => isOriginRelay(e))) candidates.push({ url: _servingRelayUrl(), pin: '' });
+    else if (!candidates.some(e => isOriginRelay(e))) candidates.push(...(globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? homeRelays().slice(0, 1) : [{ url: _servingRelayUrl(), pin: '' }]));
     let bundle = null;
     let spkPubPeer = null;
     for (const entry of candidates) {
@@ -6002,7 +6028,7 @@ async function initMessenger(dbName) {
   }
 
   async function initSessionV5Initiator(peerPubB64, supplied = null) {
-    if (!CONFIG.X3DH_V5_ENABLED || (!API && !supplied)) return null;
+    if (!CONFIG.X3DH_V5_ENABLED || (!(globalThis.__brzApiReady?.() ?? !!API) && !supplied)) return null;
     try {
       const fetched = await _fetchSessionBundleV5(peerPubB64, supplied);
       if (fetched === false) return false;
@@ -6507,7 +6533,7 @@ async function initMessenger(dbName) {
   // root-signed registry on the relay (see _worker.js handleDeviceSet). The registry is
   // client-verified: we check the root's Ed25519 signature ourselves, so the relay can
   // withhold the list (degrades to single-device) but cannot forge devices into it.
-  const _deviceAlerts = globalThis.__breezeDeviceAlerts?.createDeviceAlerts({ api: () => !!API, post: postAPIRaw, get: dbGet, put: dbPut, verify: verifySignature, sign: signMessage, myId: () => myId, me: () => myPubB64, ed: () => _signingPubB64, minute: MS.MIN, ownTs: ts => { _ownRegistryTs = ts; }, dbg: _dbg, t, esc, safeSetHTML, root: () => _ac.signal.aborted ? null : _DOM.get('msg-main'), unlink: i => _deviceLink.handleCommand('/unlink ' + i) });
+  const _deviceAlerts = globalThis.__breezeDeviceAlerts?.createDeviceAlerts({ api: () => (globalThis.__brzApiReady?.() ?? !!API), post: postAPIRaw, get: dbGet, put: dbPut, verify: verifySignature, sign: signMessage, myId: () => myId, me: () => myPubB64, ed: () => _signingPubB64, minute: MS.MIN, ownTs: ts => { _ownRegistryTs = ts; }, dbg: _dbg, t, esc, safeSetHTML, root: () => _ac.signal.aborted ? null : _DOM.get('msg-main'), unlink: i => _deviceLink.handleCommand('/unlink ' + i) });
   const _deviceRevocation = globalThis.__breezeDeviceRevocation.createDeviceRevocationHost({ get: dbGet, put: dbPut, all: dbGetAll, pub: () => myPubB64, ed: () => _signingPubB64, sign: signMessage, peerInfo: _peerRelayInfo, establishPin: pub => _fetchSessionBundleV5(pub), registry: _fetchDeviceRegistry, encrypt: encryptFor, send: relaySend, groupAuthor: () => _groupAuthor, dbg: _dbg, notice: (kind, root, epoch) => _deviceAlerts?.notice(kind, root, epoch), invalidate: () => { _attribDevCache.clear(); _myDevCache = null; } });
   async function _fetchDeviceRegistry(accountId, rootPubB64) { return await _deviceAlerts?.registry(accountId, rootPubB64) || null; }
   // A camera-scan button for the link panels, mirroring the rendezvous
@@ -6553,7 +6579,7 @@ async function initMessenger(dbName) {
     fetchDeviceList: async (a, r) => (await _fetchDeviceRegistry(a, r))?.list || null, refreshDeviceRole: _refreshDeviceRole, sendHistoryTo: _sendHistoryTo,
     bustDevCache: () => { _myDevCache = null; },
     clipboardWrite: (text) => navigator.clipboard.writeText(text),
-    hasApi: () => !!API, myId: () => myId, myPubB64: () => myPubB64, dbg: _dbg,
+    hasApi: () => (globalThis.__brzApiReady?.() ?? !!API), myId: () => myId, myPubB64: () => myPubB64, dbg: _dbg,
   });
   // SHARE_PLAN stage 5 step 4: my profile (display name / avatar emoji /
   // photo), distributed ONLY as ratchet ciphertexts to peers whose
@@ -6750,7 +6776,7 @@ async function initMessenger(dbName) {
     if (c && Date.now() - c.ts < 5 * MS.MIN) return c.ok;
     const contact = await dbGet('contacts', peerId).catch(() => null);
     const homes = sanitizeHomeList(contact?.home);
-    if (!homes.some(isOriginRelay)) homes.push({ url: _servingRelayUrl(), pin: '' });
+    if (!homes.some(isOriginRelay)) homes.push(...(globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? homeRelays().slice(0, 1) : [{ url: _servingRelayUrl(), pin: '' }]));
     for (const entry of homes) {
       try {
         const resp = isOriginRelay(entry) ? await postAPIRaw('/prekey/status', { userId: peerId }) : await _contactRelayPost(entry, '/prekey/status', { userId: peerId });
@@ -6854,7 +6880,7 @@ async function initMessenger(dbName) {
       } catch(_e) { list = []; }
     }
     const origin = _normalizeRelayUrl(linkOrigin);
-    if (origin && !list.some(e => e.url === origin)) list = [{ url: origin, pin: '' }, ...list];
+    if (origin && globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true && !list.some(e => e.url === origin)) list = [{ url: origin, pin: '' }, ...list];
     return sanitizeHomeList(list);
   }
 
@@ -6896,7 +6922,7 @@ async function initMessenger(dbName) {
       const contact = await dbGet('contacts', peerId).catch(() => null);
       const stored = sanitizeHomeList(contact?.home);
       const candidates = [...stored];
-      if (!candidates.some(e => isOriginRelay(e))) candidates.push({ url: _servingRelayUrl(), pin: '' });
+      if (!candidates.some(e => isOriginRelay(e))) candidates.push(...(globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? homeRelays().slice(0, 1) : [{ url: _servingRelayUrl(), pin: '' }]));
       for (const entry of candidates) {
         const resp = isOriginRelay(entry)
           ? await postAPIRaw('/prekey/status', { userId: peerId })
@@ -7118,7 +7144,7 @@ async function initMessenger(dbName) {
   }
 
   async function relaySend(to, payload, sealPub, contactHint) {
-    if (!API) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API)) return;
     if (sealPub && await _deviceRevocation.allowed(sealPub) === false) return;
     if (typeof _contactVerify !== 'undefined' && _contactVerify) { const c = await dbGet('contacts', to); if (c && !await _contactVerify.permit(c)) return; }
     // Stage 6 step 2: a multi-relay account asserts its home list in
@@ -7302,7 +7328,7 @@ async function initMessenger(dbName) {
         const wireObj = await _buildWire(item.to, item.payload, item.sealPub, item.payload.ts, previous);
         item.wire = JSON.stringify(wireObj);
         item.attempts++;
-        const targets = Array.isArray(item.relays) && item.relays.length ? item.relays : [{ url: _servingRelayUrl(), pin: '' }];
+        const targets = Array.isArray(item.relays) && item.relays.length ? item.relays : (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? homeRelays().slice(0, 1) : [{ url: _servingRelayUrl(), pin: '' }]);
         let anyAck = false;
         const still = [];
         for (const entry of targets) {
@@ -7631,7 +7657,7 @@ async function initMessenger(dbName) {
       // Unsubscribe push notifications for this account so the next account on this
       // device does not receive push payloads (which may contain message snippets) for
       // the previous account's userId. Best-effort: not awaited.
-      if (API && myId) {
+      if ((globalThis.__brzApiReady?.() ?? !!API) && myId) {
         // Stage-2 step 5: the registration lives on every home relay,
         // so it is removed from every home relay. The relay list is
         // snapshotted NOW — _settings belongs to the next account
@@ -7809,6 +7835,7 @@ async function initMessenger(dbName) {
     startPresence(); startPolling();
   }
   async function _boot() {
+  if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) await loadSettings();
   const hasId = await loadIdentity();
   if (hasId) {
     // Restore this account's outbox before any peer activity. Without the clear, pending
@@ -8134,7 +8161,7 @@ async function initMessenger(dbName) {
     if (_relayPinGate.verdict) return _relayPinGate.verdict.then(() => _signal(room, type, data));
     return _signalAuth(room).then(auth => {
       const full = { room, sender: myId, type, data: data || '', ...auth };
-      const posts = [fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(full) })];
+      const posts = [globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? globalThis.__breezeNoDefaultPrimaryPost?.('/signal', full) : fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(full) })];
       // Stage-2 step 6: the callee polls the rendezvous on THEIR home
       // relays, so a dm:/call: signal is deposited there too. The
       // signed body is bound to room+sender+ts, not to a relay, so
@@ -8159,8 +8186,9 @@ async function initMessenger(dbName) {
     }
     const auth = await _signalAuth(room);
     const body = { room, sender: myId, type, data: data || '', ...auth };
-    const primary = () => {
+    const primary = async () => {
       onRequest?.();
+      if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) return await globalThis.__breezeNoDefaultPrimaryPost?.('/signal', body) || new Response(null, { status: 503 });
       return fetchT(API + '/signal', { method: 'POST', headers: _H, body: JSON.stringify(body) });
     };
     // Stage-2 step 6: a 'poll' also drains the peer's home relays —
@@ -8636,7 +8664,7 @@ async function initMessenger(dbName) {
         } else if (action === 'delete') {
           if (!await showConfirm(t('confirmDeleteContact', c.name), { danger: true, okText: t('delete') })) return;
           // Server-backed groups must leave/delete server-side too, or member id/pub/name stay readable in KV for the full 30-day TTL to anyone holding the invite token.
-          if (c.isGroup && c.joinToken && API) {
+          if (c.isGroup && c.joinToken && (globalThis.__brzApiReady?.() ?? !!API)) {
             try {
               const isCreator = c.createdBy === myId;
               const gTs = Date.now();
@@ -8996,7 +9024,7 @@ async function initMessenger(dbName) {
             return;
           }
         } catch(e) { _dbg(e, 'read-send'); }
-        if (API) {
+        if ((globalThis.__brzApiReady?.() ?? !!API)) {
           _signal(_dmRoom(snap.id), 'read', String(Date.now()));
         }
       };
@@ -9635,7 +9663,7 @@ async function initMessenger(dbName) {
   // I17 + D08: report an abusive message. Reveals (frankId, plaintext, Kf) — plus the stored
   // AMF tag when present — for THIS message only; the relay re-verifies both (CRYPTO-SPEC §6a).
   async function reportMsg(msg) {
-    if (!msg?.frankId || !msg.frankOpening || !API) return;
+    if (!msg?.frankId || !msg.frankOpening || !(globalThis.__brzApiReady?.() ?? !!API)) return;
     if (!await showConfirm(t('confirmReport'), { danger: true, okText: t('report') })) return;
     try {
       const resp = await postAPIRaw('/abuse/report', { frankId: msg.frankId, message: msg.text, opening: msg.frankOpening, ...(msg.frankTag ? { amfSig: msg.frankTag, senderId: msg.contactId } : {}) });
@@ -9900,11 +9928,11 @@ async function initMessenger(dbName) {
       })();
     }
     // ICE signaling (pre-connection, unencrypted by necessity — only SDP/candidates)
-    if (API && !persistentTypes.includes(data.type) && data.type !== 'typing' && data.type !== 'read-receipt') {
+    if ((globalThis.__brzApiReady?.() ?? !!API) && !persistentTypes.includes(data.type) && data.type !== 'typing' && data.type !== 'read-receipt') {
       const sigRoomIce = 'dm:' + [myId, activeContact.id].sort().join(':');
-      _signalAuth(sigRoomIce).then(auth => fetchT(API + '/signal', { method: 'POST', headers: _H,
+      _signalAuth(sigRoomIce).then(auth => (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? globalThis.__breezeNoDefaultPrimaryPost?.('/signal', { room: sigRoomIce, sender: myId, ...data, ...auth }) : fetchT(API + '/signal', { method: 'POST', headers: _H,
         body: JSON.stringify({ room: sigRoomIce, sender: myId, ...data, ...auth })
-      })).catch(e => _dbg(e));
+      }))).catch(e => _dbg(e));
     }
   }
 
@@ -10146,7 +10174,7 @@ async function initMessenger(dbName) {
       if (!encrypted) { showToast(t('toastSendFail'), 'error'); _isSending = false; return; }
       // Record the commitment BEFORE the message can be reported. Fire-and-forget: a failed
       // record must never block or fail a send — it only means this message can't be reported.
-      if (_frank.frankId && API) {
+      if (_frank.frankId && (globalThis.__brzApiReady?.() ?? !!API)) {
         postAPIRaw('/abuse/record', { frankId: _frank.frankId, commitment: _frank.commitment })
           .catch(e => _dbg(e, 'frank-record'));
       }
@@ -10808,7 +10836,7 @@ async function initMessenger(dbName) {
   _DOM.get('b-msg-add')?.addEventListener('click', () => _showAddContactPanel());
 
   async function _fetchMemberCapsBatch(memberIds) {
-    if (!API || !memberIds.length) return {};
+    if (!(globalThis.__brzApiReady?.() ?? !!API) || !memberIds.length) return {};
     const out = {};
     for (let i = 0; i < memberIds.length; i += 10) {
       const chunk = memberIds.slice(i, i + 10);
@@ -10849,9 +10877,9 @@ async function initMessenger(dbName) {
     refreshSelfCard: () => { renderSelfCard().catch(e => _dbg(e, 'self-card-refresh')); },
     domGet: (id) => _DOM.get(id), dbg: _dbg, downscaleAvatar: (f) => _downscaleAvatar(f),
     myId: () => myId, myName: () => myName, myPubB64: () => myPubB64, setMyName: (v) => { myName = v; }, hasSession: (id) => getSession(id).then(s => !!s),
-  }); globalThis.__breezeSettingsHelp?.installSettingsHelp({ t, esc, safeSetHTML, makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c), domGet: (id) => _DOM.get(id) }); globalThis.__breezeCloudflare?.createCloudflareLink({ t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet: (id) => _DOM.get(id), fetch: (u, o) => globalThis.__breezeMock?.enabled?.() ? fetchT(u, o) : fetch(u, o), proxyBase: (API || (location.origin + '/api')) + '/cf-proxy', dbg: _dbg, onServerReady: async (dep) => { if (!dep?.serverUrl) return; const res = await attestNewRelay(dep.serverUrl).catch(() => null); if (!res || res.error || !res.relayKey) return; let label = ''; try { label = new URL(res.url).host; } catch { label = res.url; } await addHomeRelay({ url: res.url, pin: res.relayKey, label, health: res.health }); showToast(t('relayAdded', res.url), 'success'); if (myId) { _lastPreKeyCheck = 0; checkAndReplenishPreKeys(); maybeStartMailboxWs(); } } }).install();
+  }); globalThis.__breezeSettingsHelp?.installSettingsHelp({ t, esc, safeSetHTML, makeDialog: () => _makeDialog(), showDialog: (d) => _showDialog(d), wireDialogDismiss: (d, c) => _wireDialogDismiss(d, c), domGet: (id) => _DOM.get(id) }); globalThis.__breezeCloudflare?.createCloudflareLink({ t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet: (id) => _DOM.get(id), fetch: (u, o) => globalThis.__breezeMock?.enabled?.() ? fetchT(u, o) : fetch(u, o), proxyBase: () => globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true ? ((globalThis.__brzApiBase?.() || '') ? (globalThis.__brzApiBase?.() || '') + '/cf-proxy' : null) : (API || (location.origin + '/api')) + '/cf-proxy', dbg: _dbg, onServerReady: async (dep) => { if (!dep?.serverUrl) return; const res = await attestNewRelay(dep.serverUrl).catch(() => null); if (!res || res.error || !res.relayKey) return; let label = ''; try { label = new URL(res.url).host; } catch { label = res.url; } await addHomeRelay({ url: res.url, pin: res.relayKey, label, health: res.health }); showToast(t('relayAdded', res.url), 'success'); if (myId) { _lastPreKeyCheck = 0; checkAndReplenishPreKeys(); maybeStartMailboxWs(); } } }).install();
   const _turnFetch = globalThis.__breezeTurn?.createTurnFetcher({
-    apiReady: () => !!API, postTurn: (body) => postAPIRaw('/turn', body),
+    apiReady: () => (globalThis.__brzApiReady?.() ?? !!API), postTurn: (body) => postAPIRaw('/turn', body),
     myId: () => myId, setCredential: (c) => { _turnCredential = c; },
     noticeDay: () => { try { return localStorage.getItem('brz-turn-quota-day'); } catch { return null; } },
     setNoticeDay: (v) => { try { localStorage.setItem('brz-turn-quota-day', v); } catch {} },
@@ -10896,7 +10924,7 @@ async function initMessenger(dbName) {
     cleanUrl: () => history.replaceState(null, '', location.pathname),
     syncActiveMembers: (gid, members) => { if (activeContact?.id === gid) activeContact.members = members; },
     pushInterval: (h) => _intervals.push(h), minMs: () => MS.MIN,
-    hasApi: () => !!API, powerOff: () => _powerPresenceOff(), powerFloorMs: () => _powerPollFloorMs(),
+    hasApi: () => (globalThis.__brzApiReady?.() ?? !!API), powerOff: () => _powerPresenceOff(), powerFloorMs: () => _powerPollFloorMs(),
     groupMax: () => CONFIG.GROUP_MAX, groupV5: () => CONFIG.GROUP_RATCHET_V5, capsGroupV5: () => CAPS_GROUP_V5,
     authorCaps: () => _groupAuthor?.supported() ? [CAPS_GROUP_AUTHOR_SIG] : [],
     origin: () => location.origin, pathname: () => location.pathname,
@@ -10943,7 +10971,7 @@ async function initMessenger(dbName) {
   // v3: PreKey auto-replenish (check every 5 minutes)
   let _lastPreKeyCheck = 0;
   async function checkAndReplenishPreKeys() {
-    if (!API || Date.now() - _lastPreKeyCheck < MS.MIN * 5) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API) || Date.now() - _lastPreKeyCheck < MS.MIN * 5) return;
     _lastPreKeyCheck = Date.now();
     try {
       const relays = homeRelays();
@@ -11053,7 +11081,7 @@ async function initMessenger(dbName) {
   // each relay's failure is contained to that relay.
   async function pollOnce() {
     if (_pollInFlight) { _pollAgain = true; return; }
-    if (_isOffline || !API) return;
+    if (_isOffline || !(globalThis.__brzApiReady?.() ?? !!API)) return;
     _pollInFlight = true;
     try {
       for (const relay of homeRelays()) {
@@ -11144,7 +11172,7 @@ async function initMessenger(dbName) {
   }
   async function startPolling() {
     try {  
-      if (!API || !myId) return;
+      if (!(globalThis.__brzApiReady?.() ?? !!API) || !myId) return;
       await ensureSigningReady();
       if (_ac.signal.aborted) return;
       // v3.4: Only leader tab polls the server
@@ -11186,8 +11214,8 @@ async function initMessenger(dbName) {
   function mailboxWsWanted(relay) {
     // A relay under a verified key mismatch gets no socket either (step 4):
     // the wake-up channel is a relay connection like any other.
-    if (!relay || isOriginRelay(relay)) return !!(API && _isLeaderTab && !document.hidden && window._serverFeatures?.ws && !_relayPinGate.blocked);
-    return !!(API && _isLeaderTab && !document.hidden && !_relayBlockedUrls.has(relay.url) && _relayHealthByUrl.get(relay.url)?.features?.ws);
+    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true && (!relay || isOriginRelay(relay))) return !!((globalThis.__brzApiReady?.() ?? !!API) && _isLeaderTab && !document.hidden && window._serverFeatures?.ws && !_relayPinGate.blocked);
+    return !!((globalThis.__brzApiReady?.() ?? !!API) && _isLeaderTab && !document.hidden && !_relayBlockedUrls.has(relay.url) && _relayHealthByUrl.get(relay.url)?.features?.ws);
   }
   async function maybeStartMailboxWs() {
     for (const relay of homeRelays()) {
@@ -12115,7 +12143,7 @@ async function initMessenger(dbName) {
     pc.onicecandidate = (e) => {
       if (peerState.connState === 'SIGNALING') peerState.transition('ICE');
       if (manual) return;
-      if (e.candidate && API) {
+      if (e.candidate && (globalThis.__brzApiReady?.() ?? !!API)) {
         // v3.6: SECURITY — Filter ICE candidates to prevent IP leak
         const c = e.candidate;
         // Always strip non-mDNS host candidates (local IP leak)
@@ -12442,7 +12470,7 @@ async function initMessenger(dbName) {
     });
 
     // Signal
-    if (!API) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API)) return;
     const sigRoom = 'dm:' + [myId, contact.id].sort().join(':');
 
     // v3.6: Perfect Negotiation (MDN spec pattern)
@@ -12570,7 +12598,7 @@ async function initMessenger(dbName) {
   let _presencePollTimer = null;
   let _cloneWarnedAt = 0;
   function startPresence() {
-    if (!API) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API)) return;
     const beat = async () => {
       try {
         // Per-INSTALL instance id, deliberately NOT part of backups: a restored backup on a
@@ -12769,12 +12797,12 @@ async function initMessenger(dbName) {
   let _lastRtt = 0;
   let _netQualityAC = null; // AbortController to cancel overlapping RTT probes
   async function measureNetworkQuality() {
-    if (!API || _isOffline) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API) || _isOffline) return;
     if (_netQualityAC) { try { _netQualityAC.abort(); } catch {} }
     _netQualityAC = new AbortController();
     try {
       const t0 = performance.now();
-      const r = await fetchT(API + '/health', { signal: _netQualityAC.signal });
+      const r = await fetchT((globalThis.__brzApiBase?.() ?? API) + '/health', { signal: _netQualityAC.signal });
       _lastRtt = Math.round(performance.now() - t0);
       const statusEl = _DOM.get('msg-conv-status');
       if (statusEl && activeContact) {
@@ -12972,7 +13000,7 @@ async function initMessenger(dbName) {
           pubB64 = data.pub; name = data.name || name; aliasResolved = true; homeHint = sanitizeHomeList([{ url: addr.relayUrl, pin: '' }, ...(Array.isArray(data.relays) ? data.relays : [])]);
         } else { showToast(t('toastAliasNotFound'), 'error'); return; }
       } catch(e) { _dbg(e, 'alias-addr'); showToast(t('toastAliasResolveFail'), 'error'); return; }
-    } else if (input.startsWith('@') && API) {
+    } else if (input.startsWith('@') && (globalThis.__brzApiReady?.() ?? !!API)) {
       try {
         const resp = await postAPIRaw('/alias/get', { alias: input.slice(1) });
         if (resp.ok) {
@@ -13006,7 +13034,7 @@ async function initMessenger(dbName) {
   const _lastSeenCache = {}; // v3.2: Track when contacts were last seen online
 
   function startPresencePolling() {
-    if (!API) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API)) return;
     async function poll() {
       if (_powerPresenceOff()) return;
       const contacts = await dbGetAll('contacts');
@@ -13066,7 +13094,7 @@ async function initMessenger(dbName) {
   // Called from window 'online' event and NetworkInformation 'change' event.
   // Attempts ICE restart for degraded connections, fresh connect for dead ones.
   window._reconnectAllPeers = async function() {
-    if (!API || _isOffline) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API) || _isOffline) return;
     _dbg(null, 'Network recovery: reconnecting all peers');
     try {
       const contacts = await dbGetAll('contacts');
@@ -13115,13 +13143,13 @@ async function initMessenger(dbName) {
   // TURN credentials are for everyone (NAT traversal), not a paid feature. This used to live
   // inside initTurn(); the billing system is gone but the TURN fetch must remain.
   async function initTurn() {
-    if (!API || !_userId || globalThis.__breezeMock?.enabled?.()) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API) || !_userId || globalThis.__breezeMock?.enabled?.()) return;
     _turnFetch?.fetchCredentials();
   }
 
   // WEB PUSH NOTIFICATIONS — subscribe for background notifications
   async function initPushNotifications() {
-    if (!API || !('serviceWorker' in navigator) || !('PushManager' in window) || globalThis.__breezeMock?.enabled?.()) return;
+    if (!(globalThis.__brzApiReady?.() ?? !!API) || !('serviceWorker' in navigator) || !('PushManager' in window) || globalThis.__breezeMock?.enabled?.()) return;
     if (typeof Notification === 'undefined') return;
     try {
       const reg = await navigator.serviceWorker.ready;
@@ -13134,7 +13162,7 @@ async function initMessenger(dbName) {
         const perm = await Notification.requestPermission();
         if (perm !== 'granted') return;
         // VAPID public key from server health endpoint
-        const healthResp = await fetchT(API + '/health').catch(() => null);
+        const healthResp = await fetchT((globalThis.__brzApiBase?.() ?? API) + '/health').catch(() => null);
         const health = healthResp?.ok ? await healthResp.json().catch(() => null) : null;
         if (!health?.vapidPublicKey) { _dbg(null, 'No VAPID key'); return; }
         sub = await reg.pushManager.subscribe({
@@ -13233,7 +13261,7 @@ async function initMessenger(dbName) {
     const maxTtl = ttl;
     const roomUrl = location.origin + '/?join=' + roomId;
     // Register room on server (if available)
-    if (API) {
+    if ((globalThis.__brzApiReady?.() ?? !!API)) {
       try {
         // creatorPub/creatorName required by the worker (MISSING_FIELDS without them —
         // this call was silently 400ing); members/ttl aren't part of the signed bind.
@@ -13332,7 +13360,7 @@ async function initMessenger(dbName) {
         return;
       }
     } catch(e) { _dbg(e, 'typing-send'); }
-    if (API) {
+    if ((globalThis.__brzApiReady?.() ?? !!API)) {
       _signal(_dmRoom(activeContact.id), 'typing');
     }
   });
@@ -13502,7 +13530,7 @@ async function initMessenger(dbName) {
   // v5 handshake, plus the D05 chain-head pin check; key baseline pinned only on ok/new (never on 'rolled').
   async function _auditKeyTransparency(contact) {
     if (contact.offlineVerified) return null;
-    if (!API) return null;
+    if (!(globalThis.__brzApiReady?.() ?? !!API)) return null;
     try {
       const resp = await postAPIRaw('/ktlog/get', { userId: contact.id });
       if (!resp.ok) return null;
@@ -14268,7 +14296,7 @@ async function initMessenger(dbName) {
           activeContact.name = newName;
           await dbPut('contacts', activeContact);
           _setConvName(activeContact);
-          if (API && activeContact.joinToken) {
+          if ((globalThis.__brzApiReady?.() ?? !!API) && activeContact.joinToken) {
             try {
               const renTs = Date.now();
               const renSig = await signMessage(`breeze-group-rename:${activeContact.joinToken}:${myId}:${renTs}:${newName}`);
@@ -14287,7 +14315,7 @@ async function initMessenger(dbName) {
           const member = activeContact.members.find(m => m.name?.toLowerCase() === target.toLowerCase());
           if (member) {
             let newEpoch = null; // v3.3: server-side kick (was `groupToken`, never set; groups store `joinToken` — E2E-found)
-            if (API && activeContact.joinToken) {
+            if ((globalThis.__brzApiReady?.() ?? !!API) && activeContact.joinToken) {
               try {
                 const kickTs = Date.now();
                 const kickSig = await signMessage(`breeze-group-kick:${activeContact.joinToken}:${myId}:${kickTs}:${member.id}`);
@@ -14329,7 +14357,7 @@ async function initMessenger(dbName) {
             if (!activeContact.admins) activeContact.admins = [];
             if (!activeContact.admins.includes(member.id)) activeContact.admins.push(member.id);
             await dbPut('contacts', activeContact);
-            if (API && activeContact.joinToken) {
+            if ((globalThis.__brzApiReady?.() ?? !!API) && activeContact.joinToken) {
               try {
                 const proTs = Date.now();
                 const proSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${proTs}:promote:${member.id}`);
@@ -14349,7 +14377,7 @@ async function initMessenger(dbName) {
           if (member) {
             if (activeContact.admins) activeContact.admins = activeContact.admins.filter(id => id !== member.id);
             await dbPut('contacts', activeContact);
-            if (API && activeContact.joinToken) {
+            if ((globalThis.__brzApiReady?.() ?? !!API) && activeContact.joinToken) {
               try {
                 const demTs = Date.now();
                 const demSig = await signMessage(`breeze-group-admin:${activeContact.joinToken}:${myId}:${demTs}:demote:${member.id}`);
@@ -14738,7 +14766,7 @@ async function initMessenger(dbName) {
       const choice = await showConfirm(t('wipeTitle'), { okText: t('wipeBtn'), danger: true, desc: t('wipeDesc') });
       if (!choice) { showToast(t('toastCancelled'), 'info'); return; }
       // Send remote wipe signal to own inbox (wakes other devices)
-      if (API && myId) {
+      if ((globalThis.__brzApiReady?.() ?? !!API) && myId) {
         try { await postAPIRaw('/msg/send', { to: myId, from: myId, payload: '', ts: Date.now(), type: 'remote_wipe' }); } catch(e) { _dbg(e); }
         // Delete server-side account data: prekeys, inbox, presence, push subscriptions.
         // Requires Ed25519 ownership proof matching the stored edIdentityKey.
@@ -15429,7 +15457,7 @@ async function initMessenger(dbName) {
         box.appendChild(d); box.scrollTop = box.scrollHeight;
         return;
       }
-      if (API) {
+      if ((globalThis.__brzApiReady?.() ?? !!API)) {
         try {
           const oldAlias = myAlias; // captured before overwrite — released below on success
           // v3.5 SPEC: Proof-of-Work required for alias registration (anti-spam)

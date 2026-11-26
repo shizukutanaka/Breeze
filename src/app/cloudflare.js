@@ -56,7 +56,7 @@ const emptySetup = () => ({ state: 'idle', step: '', reason: '', serverUrl: '' }
 export function createCloudflareLink(D) {
   const { t, esc, dbPut, dbGet, dbDel, showToast, safeSetHTML, domGet } = D;
   const cfFetch = D.fetch || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
-  const apiBase = typeof D.proxyBase === 'string' && D.proxyBase ? D.proxyBase.replace(/\/+$/, '') : CF_API;
+  const configuredProxyBase = () => typeof D.proxyBase === 'function' ? D.proxyBase() : D.proxyBase;
   const wired = new WeakSet();
   let observer = null;
   let view = { kind: 'none', hasToken: false, accounts: [], tokenStatus: '', reason: '', setup: emptySetup(), deployment: null };
@@ -250,6 +250,9 @@ export function createCloudflareLink(D) {
 
   async function cfRequest(path, token, opts = {}, honestStatus = false) {
     if (!cfFetch) return { errorKey: 'cfErrNetwork' };
+    const configured = configuredProxyBase();
+    if (configured === null) return { errorKey: 'cfErrNoProxy' };
+    const apiBase = typeof configured === 'string' && configured ? configured.replace(/\/+$/, '') : CF_API;
     const init = { method: opts.method || 'GET', headers: { Authorization: 'Bearer ' + token, ...(opts.headers || {}) } };
     if (opts.body !== undefined) init.body = opts.body;
     let resp;

@@ -109,7 +109,7 @@ describe('add-contact surface wiring (deployed inline)', () => {
 
   it('resolveAndAdd keeps the alias transparency audit (validation unchanged)', () => {
     const start = html.indexOf('async function resolveAndAdd(');
-    const body = html.slice(start, start + 3600);
+    const body = html.slice(start, start + 3800);
     expect(body).toContain("postAPIRaw('/alias/get'");
     expect(body).toContain('_auditKeyTransparency');
     expect(body).toContain('await addContact(pubB64, name, homeHint, alias)');
