@@ -728,6 +728,7 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 .reply-preview { background: var(--s2); border-left: 3px solid var(--g); padding: 6px var(--sp-3); font-size: var(--fs-caption); color: var(--t3); border-radius: 0 var(--rad) var(--rad) 0; margin-bottom: var(--sp-1); display: flex; align-items: center; gap: var(--sp-2) } .reply-preview button { background: none; border: none; padding: 0; font: inherit; color: inherit }
 .import-result { font-size: var(--fs-caption); color: var(--t2); line-height: 1.6; margin-top: var(--sp-2) }
 .overlay-dark { background: rgba(0,0,0,.85) }
+.verification-modal { background: var(--s1); color: var(--t1); padding: var(--sp-5); border: 1px solid var(--b1); border-radius: var(--rad-lg); width: min(90vw, 400px); max-height: 80vh; overflow: auto; overflow-wrap: anywhere; box-shadow: var(--shadow-float) } .verification-strict { display: flex; align-items: baseline; gap: var(--sp-2) } .verification-strict input { flex-shrink: 0 }
 .qr-modal { text-align: center }
 .qr-code { display: block; max-width: 100%; height: auto; margin: 0 auto var(--sp-3); image-rendering: pixelated }
 .rendezvous-dialog { max-width: 800px }
@@ -1370,7 +1371,7 @@ window.__breezeSeed = createSeedHelper();
 </script>
 <script type="module">
 import { getVault, vaultGate } from './src/app/vault.js'; window.__breezeVault = { getVault, vaultGate };
-import { createContactVerify } from './src/app/contact-verify.js'; window.__breezeContactVerify = { createContactVerify };
+import { createContactVerify, negotiatedSafetyNumber } from './src/app/contact-verify.js'; window.__breezeContactVerify = { createContactVerify, negotiatedSafetyNumber };
 import { createGroupProtectionHost } from './src/app/group-protection.js'; window.__breezeGroupProtection = { createGroupProtectionHost }; import { createDeviceRevocationHost } from './src/app/device-revocation.js'; window.__breezeDeviceRevocation = { createDeviceRevocationHost };
 </script>
 <script type="module">
@@ -1736,6 +1737,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     // v3 Security
     safetyNumber: 'Safety Number',
     safetyDesc: 'Compare this number with your contact in person or via video call. If they match, your connection is secure.',
+    snV2: 'Safety number v2 · 60 digits · identifier-bound', snLegacy: 'Legacy safety number · 96 bits. Compare only the same version; this display does not change verification.', snUseLegacy: 'Compare legacy number instead', snVersion: 'Different display versions. Both choose the legacy number and compare again. This is not evidence of a key change.', snMismatch: 'QR comparison did not match. Check the contact and both keys before verifying.',
     ktChecking: 'Checking server key-transparency log…',
     ktOk: '✅ Automatically verified against the server key-transparency log',
     ktRolled: '⚠️ This contact\'s key changed since your last check — verify the safety number above carefully',
@@ -5304,7 +5306,9 @@ async function initMessenger(dbName) {
     bar.classList.add('active'); // .offline-bar is display:none until .active (shared convention)
     bar.onclick = async () => { _settings.focusUntil = 0; _settings.focusStrict = false; await saveSettings(); _updateFocusBanner(); showToast(t('focusOff'), 'info'); };
     // Re-render every minute so the countdown is honest, and self-clear on expiry.
-    _focusTimer = setTimeout(_updateFocusBanner, MS.MIN);
+    // The chain is display-only (expiry is enforced by _focusActive), so it must
+    // never wake the device more often than the listening floor of the power mode.
+    _focusTimer = setTimeout(_updateFocusBanner, Math.max(MS.MIN, (typeof _powerPollFloorMs === 'function' ? _powerPollFloorMs() : 0)));
   }
 
   // ═══ Quiet messenger: one decision point for "should this interrupt the human?" ═══
@@ -5492,6 +5496,7 @@ async function initMessenger(dbName) {
       if (!await dbPut('identity', { priv: spk.priv }, 'spk-priv') || !await dbPut('identity', { keys: otpPrivs }, 'otp-priv')) throw new Error('prekey persistence failed');
     }
     const caps = navigator.locks ? ['device-revocation-v1'] : [];
+    if (globalThis.__breezeContactVerify?.negotiatedSafetyNumber) caps.push('safety-number-v2');
     if (CONFIG.X3DH_V5_ENABLED) caps.push(CAPS_X3DH_V5);
     if (CONFIG.GROUP_RATCHET_V5) caps.push(CAPS_GROUP_V5);
     if (typeof _groupAuthor !== 'undefined' && _groupAuthor?.supported()) caps.push('group-author-sig-v1');
@@ -6452,15 +6457,10 @@ async function initMessenger(dbName) {
 
   // --- Safety Number (v3) ---
   async function safetyNumber(peerPubB64) {
-    try {  
-      const combined = [myPubB64, peerPubB64].sort().join('');
-      const hash = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(combined));
-      const bytes = new Uint8Array(hash);
-      // Format as 12-digit groups
-      let num = '';
-      for (let i = 0; i < 6; i++) { num += String((bytes[i*2] << 8 | bytes[i*2+1]) % 100000).padStart(5, '0') + ' '; }
-      return num.trim();
-    
+    try {
+      _relayInfoCache.delete(peerPubB64.slice(0, 12));
+      const info = await _peerRelayInfo(peerPubB64.slice(0, 12));
+      return globalThis.__breezeContactVerify.negotiatedSafetyNumber(myPubB64, peerPubB64, { localCaps: ['safety-number-v2'], remoteCaps: info.caps });
     } catch(_e) { _dbg(_e, 'safetyNumber'); }
   }
 
@@ -10822,7 +10822,7 @@ async function initMessenger(dbName) {
   }
 
   _contactVerify = globalThis.__breezeContactVerify.createContactVerify({ account: dbName, get: dbGet, put: dbPut, contacts: () => dbGetAll('contacts'), audit: auditLog, t, esc, safeSetHTML, dbg: _dbg,
-    safetyNumber, auditKeys: _auditKeyTransparency, local: () => ({ pubB64: myPubB64, sigPub: _signingPubB64 }), active: () => activeContact, header: () => _DOM.get('msg-conv-name'),
+    safetyNumber, qr: globalThis.__breezeQR, auditKeys: _auditKeyTransparency, local: () => ({ pubB64: myPubB64, sigPub: _signingPubB64 }), active: () => activeContact, header: () => _DOM.get('msg-conv-name'),
     refresh: async () => { if (activeContact) { activeContact = await dbGet('contacts', activeContact.id) || activeContact; _setConvName(activeContact); } await renderContacts(); },
   });
   _groupProtection = globalThis.__breezeGroupProtection.createGroupProtectionHost({ get: dbGet, put: dbPut, pub: () => myPubB64, ed: () => _signingPubB64, sign: bytes => crypto.subtle.sign('Ed25519', _signingKey.privateKey, bytes), encrypt: encryptFor, send: relaySend, establishPin: pub => _fetchSessionBundleV5(pub), verified: c => _contactVerify.state(c), verify: showSafetyNumber, confirm: showConfirm, prompt: showPrompt, t, toast: showToast, dbg: _dbg, active: () => activeContact, header: () => _DOM.get('msg-conv-header'), sync: (gid, members) => { if (activeContact?.id === gid) activeContact.members = members; }, lock: (gid, work) => navigator.locks ? navigator.locks.request('breeze-gp:' + myPubB64 + ':' + gid, work) : work() });
@@ -13948,7 +13948,7 @@ async function initMessenger(dbName) {
     matchPreKey: pairingPreKeyMatches, blockPeer: id => globalThis.__breezeOfflinePairing.blockedPeerIds.add(myId + ':' + id),
     closePeer: c => { const p = peers[c.pubB64]; if (p) { p.transition('CLOSED'); p.pc.close(); delete peers[c.pubB64]; } },
     exclusive: _withPeerLock, signal: _ac.signal, qr: globalThis.__breezeQR, root: () => _DOM.get('msg-main'), log: e => _dbg(e, 'offline-pair'),
-    verified: c => _contactVerify.verify(c, 'in-person-pairing'),
+    verified: c => _contactVerify.verify(c, 'in-person-pairing'), compare: c => _contactVerify.show(c),
     toast: text => showToast(text, 'info'), changed: c => { if (activeContact?.id === c.id) activeContact = c; renderContacts(); updateConvStatus(); },
   });
 

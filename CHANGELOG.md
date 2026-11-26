@@ -6,6 +6,8 @@
 
 - **Authenticated group legacy admission.** Sticky strict signed-author groups require a pinned administrator's signed roster and explicit default-cancel warning before admitting legacy members. Creator-signed E2EE invitations and share links establish new anchors; existing groups require safety-number verification and explicit group-screen admin confirmation, never relay roles. A locally recorded creator may explicitly confirm its own authenticated signing identity; other members still verify its contact. Persistent vault-covered drop/restoration notices, exact-roster exceptions, replay/forgery rejection, legacy interoperability and EN/JA/fallback locale coverage.
 
+- **Negotiated safety-number v2.** Supporting contacts compare the single-sourced, identifier-bound 5200-round SHA-512 reference's 60 digits; mixed or unknown capabilities retain the 96-bit legacy number. Versioned verification QRs include the separate both-key comparison; display upgrades preserve verification. The v1 in-person QR/transcript bootstrap remains compatible, with contact verification available afterwards. Includes EN/JA/fallback text, ESM/SW/CSP deployment and negotiation/persistence/browser tests.
+
 - **Certified device revocation and group authors.** Root-signed monotonic checkpoints,
   consent-backed device ownership, bounded E2EE checkpoint/head gossip and persistent
   stale-view alerts. Capable contacts reject revoked device sessions and group authors;
