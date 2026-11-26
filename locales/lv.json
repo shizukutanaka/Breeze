@@ -1088,6 +1088,7 @@
   "cfErrTokenNotActive": "token nav aktīvs (stāvoklis: {0})",
   "cfErrNetwork": "tīkla kļūda",
   "cfErrApi": "Cloudflash API kļūda",
+  "cfErrNoProxy": "Cloudflare iestatīšanai ir nepieciešams konfigurēts Breeze relejs API starpniekserverim. Vispirms pievienojiet mājas releju vai mitiniet Breeze paši un palaidiet iestatīšanu tur.",
   "cfErrNoToken": "nav saglabāts mākoņslāpju tokens",
   "cfErrStorage": "nevarēja piekļūt uzglabāšanai uz ierīces",
   "cfErrTokenRequired": "ievietot mākoņas API token pirmajā laikā",

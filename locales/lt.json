@@ -1095,6 +1095,7 @@
   "cfErrTokenNotActive": "aktyvus tokenas (status: {0})",
   "cfErrNetwork": "tinklo klaida",
   "cfErrApi": "Cloudflare API klaida",
+  "cfErrNoProxy": "„Cloudflare“ sąrankai reikalinga sukonfigūruota „Breeze“ relė API tarpiniam serveriui. Pirmiausia pridėkite namų relę arba patys talpinkite „Breeze“ ir vykdykite sąranką ten.",
   "cfErrNoToken": "neišsaugomas debesių tokenas",
   "cfErrStorage": "nebuvo gauti prieigą prie prietaiso saugojimo",
   "cfErrTokenRequired": "Įdėti Cloudflare API token pirmiausia",

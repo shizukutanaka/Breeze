@@ -1081,6 +1081,7 @@
   "cfErrTokenNotActive": "tokena ez dago aktibo (egoera: {0})",
   "cfErrNetwork": "sareko errorea",
   "cfErrApi": "Cloudflare APIaren errorea",
+  "cfErrNoProxy": "Cloudflare-ren konfigurazioak Breeze errele bat behar du API proxyrako. Gehitu etxeko errele bat lehenik, edo ostatu Breeze zeuk eta exekutatu konfigurazioa han.",
   "cfErrNoToken": "ez da lainorik gorde",
   "cfErrStorage": "ezin izan da pantailako biltegiratzean atzitu",
   "cfErrTokenRequired": "itsatsi lainoztatze- APIaren tokena aurrenik",

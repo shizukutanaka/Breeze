@@ -1095,6 +1095,7 @@
   "cfErrTokenNotActive": "token nie je aktívny (postava: {0})",
   "cfErrNetwork": "sieťová chyba",
   "cfErrApi": "Chyba cloudflare API",
+  "cfErrNoProxy": "Nastavenie Cloudflare vyžaduje nakonfigurované relé Breeze pre API proxy. Najprv pridajte domáce relé, alebo si Breeze hosťujte sami a spustite nastavenie tam.",
   "cfErrNoToken": "No Cloudflare token nie je uložený",
   "cfErrStorage": "nemohol mať prístup k úložisku v zariadení",
   "cfErrTokenRequired": "vložte najprv cloudflare API token",

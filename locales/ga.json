@@ -1102,6 +1102,7 @@
   "cfErrTokenNotActive": "Níl an teagmháil gníomhach (staid: {0})",
   "cfErrNetwork": "earráid líonra",
   "cfErrApi": "Earráid API Cloudflare",
+  "cfErrNoProxy": "Teastaíonn seachvótálaí Breeze cumraithe don phroxy API ó shocrú Cloudflare. Cuir seachvótálaí baile leis ar dtús, nó óstáil Breeze tú féin agus rith an socrú ann.",
   "cfErrNoToken": "níl aon tosca Scmailte sábháilte",
   "cfErrStorage": "níorbh fhéidir stóráil ar an bhfeiste",
   "cfErrTokenRequired": "greamaigh comhéadan Cloudflare API ar dtús",

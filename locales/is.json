@@ -1081,6 +1081,7 @@
   "cfErrTokenNotActive": "tákn er ekki virkur (status: {0})",
   "cfErrNetwork": "netvilla",
   "cfErrApi": "Skjáflare API villa",
+  "cfErrNoProxy": "Cloudflare uppsetning þarf stilltan Breeze tengilið fyrir API umboðið. Bættu fyrst við heimatengilið, eða hýstu Breeze sjálfur og keyrðu uppsetninguna þar.",
   "cfErrNoToken": "ekkert skyflare tákn er vistað",
   "cfErrStorage": "gat ekki tekið á geymslu á búningi",
   "cfErrTokenRequired": "lita inn skýflare API tákn fyrst",
