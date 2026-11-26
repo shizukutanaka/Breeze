@@ -5,6 +5,7 @@ export function createHistoryTools(D) {
   // metadata (text truncated to 200 chars, no keys, no file bodies).
   async function gdprExport() {
     try {
+      if (D.vault?.enabled()) return await D.vault.backup();
       const identity = await D.dbGet('identity', 'keys');
       const contacts = await D.dbGetAll('contacts');
       const messages = await D.dbGetAll('messages');
@@ -68,6 +69,11 @@ export function createHistoryTools(D) {
   }
 
   async function exportChat(val) {
+    if (D.vault?.enabled()) {
+      const data = await D.vault.backup();
+      downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'breeze-vault-backup.json', { vault: true });
+      return;
+    }
     const sub = val.slice(7).trim() || 'json';
     if (sub === 'all') {
       const allContacts = await D.dbGetAll('contacts');
@@ -118,6 +124,7 @@ b{font-size:13px}.ts{font-size:11px;color:#888}h1{font-size:18px}</style></head>
   }
 
   async function exportGdpr() {
+    if (D.vault?.enabled()) return exportChat('/export');
     const data = await gdprExport();
     if (!data) { showToast(t('toastServerError'), 'error'); return; }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

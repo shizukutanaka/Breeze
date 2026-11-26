@@ -106,7 +106,7 @@ export function createBackupTools(D) {
 
   async function backupToFile() {
     if (D.vault?.enabled()) {
-      try { const data = await D.vault.backup(); downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'breeze-vault-backup.json'); }
+      try { const data = await D.vault.backup(); downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), 'breeze-vault-backup.json', { vault: true }); }
       catch (e) { _dbg(e, 'vault-backup'); showToast(t('vaultFailed'), 'error'); }
       return;
     }
@@ -203,6 +203,7 @@ export function createBackupTools(D) {
   // why the disposable ('none') refusal guarding backupToFile does not
   // apply here: there is no account-recovery promise in it.
   async function exportContactsEncrypted() {
+    if (D.vault?.enabled()) return backupToFile();
     const contacts = await dbGetAll('contacts');
     const pass = await showPrompt(t('backupPassSet'), '', { type: 'password', okText: t('encrypt'), autocomplete: 'new-password' });
     // Same creation-side floor as the file backup (step 3): the minimum

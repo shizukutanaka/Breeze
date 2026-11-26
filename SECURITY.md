@@ -194,7 +194,7 @@ Verification is device/account local. A wholly new identity/contact ID does not
 inherit it. Cross-device verification sync, duplicate/lookalike-name detection and
 new-device alerts are deferred; this is not an identity-continuity or wire change.
 
-## Origin-wide key vault
+## Origin-wide vault: keys, history and browser metadata
 
 `/vault enable` (also `/keywrap`) replaces the old per-slot passphrase wrapping.
 Use a **separate strong passphrase, at least 12 characters**, not the `/lock` UI
@@ -203,12 +203,26 @@ and changes that passphrase; `/vault disable` authenticates before removing prot
 Disable must finish before `/wipe`, account deletion or reset can erase protected keys.
 The `/lock` action uses the vault lock when the vault is enabled.
 
-Protected IndexedDB identity slots: `keys`, `signing`, `pq-priv`, `spk-priv`,
-`otp-priv`, and every `sess:*`, `gsk:*`, `gsk-peer:*`, `verify:*`. Entire records are encrypted,
-including their public metadata. **History, contacts, drafts and other settings
-remain outside this vault**. Existing message-body encryption is independent: its
-`msgkey` remains unprotected by the vault, so history is readable to someone with
-the origin's files. This is a key/session vault, not full-device encryption.
+Every record in each account's `identity`, `contacts`, `messages`, `settings`,
+`audit` and `calls` stores is encrypted, including file bodies, previews, contact
+and message identifiers, timestamps, verification records and the legacy `msgkey`.
+Primary keys are random opaque identifiers; the authenticated inventory and index
+fields are encrypted too. Reads emulate indexes over unlocked memory; list previews,
+history and search cannot open before the pre-boot unlock gate. There is no plaintext
+fallback in the mandatory history adapter. Legacy body encryption still operates
+independently (including its vault-off failure behavior), but its key and every
+message record always remain inside the vault envelope while enabled.
+
+Drafts and all application `localStorage` / `sessionStorage` values are encrypted
+as separate authenticated local/tab snapshots. The only plaintext exceptions are
+`brz-theme`, `brz-consent` and `brz-lang`; account names, active-account IDs, lock
+hashes, retry queues, shared text, diagnostic counters and future private settings
+are not exceptions. Synchronous application storage calls use an unlocked memory
+view and queue encrypted writes, serialized across tabs with Web Locks. Pending
+writes are drained before migration/lock; persistence failures block operations and
+reload, never write plaintext. Abrupt browser termination can lose pending async
+browser-storage updates. Session values belong to the current tab; a new tab starts
+with an empty session snapshot. Other tabs' transient session data is not backed up.
 
 A random 256-bit data key is AES-256-GCM wrapped under PBKDF2-SHA256 (600,000
 iterations, random 128-bit salt). Only the non-extractable unlocked data key is
@@ -216,41 +230,58 @@ retained by the vault. Each record has a fresh 96-bit IV and authenticated conte
 binding format version, vault ID, account database, store and exact record key.
 An explicit tagged codec preserves ArrayBuffers and typed-array byte ranges; unknown
 tags, malformed values, substituted records and plaintext protected rows are rejected.
-An authenticated per-account inventory detects deleted protected records at boot.
+An authenticated per-store inventory detects missing or substituted records at boot.
 Password change atomically rewraps only the data key in the control database; it
 does not rewrite protected records. No passphrase or unlocked data key is persisted.
 
 Web Locks freeze participating tabs; BroadcastChannel forces quiesce and reload.
 Timers, transport sends and network writes stop, DataChannels/WebSockets/calls close,
-the crypto worker terminates, and a generation guard rejects late crypto results.
+the crypto worker terminates, browser/history caches and visible conversation data
+are cleared, and a generation guard rejects late crypto/cache results.
 Reload enters a modal **pre-boot** unlock gate before identity/session initialization.
 Locked pages do not decrypt, ACK, send or process quick replies. Web Push is generic
 and has no reply/read actions whenever the vault is enabled, even in unlocked tabs.
+Disappearing-message cleanup defers while locked and resumes after unlock; it does
+not decrypt or delete unauthenticated encrypted rows in the background. Retention
+deadlines are therefore not guarantees of deletion while the app is locked or closed.
 
 Migration first freezes writers and stages encrypted rows in a durable origin journal
 (`breeze-vault`). The phase, account list, restore index and staged-slot inventories
 are authenticated under the data key, preventing journal truncation or phase substitution.
-Each account then commits records plus its authenticated inventory
-in one atomic transaction. Boot remains blocked until *all* accounts finish. Interrupted
-enable/disable/restore resumes after authentication. Old `/keywrap` records are read
-only to migrate them, including unwrapping the out-of-scope history key. No database
-version bump is used: old clients cannot import vault-format identity records and
-must be upgraded. Close older tabs before enabling: known legacy leader tabs block
+Each account then commits all stores plus its authenticated inventory in one atomic
+transaction. Browser-storage snapshots share the authenticated durable journal;
+their idempotent commit completes before the ready marker. Boot remains blocked
+until *all* accounts and browser storage finish. Interrupted enable/disable/restore
+resumes after authentication, including crashes after account commit but before
+browser-storage commit. Existing key-only vaults upgrade at this gate. Old `/keywrap`
+records are migration input, including unwrapping the legacy history key. Authenticated
+disable returns the full records and browser settings to vault-off storage. No
+IndexedDB version bump is used: `historyV: 2` and `storageV: 1` gate record formats.
+Old clients cannot read this format and must be upgraded; they are not safe writers.
+Close older tabs before enabling: known legacy leader tabs block
 migration. Old client code, malicious same-origin code, disk rollback, browser bugs,
 extensions and XSS are **not** a security boundary this vault can enforce against.
 
-Vault file backups contain only encrypted protected rows and the wrapped-key envelope,
-not history/contacts/drafts. Restore requires the vault passphrase and empty account
+Vault file backups contain only encrypted snapshots of all account stores and this
+tab's browser metadata/drafts, plus the wrapped-key envelope. Chat/HTML/GDPR exports
+produce the ciphertext vault backup instead of plaintext while enabled; attachment
+downloads, cloud/automatic/simple/recovery-kit exports and legacy imports are denied.
+Restore requires the vault passphrase and empty account
 databases on a fresh origin/profile; corrupt backups are rejected before writes.
-Disposable identities refuse export. Cloud/automatic/simple/recovery-kit exports and
-in-place legacy backup restore are disabled while enabled, rather than exporting
-decrypted private material. Preserve the existing recovery phrase and a vault backup
+Disposable identities refuse export. Preserve the existing recovery phrase and a vault backup
 before enabling. If the vault passphrase is lost, use the existing phrase/restore path
 on a fresh installation to recover the identity; **old sessions cannot be recovered**.
 Authentication cannot be bypassed by `/lock reset`.
 
-Deferred: full history/contact encryption, platform keystores/biometrics, automatic
-idle locking, encrypted cloud vault synchronization and in-place backup merging.
+Plaintext origin metadata still reveals database names/schema, store/record counts,
+ciphertext sizes and the three appearance/consent exceptions. This is not full-device
+encryption: it cannot erase old plaintext from browser backups, storage free pages,
+previous exports, the clipboard or OS notifications already delivered. Vault-off
+behavior is unchanged. Large accounts use memory for decrypted indexed reads; the
+10k-message browser regression records migration, scan and cold-read timings.
+
+Deferred: platform keystores/biometrics, automatic idle locking, encrypted cloud
+vault synchronization, rollback-resistant external checkpoints and in-place backup merging.
 There is no protection against an attacker executing JavaScript while unlocked,
 nor a guarantee that a garbage-collected browser erases every old key copy from RAM.
 
@@ -281,7 +312,7 @@ Instead, please use [GitHub Security Advisories](https://github.com/shizukutanak
 
 Unknown direct senders are gated before message decryption, session creation, file/media handling, link rendering, receipts and call ringing. Their ciphertext envelopes live in `settings:requests:v1`, not the message/contact stores. The Requests view survives reloads. Names and ID prefixes are unverified labels, not authentication. Accept atomically creates the contact and then replays the queue through the normal receive checks; interrupted replay resumes on reload with ordinary message deduplication. Explicit contact addition and confirmed offline pairing also authorize queued traffic. Joined-group members and authenticated linked-device fan-out retain their existing authorization checks; a stranger cannot bypass quarantine merely by setting a group or self-sync flag.
 
-Limits per account: 20 senders, 20 envelopes per sender, 100 total envelopes, 2 MiB of serialized envelopes total, 128 KiB per envelope, and seven days from a request's first arrival (`MS.DAY`). Excess input is dropped, not decrypted. Expiry is enforced on subsequent access, including boot, not while the app is closed. Delete forgets the queue but permits a later request. Block persists the full identity key, forgets its queue and silently drops future application messages. Up to 1,000 blocks are retained; at capacity a new block fails visibly rather than evicting an old block. Unblock is explicit. Quarantine is ciphertext, but sender keys/names/timestamps and blocks are local plaintext metadata; this is not the separate key-vault feature. Clearing browser data or restoring an older account backup can erase this local policy. Web Locks are required for serialized acceptance/replay across tabs; unsupported replay fails closed.
+Limits per account: 20 senders, 20 envelopes per sender, 100 total envelopes, 2 MiB of serialized envelopes total, 128 KiB per envelope, and seven days from a request's first arrival (`MS.DAY`). Excess input is dropped, not decrypted. Expiry is enforced on subsequent access, including boot, not while the app is closed. Delete forgets the queue but permits a later request. Block persists the full identity key, forgets its queue and silently drops future application messages. Up to 1,000 blocks are retained; at capacity a new block fails visibly rather than evicting an old block. Unblock is explicit. Quarantine envelopes are ciphertext; sender keys/names/timestamps and blocks remain plaintext metadata when the vault is off. The full-history vault encrypts these records with the other account stores when enabled. Clearing browser data or restoring an older account backup can erase this local policy. Web Locks are required for serialized acceptance/replay across tabs; unsupported replay fails closed.
 
 Unaccepted contacts have no conversation, so typing, read and application-delivery receipts are not emitted. Relay mailbox consumption/ACKs, prekey publication and sealed-envelope opening remain necessary transport operations; sender metadata inside a sealed envelope is opened to decide admission, but its message payload is not decrypted. A relay can still observe recipient availability, polling and timing. An additive, signed `privatePresence` flag keeps public single/batch presence queries offline while retaining account-clone detection and alias renewal. Legacy clients/relays may still publish presence; a new client's signed private heartbeat is rejected by an old relay rather than downgraded to public. Existing public presence may remain visible until that relay's freshness window expires. No new endpoint is introduced.
 

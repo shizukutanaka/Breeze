@@ -353,7 +353,7 @@ describe('power mode — device alerts check', () => {
 // and drive its ticks with the real power-mode helpers.
 const disappearBlock = slice('  // Disappearing message cleanup: run every 10s', '\n\n  // GROUP CHAT');
 const runDisappearRegistration = new Function(
-  '_intervals', 'setInterval', 'db', 'activeContact', '_DOM', '_dbg', 'CONFIG', '_powerPresenceOff',
+  '_intervals', 'setInterval', 'db', 'activeContact', '_DOM', '_dbg', 'CONFIG', '_powerPresenceOff', '_vault',
   disappearBlock + '\nreturn true;');
 
 function disappearHarness(settings, rows = []) {
@@ -385,6 +385,7 @@ function disappearHarness(settings, rows = []) {
     vi.fn(),
     { DISAPPEAR_CHECK_MS: 10000, FADE_OUT_MS: 250 },
     power._powerPresenceOff,
+    { isBlocked: () => false },
   );
   return { timers, intervals, db, store };
 }

@@ -45,13 +45,14 @@ test('native IDB vault migration, encrypted enumeration/rotation, password rewra
     if (!all.some(v => v.pubB64 === 'public')) throw new Error('enumeration not opened');
     await unlocked.prekeys(db, { d: 'rotated' }, [{ d: 'otp' }], { seed: new Uint8Array(64).fill(7) });
     const before = await rows('breeze-messenger');
-    for (const slot of ['keys', 'signing', 'pq-priv', 'spk-priv', 'otp-priv', 'sess:alice', 'gsk:g', 'gsk-peer:g:a', 'verify:peer']) {
-      if (before[slot].vaultV !== 1 || before[slot].priv || before[slot].seed) throw new Error('plaintext leak: ' + slot);
+    for (const [opaque, value] of Object.entries(before)) {
+      if (value.vaultV !== 1 || value.priv || value.seed) throw new Error('plaintext leak: ' + opaque);
     }
+    if (Object.keys(before).some(k => /^(keys|signing|sess:|gsk:)/.test(k))) throw new Error('primary key leak');
     const aborted = db.transaction('identity', 'readwrite'), abortedDone = done(aborted);
     aborted.objectStore('identity').put({ priv: 'must-not-commit' }, 'keys'); aborted.abort();
     await abortedDone.catch(() => {});
-    if (JSON.stringify((await rows('breeze-messenger')).keys) !== JSON.stringify(before.keys)) throw new Error('abort changed identity');
+    if (JSON.stringify(await rows('breeze-messenger')) !== JSON.stringify(before)) throw new Error('abort changed identity');
     const backup = await unlocked.backup(); db.close();
     await unlocked.password(pass, pass + ' changed');
     if (JSON.stringify(await rows('breeze-messenger')) !== JSON.stringify(before)) throw new Error('password rewrote records');
@@ -62,7 +63,7 @@ test('native IDB vault migration, encrypted enumeration/rotation, password rewra
   const result = await restoredPage.evaluate(async backup => {
     const { make, pass, open, request } = VT;
     const r = make(); await r.boot();
-    const missing = structuredClone(backup); missing.accounts[0].rows.pop();
+    const missing = structuredClone(backup); missing.accounts[0].snapshot.stores.find(([name]) => name === 'identity')[1].pop();
     let refused = false;
     try { await r.restore(missing, pass); } catch { refused = true; }
     if (!refused) throw new Error('incomplete backup accepted');
@@ -126,7 +127,7 @@ test('legacy-keywrap migration journals survive an injected second-account crash
     const second = await rows('breeze-acc-test');
     const otherDb = await resumed.database(await open('breeze-acc-test'));
     const otherKey = await request(otherDb.transaction('identity').objectStore('identity').get('keys')); otherDb.close();
-    return { failed, phase: journal.phase, partial: partial.keys.vaultV, untouched: !!untouched.keys.wrapped, restored: restored.priv.d, second: [second.keys.vaultV, otherKey.priv.d] };
+    return { failed, phase: journal.phase, partial: partial['vault:manifest'].vaultV, untouched: !!untouched.keys.wrapped, restored: restored.priv.d, second: [second['vault:manifest'].vaultV, otherKey.priv.d] };
   });
   expect(result).toEqual({ failed: true, phase: 'enabling', partial: 1, untouched: true, restored: 'legacy-private', second: [1, 'other'] });
 });
