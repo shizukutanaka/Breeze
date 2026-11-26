@@ -504,9 +504,10 @@ describe('power mode — group member poll', () => {
     vi.useRealTimers();
   });
 
-  function groupPollHarness(powerOff) {
+  function groupPollHarness(powerOff, powerFloorMs) {
     const groupId = 'g_test';
     const postAPIRaw = vi.fn(() => ({ ok: true, json: async () => ({ members: [] }) }));
+    const delays = [];
     const deps = {
       hasApi: () => true,
       postAPIRaw,
@@ -517,8 +518,18 @@ describe('power mode — group member poll', () => {
       dbg: () => {},
     };
     if (powerOff) deps.powerOff = powerOff;
-    createGroupCreate(deps).startGroupMemberPoll('token123', groupId);
-    return { postAPIRaw };
+    if (powerFloorMs) deps.powerFloorMs = powerFloorMs;
+    const originalSetTimeout = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms, ...args) => {
+      delays.push(ms);
+      return originalSetTimeout(fn, ms, ...args);
+    };
+    try {
+      createGroupCreate(deps).startGroupMemberPoll('token123', groupId);
+    } finally {
+      globalThis.setTimeout = originalSetTimeout;
+    }
+    return { postAPIRaw, delays };
   }
 
   it('never calls /group/info while power mode keeps background presence off', async () => {
@@ -542,9 +553,44 @@ describe('power mode — group member poll', () => {
     expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
   });
 
-  it('wires the deployed power-presence gate into the group-create deps', () => {
+  it('schedules the first wake at the saver floor while the power gate stays on', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => true, () => 60000);
+    expect(h.delays[0]).toBe(60000);
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(40000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+  });
+
+  it('waits for the saver floor before the first /group/info call when power is on', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => false, () => 60000);
+    expect(h.delays[0]).toBe(60000);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(40000);
+    expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('waits for the emergency floor before the first /group/info call', async () => {
+    vi.useFakeTimers();
+    const h = groupPollHarness(() => false, () => 600000);
+    expect(h.delays[0]).toBe(600000);
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(h.postAPIRaw).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(540000);
+    expect(h.postAPIRaw).toHaveBeenCalledTimes(1);
+    expect(h.postAPIRaw).toHaveBeenCalledWith('/group/info', { token: 'token123' });
+  });
+
+  it('wires the deployed power-presence gate and poll floor into the group-create deps', () => {
     const depsBlock = slice('globalThis.__breezeGroupCreate?.createGroupCreate({', '\n  });');
     expect(depsBlock).toContain('powerOff: () => _powerPresenceOff()');
+    expect(depsBlock).toContain('hasApi: () => !!API, powerOff: () => _powerPresenceOff(), powerFloorMs: () => _powerPollFloorMs(),');
   });
 });
 
