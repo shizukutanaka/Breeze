@@ -420,6 +420,7 @@ input:focus, textarea:focus, select:focus, .field:focus { background: var(--s3);
 .ico { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; pointer-events: none }
 .btn-sm .ico { width: 17px; height: 17px }
 .tab-ico .ico { width: 22px; height: 22px }
+.ico.state-ico, .pin-banner .ico { width: 14px; height: 14px } .ico.state-ico { vertical-align: -2px; margin-right: 2px } .setup-feat .ico { width: 28px; height: 28px; display: block; margin: 0 auto 6px } .i-icon48 .ico, .drop-page-icon .ico { width: 48px; height: 48px } .i-emoji-lg .ico { width: 28px; height: 28px }
 .timer-label { font-weight: 600 }
 .timer-label:not(:empty) { margin-left: var(--sp-1) }
 
@@ -686,7 +687,7 @@ dialog .modal-input:focus { border-color: var(--g); box-shadow: 0 0 0 3px rgba(5
   background: var(--s1); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
   color: var(--t2); border: 1px solid var(--b1);
   font-size: var(--fs-name); cursor: pointer; display: flex;
-  align-items: center; justify-content: center;
+  align-items: center; justify-content: center; gap: calc(var(--sp-1) / 2);
   transition: transform .15s var(--bounce), color .15s ease;
   z-index: 15; box-shadow: var(--shadow-md)
 }
@@ -1206,9 +1207,9 @@ del.md-del { opacity: .6 }
       <button class="btn btn-o btn-sm hidden mt-8" id="setup-install-btn" data-i18n="uiInstall">Install App</button>
     </div>
     <div class="setup-features">
-      <div class="setup-feat"><span>🔐</span><b data-i18n="featEncrypt"></b><small data-i18n="featEncryptSub"></small></div>
-      <div class="setup-feat"><span>👤</span><b data-i18n="featNoReg"></b><small data-i18n="featNoRegSub"></small></div>
-      <div class="setup-feat"><span>🌐</span><b data-i18n="featWorks"></b><small data-i18n="featWorksSub"></small></div>
+      <div class="setup-feat"><span data-icon="lock" data-icon-class="feat-ico"></span><b data-i18n="featEncrypt"></b><small data-i18n="featEncryptSub"></small></div>
+      <div class="setup-feat"><span data-icon="user" data-icon-class="feat-ico"></span><b data-i18n="featNoReg"></b><small data-i18n="featNoRegSub"></small></div>
+      <div class="setup-feat"><span data-icon="globe" data-icon-class="feat-ico"></span><b data-i18n="featWorks"></b><small data-i18n="featWorksSub"></small></div>
     </div>
   </div>
 
@@ -1222,8 +1223,8 @@ del.md-del { opacity: .6 }
         <div class="sidebar-head">
           <span id="msg-my-name" class="name clickable" role="button" tabindex="0" data-i18n-title="ttEditProfile"></span>
           <span id="peer-count" class="sidebar-meta"></span>
-          <button class="btn btn-o btn-sm" id="b-msg-theme" data-i18n-aria="ariaTheme">☀</button>
-          <button class="btn btn-o btn-sm" id="b-msg-settings" data-i18n-aria="helpSettings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+          <button class="btn btn-o btn-sm" id="b-msg-theme" data-i18n-aria="ariaTheme"><span data-icon="sun"></span></button>
+          <button class="btn btn-o btn-sm" id="b-msg-settings" data-i18n-aria="helpSettings"><span data-icon="settings"></span></button>
           <button class="btn btn-g btn-sm" id="b-msg-add" data-i18n="addContactTitle" data-i18n-aria="ariaAddContact">Add friend</button>
         </div>
         <div id="msg-short-id" class="sidebar-id" role="button" tabindex="0" data-i18n-title="ttClickToCopy"></div>
@@ -1249,15 +1250,15 @@ del.md-del { opacity: .6 }
       <!-- Chat -->
       <div class="chat-area">
         <div id="msg-conv-header" class="conv-header">
-          <button class="btn btn-o btn-sm hidden" id="b-msg-back" data-i18n-aria="ariaBack"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-back" data-i18n-aria="ariaBack"><span data-icon="arrow-left"></span></button>
           <span id="msg-conv-name" class="name" data-i18n="selectContact"></span>
           <span id="msg-conv-status" class="conv-status" role="status" aria-live="polite"></span>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-call" data-i18n-aria="ariaCall"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></button>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-video" data-i18n-aria="ariaVideoCall"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg></button>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-timer" data-i18n-aria="ariaTimer" data-i18n-title="ariaTimer"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="timer-label"></span></button>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-clear" data-i18n-aria="ariaClearChat" data-i18n-title="ariaClearChat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-search" data-i18n-aria="ariaSearchChat"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
-          <button class="btn btn-o btn-sm hidden" id="b-msg-menu" data-i18n-aria="ariaConvMenu" aria-haspopup="menu" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-call" data-i18n-aria="ariaCall"><span data-icon="phone"></span></button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-video" data-i18n-aria="ariaVideoCall"><span data-icon="video"></span></button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-timer" data-i18n-aria="ariaTimer" data-i18n-title="ariaTimer"><span data-icon="clock"></span><span class="timer-label"></span></button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-clear" data-i18n-aria="ariaClearChat" data-i18n-title="ariaClearChat"><span data-icon="trash"></span></button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-search" data-i18n-aria="ariaSearchChat"><span data-icon="search"></span></button>
+          <button class="btn btn-o btn-sm hidden" id="b-msg-menu" data-i18n-aria="ariaConvMenu" aria-haspopup="menu" aria-expanded="false"><span data-icon="more-vertical"></span></button>
         </div>
         <div class="offline-bar" id="offline-bar" role="alert"></div>
         <div class="offline-bar focus-bar" id="focus-bar" role="status"></div>
@@ -1265,16 +1266,16 @@ del.md-del { opacity: .6 }
         <div class="search-bar" id="search-bar">
           <input id="search-chat-input" placeholder="Search..." data-i18n-ph="searchPh" data-i18n-aria="ariaSearchChat" autocomplete="off" enterkeyhint="search">
           <span class="match-count" id="search-match-count"></span>
-          <button class="btn btn-o btn-sm" id="search-chat-prev" data-i18n-aria="ariaPrev">↑</button>
-          <button class="btn btn-o btn-sm" id="search-chat-next" data-i18n-aria="ariaNext">↓</button>
-          <button class="btn btn-o btn-sm" id="search-chat-close" data-i18n-aria="close">✕</button>
+          <button class="btn btn-o btn-sm" id="search-chat-prev" data-i18n-aria="ariaPrev"><span data-icon="arrow-up"></span></button>
+          <button class="btn btn-o btn-sm" id="search-chat-next" data-i18n-aria="ariaNext"><span data-icon="arrow-down"></span></button>
+          <button class="btn btn-o btn-sm" id="search-chat-close" data-i18n-aria="close"><span data-icon="x"></span></button>
         </div>
         <div id="pin-banner" class="pin-banner hidden" role="status"></div>
         <div id="msg-messages" role="log" data-i18n-aria="ariaMessages" aria-live="polite" aria-relevant="additions" class="msg-area">
           <div id="drop-overlay" class="drop-overlay"><span class="drop-overlay-text" data-i18n="dropToSend">Drop to send file</span></div>
           <div class="msg-empty" data-i18n-html="emptyContacts">Use the <b class="i-g">Add friend</b> button to add a contact.</div>
         </div>
-        <button class="scroll-fab hidden" id="scroll-fab" data-i18n-aria="ariaScrollBottom">↓</button>
+        <button class="scroll-fab hidden" id="scroll-fab" data-i18n-aria="ariaScrollBottom"><span data-icon="arrow-down"></span><span class="scroll-count"></span></button>
         <div id="typing-indicator" class="typing-ind" aria-live="polite"></div>
         <div id="msg-input-bar" class="input-bar hidden">
           <div id="smart-reply-bar" class="smart-reply-bar hidden" role="toolbar" data-i18n-aria="ariaQuickReplies"></div>
@@ -1283,35 +1284,35 @@ del.md-del { opacity: .6 }
                place in the DOM and the panel's show/hide changed. -->
           <div id="msg-more-panel" class="more-panel hidden" role="group" data-i18n-aria="ariaMoreActions">
             <div class="more-item">
-              <label class="tool" data-i18n-title="ttAttach"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg><input type="file" id="msg-file" class="sr-only" data-i18n-aria="ttAttach"></label>
+              <label class="tool" data-i18n-title="ttAttach"><span data-icon="paperclip"></span><input type="file" id="msg-file" class="sr-only" data-i18n-aria="ttAttach"></label>
               <span class="more-label" data-i18n="ttAttach">Attach</span>
             </div>
             <div class="more-item">
-              <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg><svg class="ico ico-stop hidden" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg></button>
+              <button id="b-msg-voice" class="tool" data-i18n-aria="ariaVoice" aria-pressed="false"><span data-icon="mic"></span><span data-icon="stop" data-icon-class="ico-stop hidden"></span></button>
               <span class="more-label" data-i18n="ariaVoice">Record voice message</span>
             </div>
             <div class="more-item">
-              <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="12.5" x2="13" y2="12.5"/></svg><svg class="ico ico-rec hidden" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6"/></svg></button>
+              <button id="b-msg-stt" class="tool hidden" data-i18n-aria="ariaDict" aria-pressed="false"><span data-icon="message-text"></span><span data-icon="record" data-icon-class="ico-rec hidden"></span></button>
               <span class="more-label" data-i18n="ariaDict">Dictate message</span>
             </div>
             <div class="more-item">
-              <button id="b-msg-loc" class="tool" data-i18n-aria="ttLocation" data-i18n-title="ttLocation" aria-haspopup="dialog"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg></button>
+              <button id="b-msg-loc" class="tool" data-i18n-aria="ttLocation" data-i18n-title="ttLocation" aria-haspopup="dialog"><span data-icon="map-pin"></span></button>
               <span class="more-label" data-i18n="ttLocation">Share location</span>
             </div>
             <div class="more-item">
-              <button id="b-msg-sticker" class="tool" data-i18n-aria="ttStickers" data-i18n-title="ttStickers" aria-expanded="false" aria-haspopup="dialog"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+              <button id="b-msg-sticker" class="tool" data-i18n-aria="ttStickers" data-i18n-title="ttStickers" aria-expanded="false" aria-haspopup="dialog"><span data-icon="star"></span></button>
               <span class="more-label" data-i18n="ttStickers">Stickers</span>
             </div>
             <div class="more-item">
-              <button class="tool" id="b-msg-nrn" aria-pressed="false" data-i18n-aria="nrnAria" data-i18n-title="nrnAria"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/><polyline points="8.5 11.5 11 14 15.5 9.5"/></svg></button>
+              <button class="tool" id="b-msg-nrn" aria-pressed="false" data-i18n-aria="nrnAria" data-i18n-title="nrnAria"><span data-icon="message-check"></span></button>
               <span class="more-label" data-i18n="nrnBadge">no reply needed</span>
             </div>
           </div>
-          <button id="b-msg-more" class="tool" data-action="more-panel" data-i18n-aria="ariaMoreActions" aria-expanded="false" aria-haspopup="true" aria-controls="msg-more-panel"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+          <button id="b-msg-more" class="tool" data-action="more-panel" data-i18n-aria="ariaMoreActions" aria-expanded="false" aria-haspopup="true" aria-controls="msg-more-panel"><span data-icon="plus"></span></button>
           <textarea id="msg-input" dir="auto" data-i18n-ph="msgPlaceholder" data-i18n-aria="ariaMessage" maxlength="4096" rows="1" enterkeyhint="send"></textarea>
           <span id="msg-char-count" class="char-count hidden"></span>
-          <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></button>
-          <button class="send" id="b-msg-send" data-i18n-aria="send"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><path d="M22 2l-7 20-4-9-9-4 22-7z"/></svg></button>
+          <button id="b-msg-emoji" class="tool" data-i18n-aria="ttEmoji" data-i18n-title="ttEmoji" aria-expanded="false" aria-haspopup="dialog"><span data-icon="smile"></span></button>
+          <button class="send" id="b-msg-send" data-i18n-aria="send"><span data-icon="send"></span></button>
         </div>
       </div>
     </div>
@@ -1322,7 +1323,7 @@ del.md-del { opacity: .6 }
          here. A history entry is pushed on open, so Back closes it. -->
     <div id="settings-view" class="settings-view hidden" role="dialog" data-i18n-aria="helpSettings">
       <div class="settings-head">
-        <button class="btn btn-o btn-sm" id="b-settings-back" data-i18n-aria="ariaBack"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></button>
+        <button class="btn btn-o btn-sm" id="b-settings-back" data-i18n-aria="ariaBack"><span data-icon="arrow-left"></span></button>
         <span class="settings-title" data-i18n="helpSettings">Settings</span>
       </div>
       <div id="settings-body" class="settings-body"></div>
@@ -1330,11 +1331,11 @@ del.md-del { opacity: .6 }
 
     <!-- Bottom tab bar (mobile list view only; CSS-gated, see #msg-tabbar) -->
     <nav id="msg-tabbar" role="navigation" data-i18n-aria="ariaMainNav">
-      <button class="tab-btn active" id="tab-chats" aria-current="page" data-action="tab-chats" data-i18n-aria="tabChats"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></span><span><span data-i18n="tabChats">Chats</span> <span class="bdg" id="tab-badge-chats"></span></span></button>
-      <button class="tab-btn" id="tab-calls" data-action="tab-calls" data-i18n-aria="tabCalls"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg></span><span><span data-i18n="tabCalls">Calls</span> <span class="bdg" id="tab-badge-calls"></span></span></button>
-      <button class="tab-btn" id="tab-contacts" data-action="tab-contacts" data-i18n-aria="ariaContacts"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><span data-i18n="ariaContacts">Contacts</span></button>
-      <button class="tab-btn" id="tab-self" data-action="tab-self" data-i18n-aria="tabSelf"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span><span data-i18n="tabSelf">My card</span></button>
-      <button class="tab-btn" id="tab-settings" data-action="tab-settings" data-i18n-aria="helpSettings"><span class="tab-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span data-i18n="helpSettings">Settings</span></button>
+      <button class="tab-btn active" id="tab-chats" aria-current="page" data-action="tab-chats" data-i18n-aria="tabChats"><span class="tab-ico"><span data-icon="message"></span></span><span><span data-i18n="tabChats">Chats</span> <span class="bdg" id="tab-badge-chats"></span></span></button>
+      <button class="tab-btn" id="tab-calls" data-action="tab-calls" data-i18n-aria="tabCalls"><span class="tab-ico"><span data-icon="phone"></span></span><span><span data-i18n="tabCalls">Calls</span> <span class="bdg" id="tab-badge-calls"></span></span></button>
+      <button class="tab-btn" id="tab-contacts" data-action="tab-contacts" data-i18n-aria="ariaContacts"><span class="tab-ico"><span data-icon="users"></span></span><span data-i18n="ariaContacts">Contacts</span></button>
+      <button class="tab-btn" id="tab-self" data-action="tab-self" data-i18n-aria="tabSelf"><span class="tab-ico"><span data-icon="user"></span></span><span data-i18n="tabSelf">My card</span></button>
+      <button class="tab-btn" id="tab-settings" data-action="tab-settings" data-i18n-aria="helpSettings"><span class="tab-ico"><span data-icon="settings"></span></span><span data-i18n="helpSettings">Settings</span></button>
     </nav>
   </div>
 
@@ -1449,6 +1450,46 @@ window.__breezeOfflinePairing = { createOfflinePairing, blockedPeerIds: new Set(
 
 <script>
 'use strict';
+// inline mirror of src/app/icons.js — the classic script cannot import the ESM module
+// before first paint. Keep the copies logically identical; tests/ui-icons.test.js pins them.
+const _ICON_SHAPES = Object.freeze({
+  "settings":"<circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z\"/>", "arrow-left":"<line x1=\"19\" y1=\"12\" x2=\"5\" y2=\"12\"/><polyline points=\"12 19 5 12 12 5\"/>", "phone":"<path d=\"M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z\"/>", "video":"<polygon points=\"23 7 16 12 23 17 23 7\"/><rect x=\"1\" y=\"5\" width=\"15\" height=\"14\" rx=\"2\"/>", "clock":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><polyline points=\"12 6 12 12 16 14\"/>", "trash":"<polyline points=\"3 6 5 6 21 6\"/><path d=\"M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2\"/><line x1=\"10\" y1=\"11\" x2=\"10\" y2=\"17\"/><line x1=\"14\" y1=\"11\" x2=\"14\" y2=\"17\"/>",
+  "search":"<circle cx=\"11\" cy=\"11\" r=\"8\"/><line x1=\"21\" y1=\"21\" x2=\"16.65\" y2=\"16.65\"/>", "more-vertical":"<circle cx=\"12\" cy=\"5\" r=\"1\"/><circle cx=\"12\" cy=\"12\" r=\"1\"/><circle cx=\"12\" cy=\"19\" r=\"1\"/>", "paperclip":"<path d=\"M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48\"/>", "mic":"<path d=\"M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z\"/><path d=\"M19 10v2a7 7 0 0 1-14 0v-2\"/><line x1=\"12\" y1=\"19\" x2=\"12\" y2=\"23\"/><line x1=\"8\" y1=\"23\" x2=\"16\" y2=\"23\"/>", "stop":"<rect x=\"6\" y=\"6\" width=\"12\" height=\"12\" rx=\"2\"/>", "message-text":"<path d=\"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z\"/><line x1=\"8\" y1=\"9\" x2=\"16\" y2=\"9\"/><line x1=\"8\" y1=\"12.5\" x2=\"13\" y2=\"12.5\"/>",
+  "record":"<circle cx=\"12\" cy=\"12\" r=\"6\"/>", "map-pin":"<path d=\"M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z\"/><circle cx=\"12\" cy=\"10\" r=\"3\"/>", "star":"<polygon points=\"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2\"/>", "message-check":"<path d=\"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z\"/><polyline points=\"8.5 11.5 11 14 15.5 9.5\"/>", "plus":"<line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"/><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"/>", "smile":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M8 14s1.5 2 4 2 4-2 4-2\"/><line x1=\"9\" y1=\"9\" x2=\"9.01\" y2=\"9\"/><line x1=\"15\" y1=\"9\" x2=\"15.01\" y2=\"9\"/>",
+  "send":"<line x1=\"22\" y1=\"2\" x2=\"11\" y2=\"13\"/><path d=\"M22 2l-7 20-4-9-9-4 22-7z\"/>", "message":"<path d=\"M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z\"/>", "users":"<path d=\"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2\"/><circle cx=\"9\" cy=\"7\" r=\"4\"/><path d=\"M23 21v-2a4 4 0 0 0-3-3.87\"/><path d=\"M16 3.13a4 4 0 0 1 0 7.75\"/>", "user":"<path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"/><circle cx=\"12\" cy=\"7\" r=\"4\"/>", "sun":"<circle cx=\"12\" cy=\"12\" r=\"5\"/><line x1=\"12\" y1=\"1\" x2=\"12\" y2=\"3\"/><line x1=\"12\" y1=\"21\" x2=\"12\" y2=\"23\"/><line x1=\"4.22\" y1=\"4.22\" x2=\"5.64\" y2=\"5.64\"/><line x1=\"18.36\" y1=\"18.36\" x2=\"19.78\" y2=\"19.78\"/><line x1=\"1\" y1=\"12\" x2=\"3\" y2=\"12\"/><line x1=\"21\" y1=\"12\" x2=\"23\" y2=\"12\"/><line x1=\"4.22\" y1=\"19.78\" x2=\"5.64\" y2=\"18.36\"/><line x1=\"18.36\" y1=\"5.64\" x2=\"19.78\" y2=\"4.22\"/>", "moon":"<path d=\"M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z\"/>",
+  "x":"<line x1=\"18\" y1=\"6\" x2=\"6\" y2=\"18\"/><line x1=\"6\" y1=\"6\" x2=\"18\" y2=\"18\"/>", "pin":"<path d=\"M9 4h6l-1 7 3 3v2H7v-2l3-3-1-7z\"/><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"22\"/>", "mute":"<path d=\"M8.7 3a6 6 0 0 1 9.3 5v2.7\"/><path d=\"M3 3l18 18\"/><path d=\"M17 17H5a2 2 0 0 0 1.7-1.94L7 15v-4a6 6 0 0 1 .34-2\"/><path d=\"M10.3 21a2 2 0 0 0 3.4 0\"/>", "block":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"4.93\" y1=\"4.93\" x2=\"19.07\" y2=\"19.07\"/>", "archive":"<rect x=\"3\" y=\"3\" width=\"18\" height=\"5\" rx=\"1\"/><path d=\"M5 8v11a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8\"/><line x1=\"10\" y1=\"12\" x2=\"14\" y2=\"12\"/>", "lock":"<rect x=\"3\" y=\"11\" width=\"18\" height=\"11\" rx=\"2\"/><path d=\"M7 11V7a5 5 0 0 1 10 0v4\"/>",
+  "globe":"<circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"2\" y1=\"12\" x2=\"22\" y2=\"12\"/><path d=\"M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z\"/>", "check":"<polyline points=\"20 6 9 17 4 12\"/>", "warning":"<path d=\"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\"/>", "arrow-up":"<line x1=\"12\" y1=\"19\" x2=\"12\" y2=\"5\"/><polyline points=\"5 12 12 5 19 12\"/>", "arrow-down":"<line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"/><polyline points=\"19 12 12 19 5 12\"/>"
+});
+const _ICON_SVG_NS = 'http://www.w3.org/2000/svg';
+function _iconEscapeAttr(value) { return String(value).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch])); }
+function _iconClass(extra = '') { return [...new Set(('ico ' + extra).trim().split(/\s+/).filter(Boolean))].join(' '); }
+function _icon(name, extraClass = '') { const shapes = _ICON_SHAPES[name]; return shapes ? `<svg class="${_iconEscapeAttr(_iconClass(extraClass))}" viewBox="0 0 24 24" aria-hidden="true">${shapes}</svg>` : ''; }
+function _iconSlot(name, extraClass = '') { return `<span data-icon="${_iconEscapeAttr(name)}"${extraClass ? ` data-icon-class="${_iconEscapeAttr(extraClass)}"` : ''}></span>`; }
+function _createIcon(name, extraClass = '', doc = document) {
+  const markup = _icon(name, extraClass); if (!markup || !doc?.createElementNS) return null;
+  const shapes = markup.slice(markup.indexOf('>') + 1, markup.lastIndexOf('</svg>'));
+  const svg = doc.createElementNS(_ICON_SVG_NS, 'svg');
+  svg.setAttribute('class', _iconClass(extraClass)); svg.setAttribute('viewBox', '0 0 24 24'); svg.setAttribute('aria-hidden', 'true');
+  for (const shape of shapes.matchAll(/<(path|circle|line|polyline|polygon|rect)\b([^>]*)\/>/g)) {
+    const el = doc.createElementNS(_ICON_SVG_NS, shape[1]);
+    for (const attr of shape[2].matchAll(/([\w:.-]+)="([^"]*)"/g)) el.setAttribute(attr[1], attr[2]);
+    svg.appendChild(el);
+  } return svg.childNodes.length ? svg : null;
+}
+function _hydrateIcons(root = document) {
+  if (!root) return 0; const slots = [];
+  if (root.matches?.('[data-icon]')) slots.push(root);
+  if (root.querySelectorAll) slots.push(...root.querySelectorAll('[data-icon]'));
+  for (const slot of slots) {
+    const svg = _createIcon(slot.dataset.icon, slot.dataset.iconClass || '', slot.ownerDocument || document);
+    if (svg) slot.replaceWith(svg); else slot.remove();
+  } return slots.length;
+}
+// end inline mirror of src/app/icons.js
+function _statusIcon(name, key) { return _iconSlot(name, 'state-ico') + '<span class="sr-only">' + esc(t(key)) + ' </span>'; }
+function _setThemeIcon(btn) { const ic = _createIcon(document.documentElement.classList.contains('light') ? 'moon' : 'sun'); if (btn && ic) btn.replaceChildren(ic); }
+_hydrateIcons(document);
+
 const _browserBoot = globalThis.__breezeBrowserBoot = { methods: Object.fromEntries(['getItem', 'setItem', 'removeItem', 'key', 'clear'].map(k => [k, Storage.prototype[k]])), pending: [new Map(), new Map()], current: null };
 for (const method of ['getItem', 'setItem', 'removeItem', 'clear']) Storage.prototype[method] = function(key, value) {
   if (_browserBoot.current) return _browserBoot.current.invoke(this, method, key, value);
@@ -2659,7 +2700,7 @@ window.addEventListener('error', (event) => {
   // Crash recovery overlay after 3 fatal errors
   if (_fatalErrors >= 3 && !document.querySelector('.crash-overlay')) {
     const d = document.createElement('div'); d.className = 'crash-overlay';
-    const _ci = document.createElement('div'); _ci.className = 'i-icon48'; _ci.textContent = '⚠️'; d.appendChild(_ci);
+    const _ci = document.createElement('div'); _ci.className = 'i-icon48'; _ci.replaceChildren(_createIcon('warning')); d.appendChild(_ci);
     const _ch = document.createElement('h2'); _ch.textContent = t('crashTitle'); d.appendChild(_ch);
     const _cp = document.createElement('p'); _cp.textContent = t('crashBody'); d.appendChild(_cp);
     const _cb1 = document.createElement('button'); _cb1.className = 'btn btn-g'; _cb1.textContent = t('uiReload'); d.appendChild(_cb1);
@@ -2976,7 +3017,7 @@ const IS_TOUCH = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 if (!window.indexedDB) {
   const _noIDB = document.createElement('div');
   _noIDB.className = 'crash-overlay';
-  const _idbIcon = document.createElement('div'); _idbIcon.className = 'i-icon48'; _idbIcon.textContent = '🔒'; _noIDB.appendChild(_idbIcon);
+  const _idbIcon = document.createElement('div'); _idbIcon.className = 'i-icon48'; _idbIcon.replaceChildren(_createIcon('lock')); _noIDB.appendChild(_idbIcon);
   const _idbH2 = document.createElement('h2'); _idbH2.textContent = t('noIDBTitle'); _noIDB.appendChild(_idbH2);
   const _idbP1 = document.createElement('p'); _idbP1.textContent = t('noIDBDesc'); _noIDB.appendChild(_idbP1);
   const _idbP2 = document.createElement('p'); _idbP2.textContent = t('noIDBHint'); _noIDB.appendChild(_idbP2);
@@ -2986,7 +3027,7 @@ if (!window.indexedDB) {
 if (!window.crypto?.subtle) {
   const _noCrypto = document.createElement('div');
   _noCrypto.className = 'crash-overlay';
-  const _cryptoIcon = document.createElement('div'); _cryptoIcon.className = 'i-icon48'; _cryptoIcon.textContent = '🔐'; _noCrypto.appendChild(_cryptoIcon);
+  const _cryptoIcon = document.createElement('div'); _cryptoIcon.className = 'i-icon48'; _cryptoIcon.replaceChildren(_createIcon('lock')); _noCrypto.appendChild(_cryptoIcon);
   const _cryptoH2 = document.createElement('h2'); _cryptoH2.textContent = t('noCryptoTitle'); _noCrypto.appendChild(_cryptoH2);
   const _cryptoP1 = document.createElement('p'); _cryptoP1.textContent = t('noCryptoDesc'); _noCrypto.appendChild(_cryptoP1);
   const _cryptoP2 = document.createElement('p'); _cryptoP2.textContent = t('noCryptoHint'); _noCrypto.appendChild(_cryptoP2);
@@ -3168,7 +3209,7 @@ document.addEventListener('visibilitychange', () => {
     if (e.matches) document.documentElement.classList.add('light');
     else document.documentElement.classList.remove('light');
     const btn = _DOM.get('b-msg-theme');
-    if (btn) btn.textContent = e.matches ? '🌙' : '☀';
+    if (btn) _setThemeIcon(btn);
     if (meta) meta.content = e.matches ? '#fafafa' : '#0a0a0a';
   });
 })();
@@ -3178,7 +3219,7 @@ function toggleTheme() {
   try { localStorage.setItem('brz-theme', isLight ? 'light' : 'dark'); } catch(e) { _dbg(e); }
   setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), CONFIG.THEME_TRANSITION_MS);
   const btn = _DOM.get('b-msg-theme');
-  if (btn) btn.textContent = isLight ? '🌙' : '☀';
+  if (btn) _setThemeIcon(btn);
   // Update meta theme-color for browser chrome
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = isLight ? '#fafafa' : '#0a0a0a';
@@ -3286,7 +3327,9 @@ const _ttPolicy = (() => {
 
 // Safe innerHTML assignment — uses Trusted Types when available
 function safeSetHTML(el, html) {
-  if (el) el.innerHTML = _ttPolicy.createHTML(html);
+  if (!el) return;
+  el.innerHTML = _ttPolicy.createHTML(html);
+  _hydrateIcons(el);
 }
 
 // Register Service Worker (PWA) + v3.6 update notification. try/catch: an uncaught throw here would abort the rest of this script. Positioned after _ttPolicy so its createScriptURL hook can coerce register('sw.js').
@@ -3348,7 +3391,7 @@ if (P.has('drop')) {
   const keyB64 = location.hash.slice(1); // Fragment never sent to server
   // Build drop page via DOM API (avoids safeSetHTML; no functional need to change)
   const _dw = document.createElement('div'); _dw.className = 'drop-page';
-  const _di = document.createElement('div'); _di.className = 'drop-page-icon'; _di.textContent = '🔐'; _dw.appendChild(_di);
+  const _di = document.createElement('div'); _di.className = 'drop-page-icon'; _di.replaceChildren(_createIcon('lock')); _dw.appendChild(_di);
   const _ds = document.createElement('div'); _ds.id = 'drop-status'; _ds.className = 'drop-page-status'; _ds.textContent = t('dropDecrypting'); _dw.appendChild(_ds);
   const _dc = document.createElement('div'); _dc.id = 'drop-content'; _dc.className = 'drop-page-content'; _dw.appendChild(_dc);
   const _da = document.createElement('div'); _da.id = 'drop-actions'; _da.className = 'drop-page-actions';
@@ -3392,7 +3435,7 @@ if (P.has('terms') || P.has('privacy') || P.has('legal')) {
     _dbg(e, 'initMessenger-fatal');
     const d = document.createElement('div');
     d.className = 'crash-overlay';
-    safeSetHTML(d, '<div class="i-icon48">⚠️</div><h2>' + esc(t('crashTitle')) + '</h2><p>' + esc(e?.message || '') + '</p><button class="btn btn-g" id="crash-reload">' + esc(t('uiReload')) + '</button>');
+    safeSetHTML(d, '<div class="i-icon48">' + _iconSlot('warning') + '</div><h2>' + esc(t('crashTitle')) + '</h2><p>' + esc(e?.message || '') + '</p><button class="btn btn-g" id="crash-reload">' + esc(t('uiReload')) + '</button>');
     document.body.appendChild(d);
     _DOM.get('crash-reload')?.addEventListener('click', () => location.reload());
   });
@@ -8498,7 +8541,7 @@ async function initMessenger(dbName) {
       div.setAttribute('aria-label', contactDisplayName(c) + (c.unread ? ', ' + t('ariaUnread', c.unread) : '') + (c.isGroup ? '' : isOnline ? ', ' + t('statusOnline') : ', ' + t('statusOffline')));
       // v3.5: Presence dot (online/away/offline)
       // v3.6: Enhanced presence dot — shows P2P quality when connected
-      const initial = c.isGroup ? '👥' : (c.avatarImg ? `<img class="avatar-img" src="${esc(c.avatarImg)}" alt="">` : esc((contactDisplayName(c) || '?')[0].toUpperCase()));
+      const initial = c.isGroup ? _iconSlot('users') : (c.avatarImg ? `<img class="avatar-img" src="${esc(c.avatarImg)}" alt="">` : esc((contactDisplayName(c) || '?')[0].toUpperCase()));
       const avatarBg = c.isGroup ? 'var(--gd)' : `hsl(${(c.name||'').charCodeAt(0) * 37 % 360}, 40%, 30%)`;
       let presenceClass = '';
       let presenceTitle = '';
@@ -8517,7 +8560,7 @@ async function initMessenger(dbName) {
       }
       const presenceDot = presenceClass ? `<span class="presence-dot ${presenceClass}" role="img" aria-label="${presenceTitle}" title="${presenceTitle}"></span>` : '';
       const pinLabel = c.pinned ? t('unpin') : t('pin');
-      const prefix = (c.blocked ? '🚫 ' : '') + (c.pinned ? '📌 ' : '') + (c.muted ? '🔇 ' : '');
+      const prefix = (c.blocked ? _statusIcon('block', 'infoBlocked') : '') + (c.pinned ? _statusIcon('pin', 'infoPinned') : '') + (c.muted ? _statusIcon('mute', 'infoMuted') : '');
       // v3.4: Label chips for contact
       const labelHtml = (c.labels || []).map((l, i) => `<span class="contact-label" data-color="${LABEL_COLORS[i % LABEL_COLORS.length]}">${esc(l)}</span>`).join('');
       // LINE-style calendar time for last activity (see listTime)
@@ -8955,7 +8998,7 @@ async function initMessenger(dbName) {
       const pinned = allMsgs.filter(m => m.pinned);
       if (pinned.length > 0) {
         const latest = pinned.sort((a, b) => b.ts - a.ts)[0];
-        safeSetHTML(pinBanner, `<span class="pin-icon">📌</span><span class="pin-text">${esc(latest.text?.slice(0, 60) || '')}</span><span class="pin-count">${pinned.length > 1 ? t('pinsCount', pinned.length) : ''}</span>`);
+        safeSetHTML(pinBanner, `<span class="pin-icon">${_iconSlot('pin')}</span><span class="pin-text">${esc(latest.text?.slice(0, 60) || '')}</span><span class="pin-count">${pinned.length > 1 ? t('pinsCount', pinned.length) : ''}</span>`);
         pinBanner.classList.remove('hidden');
         pinBanner.onclick = () => {
           const target = document.querySelector(`[data-msgid="${latest.msgId}"]`);
@@ -9332,7 +9375,7 @@ async function initMessenger(dbName) {
           if (existing) existing.remove();
           const preview = document.createElement('div');
           preview.className = 'reply-preview';
-          safeSetHTML(preview, `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><button type="button" data-action="close-reply" class="i-cur-dim" aria-label="${esc(t('close'))}">✕</button>`);
+          safeSetHTML(preview, `<span class="i-ellip">${esc((text||'').slice(0, 60))}</span><button type="button" data-action="close-reply" class="i-cur-dim" aria-label="${esc(t('close'))}">${_iconSlot('x')}</button>`);
           bar.insertBefore(preview, bar.firstChild);
         }
         _DOM.get('msg-input')?.focus();
@@ -9659,7 +9702,7 @@ async function initMessenger(dbName) {
       safeSetHTML(fab, `<span id="select-count">0</span>
         <button class="btn btn-o btn-sm" id="select-fwd">${t('forward')}</button>
         <button class="btn btn-r btn-sm" id="select-del">${t('delete')}</button>
-        <button class="btn btn-o btn-sm" id="select-cancel" aria-label="${esc(t('ariaExitSelect'))}">✕</button>`);
+        <button class="btn btn-o btn-sm" id="select-cancel" aria-label="${esc(t('ariaExitSelect'))}">${_iconSlot('x')}</button>`);
       document.body.appendChild(fab);
       fab.querySelector('#select-cancel').onclick = exitSelectMode;
       fab.querySelector('#select-del').onclick = async () => {
@@ -9717,7 +9760,7 @@ async function initMessenger(dbName) {
       preview.className = 'reply-preview';
       bar.insertBefore(preview, bar.firstChild);
     }
-    safeSetHTML(preview, `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><button type="button" class="i-cur-dim" data-action="close-reply" aria-label="${esc(t('close'))}">✕</button>`);
+    safeSetHTML(preview, `<span class="i-ellip">${esc(msg.text?.slice(0, 60) || '')}</span><button type="button" class="i-cur-dim" data-action="close-reply" aria-label="${esc(t('close'))}">${_iconSlot('x')}</button>`);
     window._breezeReplyTo = _replyTo;
     _DOM.get('msg-input').focus();
   }
@@ -9769,7 +9812,7 @@ async function initMessenger(dbName) {
     const overlay = document.createElement('div');
     overlay.className = 'overlay';
     const list = contacts.filter(c => !c.blocked).map(c =>
-      `<label class="contact i-ctx-item" data-cid="${c.id}"><input type="checkbox" class="i-accent-g"><div class="cname">${c.pinned ? '📌 ' : ''}${esc(contactDisplayName(c))}</div></label>`
+      `<label class="contact i-ctx-item" data-cid="${c.id}"><input type="checkbox" class="i-accent-g"><div class="cname">${c.pinned ? _statusIcon('pin', 'infoPinned') : ''}${esc(contactDisplayName(c))}</div></label>`
     ).join('');
     safeSetHTML(overlay, `<div class="modal i-max-popup">
       <div class="i-heading-b">${esc(t('forwardTo'))}</div>
@@ -10305,7 +10348,7 @@ async function initMessenger(dbName) {
     };
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'remove';
-    cancelBtn.textContent = '✕'; cancelBtn.setAttribute('aria-label', t('cancel'));
+    cancelBtn.replaceChildren(_createIcon('x')); cancelBtn.setAttribute('aria-label', t('cancel'));
     cancelBtn.onclick = () => { preview.remove(); e.target.value = ''; };
     preview.append(sendBtn, cancelBtn);
     bar.insertBefore(preview, bar.firstChild);
@@ -12637,7 +12680,7 @@ async function initMessenger(dbName) {
     inp.className = 'lock-input';
     const btn = document.createElement('button');
     btn.className = 'btn btn-g i-pad-unlock'; btn.textContent = t('uiUnlock');
-    safeSetHTML(overlay, `<div class="i-icon48">🔒</div><div class="i-title16">${esc(t('lockTitle'))}</div>`);
+    safeSetHTML(overlay, `<div class="i-icon48">${_iconSlot('lock')}</div><div class="i-title16">${esc(t('lockTitle'))}</div>`);
     overlay.appendChild(inp); overlay.appendChild(btn);
     _showDialog(overlay);
     // Esc must not dismiss it, and the document-level shortcuts must not run behind it
@@ -12875,7 +12918,7 @@ async function initMessenger(dbName) {
   // Theme toggle
   _DOM.get('b-msg-theme')?.addEventListener('click', toggleTheme);
   (() => { const btn = _DOM.get('b-msg-theme');
-    if (btn) btn.textContent = document.documentElement.classList.contains('light') ? '🌙' : '☀'; })();
+    if (btn) _setThemeIcon(btn); })();
 
   // Restore: drag-drop or file input (hidden)
   _DOM.get('msg-sidebar')?.addEventListener('dragover', (e) => e.preventDefault());
@@ -14856,7 +14899,7 @@ async function initMessenger(dbName) {
         try { await navigator.clipboard.writeText(dropUrl); } catch { /* fallback below */ }
         // Show result in chat
         const [box, d] = _cmdPanelEl('chat-empty');
-        safeSetHTML(d, `<div class="i-icon48">🔐</div><b>${t('dropCreated')}</b><br>
+        safeSetHTML(d, `<div class="i-icon48">${_iconSlot('lock')}</div><b>${t('dropCreated')}</b><br>
           <span class="text-xs color-t3">${t('dropDesc')}</span><br>
           <code class="text-xs i-mono-box" style="word-break:break-all;cursor:pointer" id="drop-url-copy">${esc(dropUrl)}</code><br>
           <span class="text-xs color-t3">${t('dropExpires')}</span>`);
@@ -15237,8 +15280,8 @@ async function initMessenger(dbName) {
         t('cmdInfoFilesBookmarks', msgs.filter(m => m.fileData).length, msgs.filter(m => m.bookmarked).length),
         '',
         '<b>' + t('infoStatus') + '</b>',
-        (c.blocked ? '🚫 ' + t('infoBlocked') : c.muted ? '🔇 ' + t('infoMuted') : c.archived ? '📦 ' + t('infoArchived') : '✓ ' + t('infoActive')),
-        c.pinned ? '📌 ' + t('infoPinned') : '',
+        (c.blocked ? _iconSlot('block', 'state-ico') + t('infoBlocked') : c.muted ? _iconSlot('mute', 'state-ico') + t('infoMuted') : c.archived ? _iconSlot('archive', 'state-ico') + t('infoArchived') : _iconSlot('check', 'state-ico') + t('infoActive')),
+        c.pinned ? _iconSlot('pin', 'state-ico') + t('infoPinned') : '',
         (c.labels || []).length > 0 ? t('infoLabels') + ': ' + esc(c.labels.join(', ')) : '',
         '',
         '<b>' + t('infoConnection') + '</b>',
@@ -15486,7 +15529,7 @@ async function initMessenger(dbName) {
       activeContact.archived = !activeContact.archived;
       await dbPut('contacts', activeContact);
       const [box, d] = _cmdPanelEl('chat-empty');
-      d.textContent = '📦 ' + (activeContact.archived ? t('toastArchived') : t('toastUnarchived'));
+      safeSetHTML(d, _iconSlot('archive', 'state-ico') + esc(activeContact.archived ? t('toastArchived') : t('toastUnarchived')));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       renderContacts();
     }
@@ -15877,6 +15920,7 @@ if (PLATFORM === 'electron' && window.breeze) {
 
   // v3.2: Scroll-to-bottom FAB
   const _scrollFab = _DOM.get('scroll-fab');
+  const _scrollCount = _scrollFab?.querySelector('.scroll-count');
   const _msgBox = _DOM.get('msg-messages');
   let _newMsgsWhileScrolled = 0;
   if (_msgBox && _scrollFab) {
@@ -15885,7 +15929,7 @@ if (PLATFORM === 'electron' && window.breeze) {
       if (isNearBottom) {
         _scrollFab.classList.add('hidden');
         _newMsgsWhileScrolled = 0;
-        _scrollFab.textContent = '↓';
+        if (_scrollCount) _scrollCount.textContent = '';
       } else {
         _scrollFab.classList.remove('hidden');
       }
@@ -15893,7 +15937,7 @@ if (PLATFORM === 'electron' && window.breeze) {
     _scrollFab.addEventListener('click', () => {
       _msgBox.scrollTop = _msgBox.scrollHeight;
       _newMsgsWhileScrolled = 0;
-      _scrollFab.textContent = '↓';
+      if (_scrollCount) _scrollCount.textContent = '';
     });
   }
   // v3.5: Increment badge when new message arrives while scrolled up
@@ -15902,7 +15946,7 @@ if (PLATFORM === 'electron' && window.breeze) {
     const isNearBottom = _msgBox.scrollHeight - _msgBox.scrollTop - _msgBox.clientHeight < 200;
     if (!isNearBottom) {
       _newMsgsWhileScrolled++;
-      _scrollFab.textContent = _newMsgsWhileScrolled > 0 ? `↓ ${_newMsgsWhileScrolled}` : '↓';
+      if (_scrollCount) _scrollCount.textContent = _newMsgsWhileScrolled > 0 ? String(_newMsgsWhileScrolled) : '';
     }
   }
 

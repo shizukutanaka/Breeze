@@ -66,8 +66,8 @@ describe('(a) voice and dictation buttons swap SVGs instead of emoji text', () =
   });
 
   it('both buttons carry a second, initially hidden state icon', () => {
-    expect(buttonChunk('b-msg-voice')).toContain('class="ico ico-stop hidden"');
-    expect(buttonChunk('b-msg-stt')).toContain('class="ico ico-rec hidden"');
+    expect(buttonChunk('b-msg-voice')).toContain('data-icon-class="ico-stop hidden"');
+    expect(buttonChunk('b-msg-stt')).toContain('data-icon-class="ico-rec hidden"');
   });
 });
 

@@ -1,4 +1,5 @@
 import { comparisonQR, compareQR, legacySafetyNumber } from './safety-number.js';
+import { iconSlot } from './icons.js';
 export { negotiatedSafetyNumber } from './safety-number.js';
 
 const utf8 = new TextEncoder();
@@ -130,7 +131,7 @@ export function createContactVerify(D) {
     let combined = '';
     try { combined = await contactSafetyNumber(D.local(), fresh); } catch { /* cannot confirm without both pins */ }
     const overlay = document.createElement('div'); overlay.className = 'overlay overlay-dark';
-    D.safeSetHTML(overlay, `<div class="modal verification-modal"><div class="i-emoji-lg">🔐</div><div class="fw-700 text-sm mb-2">${D.t('safetyNumber')}</div><div class="i-safety-num">${D.esc(num || '')}</div><div class="text-xs color-t3 mb-3">${D.t('safetyDesc')}</div><div class="text-xs mb-3" id="kt-audit-status">${D.esc(D.t('ktChecking'))}</div></div>`);
+    D.safeSetHTML(overlay, `<div class="modal verification-modal"><div class="i-emoji-lg">${iconSlot('lock')}</div><div class="fw-700 text-sm mb-2">${D.t('safetyNumber')}</div><div class="i-safety-num">${D.esc(num || '')}</div><div class="text-xs color-t3 mb-3">${D.t('safetyDesc')}</div><div class="text-xs mb-3" id="kt-audit-status">${D.esc(D.t('ktChecking'))}</div></div>`);
     const modal = overlay.firstElementChild;
     const both = document.createElement('p'); both.className = 'text-xs'; both.textContent = D.t('cvCompare') + (combined ? '\n' + combined : '\n' + D.t('cvMissingPin')); modal.appendChild(both);
     const strict = document.createElement('label'), checkbox = document.createElement('input'); strict.className = 'verification-strict'; checkbox.type = 'checkbox'; checkbox.checked = s.strict !== false;

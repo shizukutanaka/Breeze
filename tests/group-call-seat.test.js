@@ -36,7 +36,7 @@ function makeEl() {
     classList: { add() {}, remove() {}, toggle() {} },
     textContent: '', innerHTML: '',
     srcObject: null, remove() {},
-    append() {}, appendChild() {}, setAttribute() {},
+    append() {}, appendChild() {}, replaceChildren() {}, setAttribute() {},
   };
 }
 
