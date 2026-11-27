@@ -206,6 +206,7 @@
   "gateServerTitle": "Պահանջվում է սերվեր",
   "gateServerDesc": "Breeze-ը չունի պաշտոնական սերվեր։ Սկսելու համար ավելացրեք ձեր սեփական սերվերը։ Միայն հրավերի հղումը բավարար չէ՝ դուք դեռ պետք է ունենաք ձեր սեփական սերվերը։",
   "gateAddServer": "Ավելացրեք ձեր սերվերը",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Նախ ստեղծեք ինքնություն մեսենջերում",
   "deleted": "Հաղորդագրությունը ջնջվել է",
   "edited": "(խմբագրված)",

@@ -165,6 +165,7 @@
   "gateServerTitle": "A server is required",
   "gateServerDesc": "Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.",
   "gateAddServer": "Add your server",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "මුලින්ම මැසෙන්ජර් එකේ අනන්‍යතාවයක් හදාගන්න",
   "deleted": "පණිවිඩය මකා ඇත",
   "edited": "(සංස්කරණය)",

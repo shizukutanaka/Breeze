@@ -206,6 +206,7 @@
   "gateServerTitle": "אַ סערווער איז נייטיק",
   "gateServerDesc": "Breeze האָט קיין אַפישאַלן סערווער נישט. לייג צו דײַן אייגענעם סערווער כדי צו אָנהייבן. אַ פאַרבעטונג־לינק אליין איז נישט גענוג — דו דאַרפֿסט נאָך אַרויס אַן אייגענעם סערווער.",
   "gateAddServer": "לייג צו דײַן סערווער",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "שאַפֿן אַן אידענטיטעט אין דער שליח ערשטער",
   "deleted": "אָנזאָג אויסגעמעקט",
   "edited": "(רעדאַקטירט)",

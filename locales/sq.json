@@ -206,6 +206,7 @@
   "gateServerTitle": "Kërkohet një server",
   "gateServerDesc": "Breeze nuk ka server zyrtar. Shto serverin tënd për të filluar. Një lidhje ftesë vetëm nuk mjafton — ju ende keni nevojë për një server tuajin.",
   "gateAddServer": "Shto serverin tënd",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Krijo një identitet te lajmëtari fillimisht",
   "deleted": "Mesazhi u fshi",
   "edited": "(redaktuar)",
