@@ -539,6 +539,8 @@
   "relayAddDuplicate": "Tá an sealaí sin cheana féin i do reaisí bhaile.",
   "relayAddKeyless": "That relay has no identity key, so it cannot be pinned — it cannot be added as a home relay.",
   "relayAddUnreachable": "That relay could not be verified — check the URL and try again.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Cuir seilse baile leis: {0}",
   "relayRemoved": "Bainthe seilse baile: {0}",
   "relayFailover": "Níor fhreagair Relay {0} — seachadadh trí {1} in ionad.",

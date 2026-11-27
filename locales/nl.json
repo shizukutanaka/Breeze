@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Die relay staat al in je thuisrelays.",
   "relayAddKeyless": "Die relay heeft geen identiteitssleutel, dus deze kan niet worden vastgezet — deze kan niet als thuisrelay worden toegevoegd.",
   "relayAddUnreachable": "Die relay kon niet worden geverifieerd — controleer de URL en probeer opnieuw.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Thuisrelay toegevoegd: {0}",
   "relayRemoved": "Thuisrelay verwijderd: {0}",
   "relayFailover": "Relay {0} antwoordde niet — in plaats daarvan afgeleverd via {1}.",

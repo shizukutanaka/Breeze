@@ -259,6 +259,8 @@
   "relayAddDuplicate": "Ese relé ya está entre tus relés de inicio.",
   "relayAddKeyless": "Ese relé no tiene clave de identidad, así que no se puede fijar: no puede añadirse como relé de inicio.",
   "relayAddUnreachable": "No se pudo verificar ese relé: comprueba la URL e inténtalo de nuevo.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Relé de inicio añadido: {0}",
   "relayRemoved": "Relé de inicio eliminado: {0}",
   "relayRemoveConfirm": "¿Quitar {0} de tus relés de inicio? El relé conserva los datos que ya tiene; simplemente deja de recibir copias nuevas.",

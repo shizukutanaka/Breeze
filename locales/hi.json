@@ -480,6 +480,8 @@
   "relayAddDuplicate": "वह रिले पहले से आपके होम रिले में है।",
   "relayAddKeyless": "उस रिले के पास पहचान कुंजी नहीं है, इसलिए उसे पिन नहीं किया जा सकता — उसे होम रिले के रूप में नहीं जोड़ा जा सकता।",
   "relayAddUnreachable": "उस रिले को सत्यापित नहीं किया जा सका — URL जाँचकर फिर कोशिश करें।",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "होम रिले जोड़ा गया: {0}",
   "relayRemoved": "होम रिले हटाया गया: {0}",
   "relayFailover": "रिले {0} ने जवाब नहीं दिया — इसके बजाय {1} से पहुँचाया गया।",

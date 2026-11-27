@@ -533,6 +533,8 @@
   "relayAddDuplicate": "Errele hori zure erreletxeetan dago.",
   "relayAddKeyless": "That relay has no identity key, so it cannot be pinned — it cannot be added as a home relay.",
   "relayAddUnreachable": "That relay could not be verified — check the URL and try again.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Etxeko igorlea gehituta: {0}",
   "relayRemoved": "Etxeko igorlea kenduta: {0}",
   "relayFailover": "Errelea {0}-(e)k ez du erantzun - horren ordez {1} bidez bidali da.",

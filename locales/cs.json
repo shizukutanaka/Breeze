@@ -484,6 +484,8 @@
   "relayAddDuplicate": "Tento relay už ve vašich domácích relay je.",
   "relayAddKeyless": "Tento relay nemá klíč identity, takže ho nelze připnout — nelze ho přidat jako domácí relay.",
   "relayAddUnreachable": "Tento relay se nepodařilo ověřit — zkontrolujte URL a zkuste to znovu.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Domácí relay přidán: {0}",
   "relayRemoved": "Domácí relay odebrán: {0}",
   "relayFailover": "Relay {0} neodpověděl — doručeno místo toho přes {1}.",

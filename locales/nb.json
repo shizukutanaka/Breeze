@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Det reléet er allerede blant hjemmereléene dine.",
   "relayAddKeyless": "Det reléet har ingen identitetsnøkkel, så det kan ikke festes — det kan ikke legges til som hjemmerelé.",
   "relayAddUnreachable": "Det reléet kunne ikke verifiseres — sjekk URL-en og prøv igjen.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Hjemmerelé lagt til: {0}",
   "relayRemoved": "Hjemmerelé fjernet: {0}",
   "relayFailover": "Relé {0} svarte ikke — levert via {1} i stedet.",

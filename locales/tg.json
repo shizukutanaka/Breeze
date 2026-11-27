@@ -535,6 +535,8 @@
   "relayAddDuplicate": "Ин эстафета аллакай дар релеҳои хонагии шумост.",
   "relayAddKeyless": "Он реле калиди шахсият надорад, аз ин рӯ онро пайваст кардан мумкин нест - онро ҳамчун релеи хонагӣ илова кардан мумкин нест.",
   "relayAddUnreachable": "Ин реле тасдиқ карда нашуд - URL-ро тафтиш кунед ва дубора кӯшиш кунед.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Эстафетаи хонагӣ илова карда шуд: {0}",
   "relayRemoved": "Эстафетаи хонагӣ хориҷ карда шуд: {0}",
   "relayFailover": "Эстафетаи {0} ҷавоб надод - ба ҷои он тавассути {1} расонида шуд.",

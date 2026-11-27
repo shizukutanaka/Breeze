@@ -2146,7 +2146,9 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     relayAddSelf: 'That URL is this relay itself — it is already your home relay.',
     relayAddDuplicate: 'That relay is already in your home relays.',
     relayAddKeyless: 'That relay has no identity key, so it cannot be pinned — it cannot be added as a home relay.',
-    relayAddUnreachable: 'That relay could not be verified — check the URL and try again.',
+    relayAddUnreachable: 'That relay could not be reached — check the URL and your connection, and make sure the server is running, then try again.',
+    relayAddTimeout: 'That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.',
+    relayAddNotBreeze: 'That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.',
     relayAdded: 'Home relay added: {0}',
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
@@ -4669,27 +4671,38 @@ async function initMessenger(dbName) {
   // answer (attestation naming a different key than health) counts
   // as no evidence, exactly as in step 4's check.
   async function _relayAttestCheck(base, expectedKey) {
+    const timeoutNamed = (e) => e?.name === 'TimeoutError' || e?.name === 'AbortError';
     let health = null;
+    let healthReason = 'unreachable';
     try {
-      const r = await fetchT(base + '/health').catch(() => null);
+      let r = null;
+      try { r = await fetchT(base + '/health'); }
+      catch(e) { healthReason = timeoutNamed(e) ? 'timeout' : 'unreachable'; }
+      if (r && !r.ok) healthReason = 'not-breeze';
       health = r?.ok ? await r.json().catch(() => null) : null;
-    } catch(e) { _dbg(e, 'relay-attest-check'); }
-    if (!health) return { verdict: 'unreachable', relayKey: null, health: null };
+      if (r?.ok && !health) healthReason = 'not-breeze';
+    } catch(e) { _dbg(e, 'relay-attest-check'); healthReason = timeoutNamed(e) ? 'timeout' : 'unreachable'; }
+    if (!health) return { verdict: 'unreachable', relayKey: null, health: null, reason: healthReason };
     const relayKey = typeof health.relayKey === 'string' && health.relayKey ? health.relayKey : null;
     if (!relayKey) return { verdict: 'keyless', relayKey: null, health };
     if (expectedKey && relayKey !== expectedKey) return { verdict: 'mismatch', relayKey, health };
     try {
       const nonce = [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
-      const resp = await fetchT(base + '/relay/attest', { method: 'POST', headers: _H, body: JSON.stringify({ nonce }) }).catch(() => null);
+      let attestReason = 'unreachable';
+      let resp = null;
+      try { resp = await fetchT(base + '/relay/attest', { method: 'POST', headers: _H, body: JSON.stringify({ nonce }) }); }
+      catch(e) { attestReason = timeoutNamed(e) ? 'timeout' : 'unreachable'; }
+      if (resp && !resp.ok) attestReason = 'not-breeze';
       const data = resp?.ok ? await resp.json().catch(() => null) : null;
-      if (!data) return { verdict: 'unreachable', relayKey, health };
+      if (resp?.ok && !data) attestReason = 'not-breeze';
+      if (!data) return { verdict: 'unreachable', relayKey, health, reason: attestReason };
       const verified = data.relayKey === relayKey && typeof data.sig === 'string'
         ? await verifySignature(`breeze-relay-attest:${relayKey}:${nonce}`, data.sig, relayKey)
         : null;
       if (verified === true) return { verdict: 'ok', relayKey, health };
       if (verified === false) return { verdict: 'mismatch', relayKey, health };
-      return { verdict: 'unreachable', relayKey, health };
-    } catch(e) { _dbg(e, 'relay-attest-check'); return { verdict: 'unreachable', relayKey, health }; }
+      return { verdict: 'unreachable', relayKey, health, reason: 'not-breeze' };
+    } catch(e) { _dbg(e, 'relay-attest-check'); return { verdict: 'unreachable', relayKey, health, reason: timeoutNamed(e) ? 'timeout' : 'unreachable' }; }
   }
   function _blockAddedRelay(relay, verdict) {
     _relayBlockedUrls.add(relay.url);
@@ -4791,7 +4804,7 @@ async function initMessenger(dbName) {
     if (homeRelays().some(r => r.url === url)) return { error: 'duplicate' };
     const r = await _relayAttestCheck(url + '/api', null);
     if (r.verdict === 'keyless') return { error: 'keyless' };
-    if (r.verdict !== 'ok') return { error: 'unreachable' };
+    if (r.verdict !== 'ok') return { error: r.reason === 'timeout' ? 'timeout' : r.reason === 'not-breeze' ? 'not-breeze' : 'unreachable' };
     return { url, relayKey: r.relayKey, health: r.health, fingerprint: await relayFingerprint(r.relayKey) };
   }
   async function addHomeRelay(entry) {
@@ -4825,7 +4838,7 @@ async function initMessenger(dbName) {
     if (!raw) return;
     const res = await attestNewRelay(raw);
     if (res.error) {
-      const errKey = { invalid: 'relayAddInvalid', self: 'relayAddSelf', duplicate: 'relayAddDuplicate', keyless: 'relayAddKeyless', unreachable: 'relayAddUnreachable' }[res.error] || 'relayAddUnreachable';
+      const errKey = { invalid: 'relayAddInvalid', self: 'relayAddSelf', duplicate: 'relayAddDuplicate', keyless: 'relayAddKeyless', unreachable: 'relayAddUnreachable', timeout: 'relayAddTimeout', 'not-breeze': 'relayAddNotBreeze' }[res.error] || 'relayAddUnreachable';
       showToast(t(errKey), 'error', 8000);
       return;
     }
@@ -8376,7 +8389,11 @@ async function initMessenger(dbName) {
       const url = _normalizeRelayUrl(trimmed);
       if (!url) { showToast(t('relayAddInvalid'), 'error'); return; }
       const r = await _relayAttestCheck(url + '/api', null);
-      if (r.verdict === 'unreachable') { showToast(t('relayAddUnreachable'), 'error'); return; }
+      if (r.verdict === 'unreachable') {
+        const errKey = r.reason === 'timeout' ? 'relayAddTimeout' : r.reason === 'not-breeze' ? 'relayAddNotBreeze' : 'relayAddUnreachable';
+        showToast(t(errKey), 'error');
+        return;
+      }
       let pin = '';
       if (r.verdict === 'ok') {
         const fp = await relayFingerprint(r.relayKey);

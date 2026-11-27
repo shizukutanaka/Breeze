@@ -478,6 +478,8 @@
   "relayAddDuplicate": "Relay náà ti wà nínú àwọn relay ilé rẹ tẹ́lẹ̀.",
   "relayAddKeyless": "Relay náà kò ní kọ́kọ́rọ́ ìdánimọ̀, nítorí náà a kò lè fi ín sílẹ̀ — a kò lè fi ín kún gẹ́gẹ́ bí relay ilé.",
   "relayAddUnreachable": "A kò lè jẹ́rìí relay náà — ṣàyẹ̀wò URL kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "A ti fi relay ilé kún: {0}",
   "relayRemoved": "A ti yọ relay ilé kúrò: {0}",
   "relayFailover": "Relay {0} kò dáhùn — a fi ránṣẹ́ nípasẹ̀ {1} dípò rẹ̀.",

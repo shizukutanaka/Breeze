@@ -478,6 +478,8 @@
   "relayAddDuplicate": "ထိုရီလေးသည် သင့်မူရင်း ရီလေးများတွင် ရှိပြီးသားပါ။",
   "relayAddKeyless": "ထိုရီလေးတွင် အမှတ်အသား သော့ မရှိပါ၊ ထို့ကြောင့် ပင်ထိုး၍ မရပါ — မူရင်း ရီလေးအဖြစ် ထည့်၍ မရပါ။",
   "relayAddUnreachable": "ထိုရီလေးကို အတည်ပြု၍ မရပါ — URL ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "မူရင်း ရီလေး ထည့်ပြီးပါပြီ: {0}",
   "relayRemoved": "မူရင်း ရီလေး ဖယ်ရှားပြီးပါပြီ: {0}",
   "relayFailover": "ရီလေး {0} က မဖြေပါ — အစား {1} မှတဆင့် ပို့ပြီးပါပြီ။",

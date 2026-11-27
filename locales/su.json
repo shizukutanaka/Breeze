@@ -533,6 +533,8 @@
   "relayAddDuplicate": "Éta relay parantos aya dina relay bumi anjeun.",
   "relayAddKeyless": "Éta relay teu gaduh konci idéntitas, janten henteu tiasa disematkeun - éta henteu tiasa ditambah salaku relay bumi.",
   "relayAddUnreachable": "Relay éta henteu tiasa diverifikasi - pariksa URL sareng cobian deui.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Imah relay ditambahkeun: {0}",
   "relayRemoved": "Imah relay dihapus: {0}",
   "relayFailover": "Relay {0} teu ngajawab - dikirimkeun via {1} gantina.",

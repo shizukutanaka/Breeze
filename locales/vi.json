@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Máy chủ chuyển tiếp đó đã có trong danh sách chính của bạn.",
   "relayAddKeyless": "Máy chủ chuyển tiếp đó không có khóa danh tính, nên không thể ghim — không thể thêm làm máy chủ chính.",
   "relayAddUnreachable": "Không thể xác minh máy chủ chuyển tiếp đó — kiểm tra URL và thử lại.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Đã thêm máy chủ chuyển tiếp chính: {0}",
   "relayRemoved": "Đã xóa máy chủ chuyển tiếp chính: {0}",
   "relayFailover": "Máy chủ chuyển tiếp {0} không trả lời — đã gửi qua {1} thay thế.",

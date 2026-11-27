@@ -535,6 +535,8 @@
   "relayAddDuplicate": "دا ریل لا دمخه ستاسو په کور کې دی.",
   "relayAddKeyless": "دا ریل د پیژندنې کیلي نلري، نو دا نشي پین کیدی - دا د کور ریل په توګه نشي اضافه کیدی.",
   "relayAddUnreachable": "دا ریل تایید نشي - URL وګورئ او بیا هڅه وکړئ.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "د کور ریل اضافه شوی: {0}",
   "relayRemoved": "د کور ریل لرې شوی: {0}",
   "relayFailover": "Relay {0} ځواب ورنکړ - د دې پرځای د {1} له لارې ورکړل شو.",

@@ -484,6 +484,8 @@
   "relayAddDuplicate": "Это реле уже есть в ваших домашних реле.",
   "relayAddKeyless": "У этого реле нет ключа личности, поэтому его нельзя закрепить — его нельзя добавить как домашнее реле.",
   "relayAddUnreachable": "Это реле не удалось проверить — проверьте URL и повторите.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Домашнее реле добавлено: {0}",
   "relayRemoved": "Домашнее реле удалено: {0}",
   "relayFailover": "Реле {0} не ответило — доставлено через {1}.",

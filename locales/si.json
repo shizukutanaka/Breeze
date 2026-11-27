@@ -535,6 +535,8 @@
   "relayAddDuplicate": "එම රිලේ දැනටමත් ඔබගේ නිවසේ රිලේ වල ඇත.",
   "relayAddKeyless": "එම රිලේට අනන්‍යතා යතුරක් නැත, එබැවින් එය ඇමිණිය නොහැක - එය නිවසේ රිලේ එකක් ලෙස එක් කළ නොහැක.",
   "relayAddUnreachable": "එම රිලේ සත්‍යාපනය කළ නොහැකි විය - URL පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "මුල් පිටුව රිලේ එකතු කරන ලදී: {0}",
   "relayRemoved": "මුල් පිටුව රිලේ ඉවත් කරන ලදී: {0}",
   "relayFailover": "Relay {0} පිළිතුරු දුන්නේ නැත - ඒ වෙනුවට {1} හරහා බෙදා හරිනු ලැබේ.",

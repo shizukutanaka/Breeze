@@ -535,6 +535,8 @@
   "relayAddDuplicate": "त्यो रिले पहिले नै तपाइँको घर रिले मा छ।",
   "relayAddKeyless": "त्यो रिलेसँग कुनै पहिचान कुञ्जी छैन, त्यसैले यसलाई पिन गर्न सकिँदैन — यसलाई गृह रिलेको रूपमा थप्न सकिँदैन।",
   "relayAddUnreachable": "त्यो रिले प्रमाणित गर्न सकिएन — URL जाँच गर्नुहोस् र पुन: प्रयास गर्नुहोस्।",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "गृह रिले थपियो: {0}",
   "relayRemoved": "गृह रिले हटाइयो: {0}",
   "relayFailover": "रिले {0} ले जवाफ दिएन — यसको सट्टा {1} मार्फत डेलिभर गरियो।",

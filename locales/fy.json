@@ -478,6 +478,8 @@
   "relayAddDuplicate": "Dizze fertraging stiet al yn jo lokale thúsmap.",
   "relayAddKeyless": "Dizze fertraging hat gjin identiteitskaai, dy' t wol mooglik is om steat te steann. It kin net taheakke wurde as in persoanlike relais.",
   "relayAddUnreachable": "Dit databank kin net falidearre wurde. Kontrolearje it URL- adres en besykje it nochris.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Persoanlike map taheakje: {0}",
   "relayRemoved": "Home relay removed: {0}",
   "relayFailover": "Op 'e nij begjinne as {0} is net reagearre — levere troch {1}",

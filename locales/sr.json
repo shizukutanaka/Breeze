@@ -482,6 +482,8 @@
   "relayAddDuplicate": "Taj relej je već među vašim kućnim relejima.",
   "relayAddKeyless": "Taj relej nema ključ identiteta, pa se ne može zakačiti — ne može se dodati kao kućni relej.",
   "relayAddUnreachable": "Taj relej nije mogao da se proveri — proverite URL i pokušajte ponovo.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Kućni relej je dodat: {0}",
   "relayRemoved": "Kućni relej je uklonjen: {0}",
   "relayFailover": "Relej {0} nije odgovorio — isporučeno preko {1} umesto njega.",

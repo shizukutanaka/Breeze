@@ -533,6 +533,8 @@
   "relayAddDuplicate": "relay ນັ້ນມີຢູ່ໃນ relay ເຮືອນຂອງທ່ານແລ້ວ.",
   "relayAddKeyless": "relay ນັ້ນບໍ່ມີກະແຈຕົວຕົນ, ສະນັ້ນມັນບໍ່ສາມາດຖືກ pinned — ມັນບໍ່ສາມາດເພີ່ມເປັນ relay ເຮືອນ.",
   "relayAddUnreachable": "Relay ນັ້ນບໍ່ສາມາດຢັ້ງຢືນໄດ້ — ກະລຸນາກວດເບິ່ງ URL ແລະລອງໃໝ່ອີກ.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "ເພີ່ມ Relay ເຮືອນ: {0}",
   "relayRemoved": "ການຖອດ Relay ເຮືອນອອກ: {0}",
   "relayFailover": "Relay {0} ບໍ່ຕອບ — ສົ່ງຜ່ານ {1} ແທນ.",

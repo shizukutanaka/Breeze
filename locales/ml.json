@@ -480,6 +480,8 @@
   "relayAddDuplicate": "ആ റിലേ ഇതിനകം നിങ്ങളുടെ ഹോം റിലേകളിലുണ്ട്.",
   "relayAddKeyless": "ആ റിലേയ്ക്ക് ഐഡന്റിറ്റി കീ ഇല്ല, അതിനാൽ അത് പിൻ ചെയ്യാനാവില്ല — അത് ഹോം റിലേയായി ചേർക്കാനാവില്ല.",
   "relayAddUnreachable": "ആ റിലേ പരിശോധിക്കാനായില്ല — URL പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "ഹോം റിലേ ചേർത്തു: {0}",
   "relayRemoved": "ഹോം റിലേ നീക്കം ചെയ്തു: {0}",
   "relayFailover": "റിലേ {0} മറുപടി നൽകിയില്ല — പകരം {1} വഴി എത്തിച്ചു.",

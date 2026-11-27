@@ -478,6 +478,8 @@
   "relayAddDuplicate": "该中继已在你的主中继列表中。",
   "relayAddKeyless": "该中继没有身份密钥，因此无法固定 — 不能添加为主中继。",
   "relayAddUnreachable": "无法验证该中继 — 请检查 URL 并重试。",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "主中继已添加：{0}",
   "relayRemoved": "主中继已移除：{0}",
   "relayFailover": "中继 {0} 没有响应 — 改为通过 {1} 送达。",

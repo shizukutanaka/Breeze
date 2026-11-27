@@ -480,6 +480,8 @@
   "relayAddDuplicate": "ఆ రిలే ఇప్పటికే మీ హోమ్ రిలేలలో ఉంది.",
   "relayAddKeyless": "ఆ రిలేకు గుర్తింపు కీ లేదు, కాబట్టి దానిని పిన్ చేయలేరు — దానిని హోమ్ రిలేగా జోడించలేరు.",
   "relayAddUnreachable": "ఆ రిలేను ధృవీకరించలేకపోయింది — URL ను తనిఖీ చేసి మళ్లీ ప్రయత్నించండి.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "హోమ్ రిలే జోడించబడింది: {0}",
   "relayRemoved": "హోమ్ రిలే తీసివేయబడింది: {0}",
   "relayFailover": "రిలే {0} స్పందించలేదు — బదులుగా {1} ద్వారా అందించబడింది.",

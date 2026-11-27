@@ -535,6 +535,8 @@
   "relayAddDuplicate": "ಆ ರಿಲೇ ಈಗಾಗಲೇ ನಿಮ್ಮ ಹೋಮ್ ರಿಲೇಗಳಲ್ಲಿದೆ.",
   "relayAddKeyless": "ಆ ರಿಲೇಗೆ ಯಾವುದೇ ಗುರುತಿನ ಕೀ ಇಲ್ಲ, ಆದ್ದರಿಂದ ಅದನ್ನು ಪಿನ್ ಮಾಡಲಾಗುವುದಿಲ್ಲ - ಇದನ್ನು ಹೋಮ್ ರಿಲೇ ಆಗಿ ಸೇರಿಸಲಾಗುವುದಿಲ್ಲ.",
   "relayAddUnreachable": "ಆ ರಿಲೇಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗಲಿಲ್ಲ - URL ಅನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "ಹೋಮ್ ರಿಲೇ ಸೇರಿಸಲಾಗಿದೆ: {0}",
   "relayRemoved": "ಹೋಮ್ ರಿಲೇ ತೆಗೆದುಹಾಕಲಾಗಿದೆ: {0}",
   "relayFailover": "ರಿಲೇ {0} ಉತ್ತರಿಸಲಿಲ್ಲ - ಬದಲಿಗೆ {1} ಮೂಲಕ ವಿತರಿಸಲಾಗಿದೆ.",

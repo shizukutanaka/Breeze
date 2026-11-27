@@ -258,6 +258,8 @@
   "relayAddDuplicate": "Relai tersebut sudah ada di relai rumah Anda.",
   "relayAddKeyless": "Relai tersebut tidak memiliki kunci identitas, sehingga tidak dapat disematkan — tidak dapat ditambahkan sebagai relai rumah.",
   "relayAddUnreachable": "Relai tersebut tidak dapat diverifikasi — periksa URL dan coba lagi.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Relai rumah ditambahkan: {0}",
   "relayRemoved": "Relai rumah dihapus: {0}",
   "relayRemoveConfirm": "Hapus {0} dari relai rumah Anda? Relai tetap menyimpan data yang sudah dimilikinya; hanya berhenti menerima salinan baru.",

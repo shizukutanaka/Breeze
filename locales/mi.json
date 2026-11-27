@@ -535,6 +535,8 @@
   "relayAddDuplicate": "Ko taua rerei kei roto i o rerei kaainga.",
   "relayAddKeyless": "Karekau he taviri tuakiri o taua rei, no reira kare e taea te titi - kaore e taea te taapiri hei rei kaainga.",
   "relayAddUnreachable": "Kare e taea te manatoko taua rei - tirohia te URL ka ngana ano.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Taapiri kainga: {0}",
   "relayRemoved": "Kua tangohia te taara o te kainga: {0}",
   "relayFailover": "Kare a Relay {0} i whakautu - ka tukuna ma {1} kē.",

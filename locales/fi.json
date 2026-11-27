@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Tämä välittäjä on jo kotivälittäjissäsi.",
   "relayAddKeyless": "Tällä välittäjällä ei ole henkilöllisyysavainta, joten sitä ei voi kiinnittää — sitä ei voi lisätä kotivälittäjäksi.",
   "relayAddUnreachable": "Tätä välittäjää ei voitu vahvistaa — tarkista URL ja yritä uudelleen.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Kotivälittäjä lisätty: {0}",
   "relayRemoved": "Kotivälittäjä poistettu: {0}",
   "relayFailover": "Välittäjä {0} ei vastannut — toimitettiin sen sijaan välittäjän {1} kautta.",

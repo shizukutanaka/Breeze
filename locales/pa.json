@@ -480,6 +480,8 @@
   "relayAddDuplicate": "ਉਹ ਰਿਲੇਅ ਪਹਿਲਾਂ ਹੀ ਤੁਹਾਡੇ ਹੋਮ ਰਿਲੇਅ ਵਿੱਚ ਹੈ।",
   "relayAddKeyless": "ਉਸ ਰਿਲੇਅ ਕੋਲ ਕੋਈ ਪਛਾਣ ਕੁੰਜੀ ਨਹੀਂ, ਇਸ ਲਈ ਇਸਨੂੰ ਪਿੰਨ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ — ਇਸਨੂੰ ਹੋਮ ਰਿਲੇਅ ਵਜੋਂ ਸ਼ਾਮਲ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ।",
   "relayAddUnreachable": "ਉਸ ਰਿਲੇਅ ਦੀ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੋ ਸਕੀ — URL ਦੇਖ ਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "ਹੋਮ ਰਿਲੇਅ ਸ਼ਾਮਲ ਹੋ ਗਿਆ: {0}",
   "relayRemoved": "ਹੋਮ ਰਿਲੇਅ ਹਟਾ ਦਿੱਤਾ ਗਿਆ: {0}",
   "relayFailover": "ਰਿਲੇਅ {0} ਨੇ ਜਵਾਬ ਨਹੀਂ ਦਿੱਤਾ — ਇਸ ਦੀ ਬਜਾਏ {1} ਰਾਹੀਂ ਪਹੁੰਚਾਇਆ ਗਿਆ।",

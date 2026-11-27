@@ -482,6 +482,8 @@
   "relayAddDuplicate": "Tha an t-ath-leasachadh sin anns na h-ath-leasachaidhean a' bhaile agad mar-thà.",
   "relayAddKeyless": "Chan eil iuchair aitheantais sam bith air an ath-sheachadadh sin, mar sin chan urrainn dha a bhith pionndachadh — chan urrainn dha a chur ris mar ath-leasachadh baile.",
   "relayAddUnreachable": "Cha b' urrainn dhuinn an ath-shlàinte sin a dhearbhadh — sgrùd an URL is feuch ris a-rithist.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Cuirear ath-sheachad sa bhaile ris: {0}",
   "relayRemoved": "Chaidh ath-sheachad a' bhaile a thoirt air falbh: {0}",
   "relayFailover": "Cha deach {0} a fhreagairt air ais — seachad tro {1} an àite.",

@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Quel relay è già nei tuoi relay principali.",
   "relayAddKeyless": "Quel relay non ha una chiave di identità, quindi non può essere fissato — non può essere aggiunto come relay principale.",
   "relayAddUnreachable": "Quel relay non è stato verificato — controlla l'URL e riprova.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Relay principale aggiunto: {0}",
   "relayRemoved": "Relay principale rimosso: {0}",
   "relayFailover": "Il relay {0} non ha risposto — consegnato invece tramite {1}.",

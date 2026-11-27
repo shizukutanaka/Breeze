@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Αυτό το relay υπάρχει ήδη στα κύρια relay σας.",
   "relayAddKeyless": "Αυτό το relay δεν έχει κλειδί ταυτότητας, οπότε δεν μπορεί να καρφιτσωθεί — δεν μπορεί να προστεθεί ως κύριο relay.",
   "relayAddUnreachable": "Αυτό το relay δεν μπόρεσε να επαληθευτεί — ελέγξτε το URL και δοκιμάστε ξανά.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Το κύριο relay προστέθηκε: {0}",
   "relayRemoved": "Το κύριο relay αφαιρέθηκε: {0}",
   "relayFailover": "Το relay {0} δεν απάντησε — παραδόθηκε μέσω {1}.",

@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Ez a közvetítő már szerepel az otthoni közvetítőid között.",
   "relayAddKeyless": "Ennek a közvetítőnek nincs azonosítókulcsa, ezért nem rögzíthető — nem adható hozzá otthoni közvetítőként.",
   "relayAddUnreachable": "Ezt a közvetítőt nem sikerült ellenőrizni — ellenőrizd az URL-t, és próbáld újra.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Otthoni közvetítő hozzáadva: {0}",
   "relayRemoved": "Otthoni közvetítő eltávolítva: {0}",
   "relayFailover": "A közvetítő {0} nem válaszolt — helyette ezen keresztül kézbesítve: {1}.",

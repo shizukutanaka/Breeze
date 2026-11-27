@@ -480,6 +480,8 @@
   "relayAddDuplicate": "آن رله همین حالا در رله‌های خانگی شماست.",
   "relayAddKeyless": "آن رله کلید هویتی ندارد، پس نمی‌توان آن را سنجاق کرد — نمی‌توان آن را به‌عنوان رله خانگی افزود.",
   "relayAddUnreachable": "آن رله راستی‌آزمایی نشد — نشانی را بررسی کنید و دوباره تلاش کنید.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "رله خانگی اضافه شد: {0}",
   "relayRemoved": "رله خانگی حذف شد: {0}",
   "relayFailover": "رله {0} پاسخ نداد — به‌جای آن از طریق {1} تحویل داده شد.",

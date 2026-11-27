@@ -535,6 +535,8 @@
   "relayAddDuplicate": "Aia kēlā relay i kou home relay.",
   "relayAddKeyless": "ʻAʻohe kī ʻike o kēlā relay, no laila ʻaʻole hiki ke hoʻopaʻa ʻia - ʻaʻole hiki ke hoʻohui ʻia ma ke ʻano he relay home.",
   "relayAddUnreachable": "ʻAʻole hiki ke hōʻoia ʻia kēlā relay - e nānā i ka URL a hoʻāʻo hou.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Hoʻohui ʻia ka relay home: {0}",
   "relayRemoved": "Wehe ʻia ka relay home: {0}",
   "relayFailover": "ʻAʻole pane ʻo Relay {0} - hāʻawi ʻia ma {1} ma kahi.",

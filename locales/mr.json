@@ -535,6 +535,8 @@
   "relayAddDuplicate": "तो रिले तुमच्या घरच्या रिलेमध्ये आधीच आहे.",
   "relayAddKeyless": "त्या रिलेमध्ये कोणतीही ओळख की नाही, म्हणून ती पिन केली जाऊ शकत नाही — ती होम रिले म्हणून जोडली जाऊ शकत नाही.",
   "relayAddUnreachable": "तो रिले सत्यापित करणे शक्य नाही — URL तपासा आणि पुन्हा प्रयत्न करा.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "होम रिले जोडले: {0}",
   "relayRemoved": "होम रिले काढले: {0}",
   "relayFailover": "रिले {0} ने उत्तर दिले नाही — त्याऐवजी {1} द्वारे वितरित केले.",

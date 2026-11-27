@@ -482,6 +482,8 @@
   "relayAddDuplicate": "Taj je relej već među vašim matičnim relejima.",
   "relayAddKeyless": "Taj relej nema ključ identiteta pa se ne može prikvačiti — ne može se dodati kao matični relej.",
   "relayAddUnreachable": "Taj relej nije bilo moguće provjeriti — provjerite URL i pokušajte ponovno.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Matični relej je dodan: {0}",
   "relayRemoved": "Matični relej je uklonjen: {0}",
   "relayFailover": "Relej {0} nije odgovorio — dostavljeno putem {1}.",

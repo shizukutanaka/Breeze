@@ -535,6 +535,8 @@
   "relayAddDuplicate": "Тэр буухиа таны гэрийн релейд аль хэдийн орсон байна.",
   "relayAddKeyless": "Энэ реле нь таних түлхүүргүй тул үүнийг бэхлэх боломжгүй - үүнийг гэрийн реле болгон нэмэх боломжгүй.",
   "relayAddUnreachable": "Энэ релейг баталгаажуулж чадсангүй — URL хаягийг шалгаад дахин оролдоно уу.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Гэрийн реле нэмсэн: {0}",
   "relayRemoved": "Гэрийн реле хасагдсан: {0}",
   "relayFailover": "{0} буухиа хариу өгсөнгүй - оронд нь {1}-ээр хүргэгдсэн.",

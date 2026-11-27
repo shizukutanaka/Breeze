@@ -482,6 +482,8 @@
   "relayAddDuplicate": "Гэта перадача ужо ў вашых хатніх перадаць.",
   "relayAddKeyless": "Рэле не мае ключа профіля, таму ён не можа быць змяшчаны - ён не можа быць дададзены ў якасці хатняга пераслання.",
   "relayAddUnreachable": "Рэлея не можа быць праверана: праверце адрас і паспрабуйце зноў.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Дададзенае хатняе реле: {0}",
   "relayRemoved": "Хатняя перадача выдаленыя: {0}",
   "relayFailover": "Relay {0} didn't answer — delivered via {1} instead.",

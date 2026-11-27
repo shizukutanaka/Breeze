@@ -258,6 +258,8 @@
   "relayAddDuplicate": "รีเลย์นั้นอยู่ในรีเลย์หลักของคุณอยู่แล้ว",
   "relayAddKeyless": "รีเลย์นั้นไม่มีคีย์ระบุตัวตน จึงปักหมุดไม่ได้ — เพิ่มเป็นรีเลย์หลักไม่ได้",
   "relayAddUnreachable": "ไม่สามารถยืนยันรีเลย์นั้นได้ — โปรดตรวจสอบ URL แล้วลองอีกครั้ง",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "เพิ่มรีเลย์หลักแล้ว: {0}",
   "relayRemoved": "ลบรีเลย์หลักแล้ว: {0}",
   "relayRemoveConfirm": "ลบ {0} ออกจากรีเลย์หลักของคุณหรือไม่? รีเลย์จะเก็บข้อมูลที่มีอยู่เดิมไว้ เพียงแต่จะไม่ได้รับสำเนาใหม่อีกต่อไป",

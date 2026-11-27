@@ -480,6 +480,8 @@
   "relayAddDuplicate": "Bu aktarıcı zaten ana aktarıcılarınız arasında.",
   "relayAddKeyless": "Bu aktarıcının kimlik anahtarı yok, bu yüzden sabitlenemez — ana aktarıcı olarak eklenemez.",
   "relayAddUnreachable": "Bu aktarıcı doğrulanamadı — URL’yi kontrol edip yeniden deneyin.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Ana aktarıcı eklendi: {0}",
   "relayRemoved": "Ana aktarıcı kaldırıldı: {0}",
   "relayFailover": "Aktarıcı {0} yanıt vermedi — bunun yerine {1} üzerinden teslim edildi.",

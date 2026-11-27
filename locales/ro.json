@@ -482,6 +482,8 @@
   "relayAddDuplicate": "Acest releu este deja în releele tale de domiciliu.",
   "relayAddKeyless": "Acest releu nu are cheie de identitate, deci nu poate fi fixat — nu poate fi adăugat ca releu de domiciliu.",
   "relayAddUnreachable": "Acest releu nu a putut fi verificat — verifică URL-ul și reîncearcă.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Releu de domiciliu adăugat: {0}",
   "relayRemoved": "Releu de domiciliu eliminat: {0}",
   "relayFailover": "Releul {0} nu a răspuns — livrat prin {1} în schimb.",

@@ -258,6 +258,8 @@
   "relayAddDuplicate": "그 릴레이는 이미 홈 릴레이에 포함되어 있습니다.",
   "relayAddKeyless": "그 릴레이에는 신원 키가 없어 고정할 수 없습니다 — 홈 릴레이로 추가할 수 없습니다.",
   "relayAddUnreachable": "그 릴레이를 확인할 수 없습니다 — URL을 확인하고 다시 시도하세요.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "홈 릴레이가 추가되었습니다: {0}",
   "relayRemoved": "홈 릴레이가 삭제되었습니다: {0}",
   "relayRemoveConfirm": "{0}을(를) 홈 릴레이에서 삭제할까요? 릴레이에 이미 저장된 데이터는 그대로 남고, 새 복사본만 더 이상 전달되지 않습니다.",
