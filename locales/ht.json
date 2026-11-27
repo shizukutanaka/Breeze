@@ -478,6 +478,7 @@
   "relayAddSelf": "URL sa a se relè sa a li menm — li deja relè lakay ou.",
   "relayAddDuplicate": "Relè sa a deja nan relè lakay ou.",
   "relayAddKeyless": "Relè sa a pa gen kle idantite, kidonk li pa ka fikse — li pa ka ajoute kòm yon relè lakay.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relè sa a pa t ka verifye — tcheke URL la epi eseye ankò.",
   "relayAdded": "Relè lakay ajoute: {0}",
   "relayRemoved": "Relè lakay retire: {0}",

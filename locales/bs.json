@@ -479,6 +479,7 @@
   "relayAddSelf": "Taj URL je ovaj relej – već je vaš kućni relej.",
   "relayAddDuplicate": "Taj relej je već u vašim kućnim relejima.",
   "relayAddKeyless": "Taj relej nema kljuc identiteta, tako da se ne moze pričvrstiti – ne moze biti dodan kao kucni relej.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Taj relej nije mogao biti provjeren — provjerite URL i pokušajte ponovo.",
   "relayAdded": "Dodani početni relej: {0}",
   "relayRemoved": "Home relay removed: {0}",

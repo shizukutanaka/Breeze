@@ -477,6 +477,7 @@
   "relayAddSelf": "URL náà ni relay yìí fúnra rẹ̀ — ó ti jẹ́ relay ilé rẹ tẹ́lẹ̀.",
   "relayAddDuplicate": "Relay náà ti wà nínú àwọn relay ilé rẹ tẹ́lẹ̀.",
   "relayAddKeyless": "Relay náà kò ní kọ́kọ́rọ́ ìdánimọ̀, nítorí náà a kò lè fi ín sílẹ̀ — a kò lè fi ín kún gẹ́gẹ́ bí relay ilé.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "A kò lè jẹ́rìí relay náà — ṣàyẹ̀wò URL kí o sì gbìyànjú lẹ́ẹ̀kan sí i.",
   "relayAdded": "A ti fi relay ilé kún: {0}",
   "relayRemoved": "A ti yọ relay ilé kúrò: {0}",

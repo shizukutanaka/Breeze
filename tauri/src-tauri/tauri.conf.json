@@ -10,7 +10,7 @@
   "app": {
     "withGlobalTauri": false,
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-v1qebErT0t6uxWB/1cAzopgKYlwqJHnRegMhauSisdM=' 'sha256-JUEa8e1KshqOPuL4wIPHRw2p/4pECP+AQpWFYBza3uk=' 'sha256-Dui2J5l3dMcthxpsuvmyNpinPAIf9lumw9AgPpU9M/A=' 'sha256-Ob4cbc5x7QxbODFbmEhvpRuLR95d8/FKuY6gDZ4zd0c=' 'sha256-CPbU5fpj+FK83w2ahJ7MZG31c+OcB0GX64jfb74FHnU=' 'sha256-k9+WQiLorJoUE0TLZsBu6BIYyo0jO9fe/06IFRm2vvc=' 'sha256-vL1RMC5WihF3S7ARrv5RovNAXV4n/YFqNWrGcp/CQF8='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests"
+      "csp": "default-src 'self'; script-src 'self' 'sha256-6Z80/7wo9P47eUUWkTF9c8HfUl7/oDSOH5oFss8tzUI=' 'sha256-v1qebErT0t6uxWB/1cAzopgKYlwqJHnRegMhauSisdM=' 'sha256-JUEa8e1KshqOPuL4wIPHRw2p/4pECP+AQpWFYBza3uk=' 'sha256-Dui2J5l3dMcthxpsuvmyNpinPAIf9lumw9AgPpU9M/A=' 'sha256-Ob4cbc5x7QxbODFbmEhvpRuLR95d8/FKuY6gDZ4zd0c=' 'sha256-CPbU5fpj+FK83w2ahJ7MZG31c+OcB0GX64jfb74FHnU=' 'sha256-k9+WQiLorJoUE0TLZsBu6BIYyo0jO9fe/06IFRm2vvc=' 'sha256-0MSMEw2Q+PPVrPUlSrFtNQQ25O4+QUEJB++r9R5Nm+A='; style-src 'self' 'unsafe-inline'; connect-src 'self' https: wss: stun: turn:; img-src 'self' blob: data: https:; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'; trusted-types breeze-sanitizer default; require-trusted-types-for 'script'; upgrade-insecure-requests"
     },
     "windows": [
       {

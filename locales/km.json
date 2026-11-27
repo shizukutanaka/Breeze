@@ -477,6 +477,7 @@
   "relayAddSelf": "URL នោះគឺជាឧបករណ៍បញ្ជូនបន្តនេះផ្ទាល់ — វាគឺជាឧបករណ៍បញ្ជូនបន្តផ្ទះរបស់អ្នករួចហើយ។",
   "relayAddDuplicate": "ឧបករណ៍បញ្ជូនបន្តនោះស្ថិតនៅក្នុងឧបករណ៍បញ្ជូនបន្តផ្ទះរបស់អ្នករួចហើយ។",
   "relayAddKeyless": "ឧបករណ៍បញ្ជូនបន្តនោះគ្មានកូនសោអត្តសញ្ញាណទេ ដូច្នេះវាមិនអាចត្រូវបានខ្ទាស់បានទេ — វាមិនអាចត្រូវបានបន្ថែមជាឧបករណ៍បញ្ជូនបន្តផ្ទះបានទេ។",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ឧបករណ៍បញ្ជូនបន្តនោះមិនអាចត្រូវបានផ្ទៀងផ្ទាត់ទេ — ពិនិត្យ URL ហើយព្យាយាមម្តងទៀត។",
   "relayAdded": "ឧបករណ៍បញ្ជូនបន្តផ្ទះត្រូវបានបន្ថែម៖ {0}",
   "relayRemoved": "ឧបករណ៍បញ្ជូនបន្តផ្ទះត្រូវបានដកចេញ៖ {0}",

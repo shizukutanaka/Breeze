@@ -257,6 +257,7 @@
   "relayAddSelf": "그 URL은 이 릴레이 자체입니다 — 이미 홈 릴레이입니다.",
   "relayAddDuplicate": "그 릴레이는 이미 홈 릴레이에 포함되어 있습니다.",
   "relayAddKeyless": "그 릴레이에는 신원 키가 없어 고정할 수 없습니다 — 홈 릴레이로 추가할 수 없습니다.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "그 릴레이를 확인할 수 없습니다 — URL을 확인하고 다시 시도하세요.",
   "relayAdded": "홈 릴레이가 추가되었습니다: {0}",
   "relayRemoved": "홈 릴레이가 삭제되었습니다: {0}",

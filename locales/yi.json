@@ -478,6 +478,7 @@
   "relayAddSelf": "דער URL איז די רעלע זיך - עס איז שוין דיין היים רעלע.",
   "relayAddDuplicate": "דער רעלע איז שוין אין דיין היים רילייז.",
   "relayAddKeyless": "דער רעלע האט קיין אידענטיטעט שליסל, אַזוי עס קענען ניט זיין פּינד - עס קען נישט זיין מוסיף ווי אַ היים רעלע.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "דער רעלע קען נישט זיין וועראַפייד - קאָנטראָלירן די URL און פּרובירן ווידער.",
   "relayAdded": "היים רעלע צוגעגעבן: {0}",
   "relayRemoved": "היים רעלע אַוועקגענומען: {0}",

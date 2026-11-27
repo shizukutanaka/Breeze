@@ -477,6 +477,7 @@
   "relayAddSelf": "Dëse URL ass d'Additioun just zesummengesat. D'Additioun ass schonn däit hier.",
   "relayAddDuplicate": "Dëse Video ass schon bei ärer Heem gewënnt.",
   "relayAddKeyless": "Dëse Relay huet keng Schlëssel fir d' Identität vu hieremno nees, wëll se net duerchgefouert gi sinn. Et kann net eng Kéier geluede ginn.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Déi Ëmfänkt konnt net iwwerpréift ginn - d' URL automatësch nees probéieren.",
   "relayAdded": "D'Home- Zesummendroung dobäigemaach: {0}",
   "relayRemoved": "Home Ufro ewechgeholl: {0}",

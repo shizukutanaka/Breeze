@@ -479,6 +479,7 @@
   "relayAddSelf": "वह URL यही रिले है — यह पहले से आपका होम रिले है।",
   "relayAddDuplicate": "वह रिले पहले से आपके होम रिले में है।",
   "relayAddKeyless": "उस रिले के पास पहचान कुंजी नहीं है, इसलिए उसे पिन नहीं किया जा सकता — उसे होम रिले के रूप में नहीं जोड़ा जा सकता।",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "उस रिले को सत्यापित नहीं किया जा सका — URL जाँचकर फिर कोशिश करें।",
   "relayAdded": "होम रिले जोड़ा गया: {0}",
   "relayRemoved": "होम रिले हटाया गया: {0}",

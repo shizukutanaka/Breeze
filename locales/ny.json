@@ -478,6 +478,7 @@
   "relayAddSelf": "URL imeneyo ndi kulandirana uku palokha - ndi kale kulandirana kwanu kunyumba.",
   "relayAddDuplicate": "Kulandirana kumeneko kuli kale mu kulandirana kwanu kunyumba.",
   "relayAddKeyless": "Kulandirana kumeneko kulibe kiyi wa chizindikiritso, chotero sikungathe kuikidwa — sikungawonjezeredwe monga kulandirana kunyumba.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Kulandirana kumeneko sikunatsimikizidwe - onani URL ndikuyesanso.",
   "relayAdded": "Kulandirana kunyumba anawonjezera kuti: {0}",
   "relayRemoved": "Kulandirana kunyumba kuchotsedwa: {0}",

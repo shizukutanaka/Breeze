@@ -479,6 +479,7 @@
   "relayAddSelf": "Cette URL est ce relais lui-même — c'est déjà votre relais principal.",
   "relayAddDuplicate": "Ce relais est déjà dans vos relais principaux.",
   "relayAddKeyless": "Ce relais n'a pas de clé d'identité, donc il ne peut pas être épinglé — il ne peut pas être ajouté comme relais principal.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Ce relais n'a pas pu être vérifié — vérifiez l'URL et réessayez.",
   "relayAdded": "Relais principal ajouté : {0}",
   "relayRemoved": "Relais principal retiré : {0}",

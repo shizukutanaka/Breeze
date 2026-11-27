@@ -534,6 +534,7 @@
   "relayAddSelf": "Бул URL бул реле өзү - бул сиздин үй релеңиз.",
   "relayAddDuplicate": "Ал реле сиздин үйүңүздүн релелеринде мурунтан эле бар.",
   "relayAddKeyless": "Ал реледе идентификациялык ачкыч жок, андыктан аны кадап коюуга болбойт — аны үй реле катары кошууга болбойт.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Бул реле ырасталган жок — URL дарегин текшерип, кайра аракет кылыңыз.",
   "relayAdded": "Үй реле кошулду: {0}",
   "relayRemoved": "Үй реле алынып салынды: {0}",

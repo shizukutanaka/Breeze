@@ -532,6 +532,7 @@
   "relayAddSelf": "URL ນັ້ນຄື relay ນີ້ເອງ — ມັນແມ່ນ relay ເຮືອນຂອງເຈົ້າແລ້ວ.",
   "relayAddDuplicate": "relay ນັ້ນມີຢູ່ໃນ relay ເຮືອນຂອງທ່ານແລ້ວ.",
   "relayAddKeyless": "relay ນັ້ນບໍ່ມີກະແຈຕົວຕົນ, ສະນັ້ນມັນບໍ່ສາມາດຖືກ pinned — ມັນບໍ່ສາມາດເພີ່ມເປັນ relay ເຮືອນ.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relay ນັ້ນບໍ່ສາມາດຢັ້ງຢືນໄດ້ — ກະລຸນາກວດເບິ່ງ URL ແລະລອງໃໝ່ອີກ.",
   "relayAdded": "ເພີ່ມ Relay ເຮືອນ: {0}",
   "relayRemoved": "ການຖອດ Relay ເຮືອນອອກ: {0}",

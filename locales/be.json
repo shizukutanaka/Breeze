@@ -481,6 +481,7 @@
   "relayAddSelf": "Гэта URL - гэта гэтая перадача сябе, гэта ўжо ваша дамашняе перадача.",
   "relayAddDuplicate": "Гэта перадача ужо ў вашых хатніх перадаць.",
   "relayAddKeyless": "Рэле не мае ключа профіля, таму ён не можа быць змяшчаны - ён не можа быць дададзены ў якасці хатняга пераслання.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Рэлея не можа быць праверана: праверце адрас і паспрабуйце зноў.",
   "relayAdded": "Дададзенае хатняе реле: {0}",
   "relayRemoved": "Хатняя перадача выдаленыя: {0}",

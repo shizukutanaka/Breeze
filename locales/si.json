@@ -534,6 +534,7 @@
   "relayAddSelf": "එම URL එක මෙම රිලේම වේ - එය දැනටමත් ඔබගේ නිවසේ රිලේ වේ.",
   "relayAddDuplicate": "එම රිලේ දැනටමත් ඔබගේ නිවසේ රිලේ වල ඇත.",
   "relayAddKeyless": "එම රිලේට අනන්‍යතා යතුරක් නැත, එබැවින් එය ඇමිණිය නොහැක - එය නිවසේ රිලේ එකක් ලෙස එක් කළ නොහැක.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "එම රිලේ සත්‍යාපනය කළ නොහැකි විය - URL පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
   "relayAdded": "මුල් පිටුව රිලේ එකතු කරන ලදී: {0}",
   "relayRemoved": "මුල් පිටුව රිලේ ඉවත් කරන ලදී: {0}",

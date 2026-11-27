@@ -483,6 +483,7 @@
   "relayAddSelf": "Dan il - URL huwa dan il - relay stess — diġà hu l - relay tiegħek.",
   "relayAddDuplicate": "Dik il - relay diġà tinsab fil - relays tad - dar tiegħek.",
   "relayAddKeyless": "Din il - relay m’għandha l - ebda karatteristika importanti taʼ l - identità, u għalhekk ma tistax tinbena — ma tistax tiżdied bħala relay tad - dar.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Din il - relay ma setgħetx tiġi vverifikata — iċċekkja l - URL u terġaʼ tipprova.",
   "relayAdded": "Home relay added: {0}",
   "relayRemoved": "Home relay removed: {0}",

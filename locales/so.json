@@ -478,6 +478,7 @@
   "relayAddSelf": "URL-kaas waa relay-ga laftiisa — waa relay-gaaga guriga hore.",
   "relayAddDuplicate": "Relay-gaas horey ayuu ugu jiraa relays-ka gurigaaga.",
   "relayAddKeyless": "Relay-gaas ma laha furaha aqoonsiga, sidaas darteed lama dhejin karo — lama dari karo sidii relay-ga guriga.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relay-gaas lama xaqiijin karo — hubi URL-ka oo mar kale isku day.",
   "relayAdded": "Home relay ayaa lagu daray: {0}",
   "relayRemoved": "Home relay waa la saaray: {0}",

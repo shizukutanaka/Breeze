@@ -479,6 +479,7 @@
   "relayAddSelf": "آن نشانی خود این رله است — همین حالا رله خانگی شماست.",
   "relayAddDuplicate": "آن رله همین حالا در رله‌های خانگی شماست.",
   "relayAddKeyless": "آن رله کلید هویتی ندارد، پس نمی‌توان آن را سنجاق کرد — نمی‌توان آن را به‌عنوان رله خانگی افزود.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "آن رله راستی‌آزمایی نشد — نشانی را بررسی کنید و دوباره تلاش کنید.",
   "relayAdded": "رله خانگی اضافه شد: {0}",
   "relayRemoved": "رله خانگی حذف شد: {0}",

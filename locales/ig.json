@@ -477,6 +477,7 @@
   "relayAddSelf": "URL ahụ bụ relay a n'onwe ya — ọ bụ relay ụlọ gị ugbu a.",
   "relayAddDuplicate": "Relay ahụ adịla na relay ụlọ gị.",
   "relayAddKeyless": "Relay ahụ enweghị igodo njirimara, yabụ enweghị ike itinye ya — enweghị ike ịtinye ya dị ka relay ụlọ.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Enweghị ike ịkwenye relay ahụ — lelee URL ma nwaa ọzọ.",
   "relayAdded": "Etinyere relay ụlọ: {0}",
   "relayRemoved": "Ewepụrụ relay ụlọ: {0}",

@@ -534,6 +534,7 @@
   "relayAddSelf": "Io URL io dia io fampitana io mihitsy — efa fampitaovana an-tranonao io.",
   "relayAddDuplicate": "Efa ao amin'ny relais an-tranonao io relay io.",
   "relayAddKeyless": "Tsy manana fanalahidin'ny maha-izy azy io fampitaovana io, ka tsy azo apetaka - tsy azo ampiana ho fampitaovana an-trano.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Tsy azo hamarinina io fampitana io — jereo ny URL ary andramo indray.",
   "relayAdded": "Nampiana fampitana an-trano: {0}",
   "relayRemoved": "Nesorina ny fampitana an-trano: {0}",

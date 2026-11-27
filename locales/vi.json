@@ -479,6 +479,7 @@
   "relayAddSelf": "URL đó chính là máy chủ chuyển tiếp này — nó đã là máy chủ chính của bạn.",
   "relayAddDuplicate": "Máy chủ chuyển tiếp đó đã có trong danh sách chính của bạn.",
   "relayAddKeyless": "Máy chủ chuyển tiếp đó không có khóa danh tính, nên không thể ghim — không thể thêm làm máy chủ chính.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Không thể xác minh máy chủ chuyển tiếp đó — kiểm tra URL và thử lại.",
   "relayAdded": "Đã thêm máy chủ chuyển tiếp chính: {0}",
   "relayRemoved": "Đã xóa máy chủ chuyển tiếp chính: {0}",

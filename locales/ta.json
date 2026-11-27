@@ -479,6 +479,7 @@
   "relayAddSelf": "அந்த URL இந்த ரிலேயே தான் — அது ஏற்கனவே உங்கள் முகப்பு ரிலே.",
   "relayAddDuplicate": "அந்த ரிலே ஏற்கனவே உங்கள் முகப்பு ரிலேகளில் உள்ளது.",
   "relayAddKeyless": "அந்த ரிலேக்கு அடையாள விசை இல்லை, எனவே அதைப் பொருத்த முடியாது — அதை முகப்பு ரிலேயாகச் சேர்க்க முடியாது.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "அந்த ரிலேயைச் சரிபார்க்க முடியவில்லை — URL ஐச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
   "relayAdded": "முகப்பு ரிலே சேர்க்கப்பட்டது: {0}",
   "relayRemoved": "முகப்பு ரிலே நீக்கப்பட்டது: {0}",

@@ -477,6 +477,7 @@
   "relayAddSelf": "URL itu ialah geganti ini sendiri — ia sudah menjadi geganti utama anda.",
   "relayAddDuplicate": "Geganti itu sudah ada dalam geganti utama anda.",
   "relayAddKeyless": "Geganti itu tiada kunci identiti, jadi ia tidak boleh disemat — ia tidak boleh ditambah sebagai geganti utama.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Geganti itu tidak dapat disahkan — semak URL dan cuba semula.",
   "relayAdded": "Geganti utama ditambah: {0}",
   "relayRemoved": "Geganti utama dibuang: {0}",

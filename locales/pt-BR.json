@@ -258,6 +258,7 @@
   "relayAddSelf": "Essa URL é este próprio relay — ele já é o seu relay doméstico.",
   "relayAddDuplicate": "Esse relay já está entre os seus relays domésticos.",
   "relayAddKeyless": "Esse relay não tem uma chave de identidade, portanto não pode ser fixado — não pode ser adicionado como relay doméstico.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Não foi possível verificar esse relay — confira a URL e tente novamente.",
   "relayAdded": "Relay doméstico adicionado: {0}",
   "relayRemoved": "Relay doméstico removido: {0}",

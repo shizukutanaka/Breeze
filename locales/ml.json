@@ -479,6 +479,7 @@
   "relayAddSelf": "ആ URL ഈ റിലേ തന്നെയാണ് — അത് ഇതിനകം നിങ്ങളുടെ ഹോം റിലേയാണ്.",
   "relayAddDuplicate": "ആ റിലേ ഇതിനകം നിങ്ങളുടെ ഹോം റിലേകളിലുണ്ട്.",
   "relayAddKeyless": "ആ റിലേയ്ക്ക് ഐഡന്റിറ്റി കീ ഇല്ല, അതിനാൽ അത് പിൻ ചെയ്യാനാവില്ല — അത് ഹോം റിലേയായി ചേർക്കാനാവില്ല.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ആ റിലേ പരിശോധിക്കാനായില്ല — URL പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.",
   "relayAdded": "ഹോം റിലേ ചേർത്തു: {0}",
   "relayRemoved": "ഹോം റിലേ നീക്കം ചെയ്തു: {0}",

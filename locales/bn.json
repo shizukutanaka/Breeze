@@ -479,6 +479,7 @@
   "relayAddSelf": "ওই URL-টি এই রিলেই — এটি আগেই আপনার হোম রিলে।",
   "relayAddDuplicate": "ওই রিলেটি আগেই আপনার হোম রিলেতে আছে।",
   "relayAddKeyless": "ওই রিলের কোনো পরিচয় কি নেই, তাই এটি পিন করা যায় না — হোম রিলে হিসেবে যোগ করা যায় না।",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ওই রিলেটি যাচাই করা যায়নি — URL দেখে আবার চেষ্টা করুন।",
   "relayAdded": "হোম রিলে যোগ হয়েছে: {0}",
   "relayRemoved": "হোম রিলে সরানো হয়েছে: {0}",

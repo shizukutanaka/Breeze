@@ -478,6 +478,7 @@
   "relayAddSelf": "އެ ޔޫއާރްއެލް އަކީ މި ރިލޭ އެވެ.",
   "relayAddDuplicate": "އެ ރިލޭ މިހާރު ވެސް ތިބާގެ ގޭތެރޭގެ ރިލޭގައި ހުންނާނެ.",
   "relayAddKeyless": "އެ ރިލޭގައި އައިޑެންޓިޓީ ކީއެއް ނެތުމުން ޕިން ނުކުރެވޭނެ އެވެ.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "އެ ރިލޭ ކަށަވަރު ނުކުރެވުނު، ޔޫއާރްއެލް ޗެކް ކުރުމަށްފަހު އަލުން ޓްރައި ކުރާށެވެ.",
   "relayAdded": "ހޯމް ރިލޭ: {0}",
   "relayRemoved": "ހޯމް ރިލޭ ނެގުމުން: {0}",

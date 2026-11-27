@@ -534,6 +534,7 @@
   "relayAddSelf": "Kana nga URL mao kini nga relay mismo - kini na ang imong home relay.",
   "relayAddDuplicate": "Kanang relay naa na sa imong mga home relay.",
   "relayAddKeyless": "Kana nga relay walay identity key, mao nga dili kini ma-pin — dili kini madugang isip home relay.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Kana nga relay dili mapamatud-an - susiha ang URL ug sulayi pag-usab.",
   "relayAdded": "Gidugang ang relay sa balay: {0}",
   "relayRemoved": "Gitangtang ang relay sa balay: {0}",

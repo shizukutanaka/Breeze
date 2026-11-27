@@ -479,6 +479,7 @@
   "relayAddSelf": "وہ URL یہی ریلے ہے — یہ پہلے ہی آپ کا ہوم ریلے ہے۔",
   "relayAddDuplicate": "وہ ریلے پہلے ہی آپ کے ہوم ریلے میں ہے۔",
   "relayAddKeyless": "اس ریلے کی کوئی شناختی کنجی نہیں، اس لیے اسے پن نہیں کیا جا سکتا — اسے ہوم ریلے کے طور پر شامل نہیں کیا جا سکتا۔",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "اس ریلے کی تصدیق نہیں ہو سکی — URL دیکھ کر دوبارہ کوشش کریں۔",
   "relayAdded": "ہوم ریلے شامل ہو گیا: {0}",
   "relayRemoved": "ہوم ریلے ہٹا دیا گیا: {0}",
