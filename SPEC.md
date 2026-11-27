@@ -27,7 +27,7 @@ Breeze is a serverless, end-to-end encrypted P2P messenger deployed on Cloudflar
 | server/* | — | Node self-host relay (same handler, SQLite state) |
 | sw.js | 11 KB | Service Worker: offline cache + push |
 | manifest.json | 2 KB | PWA manifest |
-| locales/* | — | 81 UI locale files (see §11) |
+| locales/* | — | 91 UI locale files (see §11) |
 | icon-192.png / icon-512.png | — | PWA icons |
 | 404.html | — | Custom 404 page |
 | _headers | — | Cloudflare Pages HTTP headers |
@@ -768,7 +768,7 @@ hooks are used for the following adaptations:
 ## 11. i18n
 
 - **Built-in**: English only — the inline reference table (921 keys, pure data) and runtime fallback
-- **Locale files**: 81 files, `locales/<lang>.json` for af, am, ar, as, az, be, bg, bn, bs, ca, cs, cy, da, de, el, eo, es, et, eu, fa, fi, fr, fy, ga, gd, gl, gu, ha, he, hi, hr, hu, id, ig, is, it, ja, ka, kk, km, kn, ko, ky, lb, lo, lt, lv, mk, ml, mn, mr, ms, mt, my, nb, ne, nl, or, pa, pl, pt-BR, ro, ru, si, sk, sl, sr, sv, sw, ta, te, th, tl, tr, uk, ur, uz, vi, yo, zh-CN, zh-TW, fetched at boot and merged over English — 82 UI languages in total including English. `node tools/i18n-check.mjs` prints the live key count and per-locale coverage; at 2026-11-26 it reports all 81 locales at 100% (core and total). The active locale is auto-detected from `navigator.language` against `FULL_LOCALES`
+- **Locale files**: 91 files, `locales/<lang>.json` for af, am, ar, as, az, be, bg, bn, bs, ca, cs, cy, da, de, el, eo, es, et, eu, fa, fi, fr, fy, ga, gd, gl, gu, ha, he, hi, hr, hu, id, ig, is, it, ja, ka, kk, km, kn, ko, ky, lb, lo, lt, lv, mk, ml, mn, mr, ms, mt, my, nb, ne, nl, or, pa, pl, pt-BR, ro, ru, si, sk, sl, sr, sv, sw, ta, te, th, tl, tr, uk, ur, uz, vi, yo, zh-CN, zh-TW, ps, ug, tg, tt, jv, su, ceb, mi, haw, mg, fetched at boot and merged over English — 92 UI languages in total including English. `node tools/i18n-check.mjs` prints the live key count and per-locale coverage; at 2026-11-26 it reports all 91 locales at 100% (core and total). The active locale is auto-detected from `navigator.language` against `FULL_LOCALES`
 - **External**: none — the 924-language `lang.js` table was deleted (supplied zero strings to the UI at 44% of payload; see SECURITY.md)
 - **Hardcoded UI strings**: 0 (100% coverage via `t()` function)
 - **Toast i18n**: 100%
