@@ -2159,6 +2159,11 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
+    relayStatusBlocked: 'Blocked — identity check failed',
+    relayStatusOk: 'Reachable',
+    relayStatusOkVersion: 'Reachable · v{0}',
+    relayStatusDegraded: 'Reachable, but storage is not configured',
+    relayStatusUnknown: 'Not checked yet this session',
     relayFanoutLabel: 'Copies per contact (redundant delivery):', helpSetFanout: "For contacts that use multiple home relays, sends each message copy to this many of those relays. More copies can improve delivery if one relay is down, but they use more network traffic and store ciphertext in more places.",
     powerModeLabel: 'Power use:', helpSetPowerMode: "Controls how much Breeze reduces background checking to save battery. Sending is not delayed, but Saver and Emergency can make incoming messages and presence updates arrive later; Auto follows your battery when the browser reports it.",
     powerAuto: 'Auto (by battery)',
@@ -4841,6 +4846,15 @@ async function initMessenger(dbName) {
     // this session's verdict, and its health is already known.
     _relayVerifyMemo.set(entry.url, Promise.resolve(true));
     if (entry.health) _relayHealthByUrl.set(entry.url, entry.health);
+  }
+  function _relayStatusText(relay) {
+    if (_relayBlockedUrls.has(relay.url)) return t('relayStatusBlocked');
+    const health = _relayHealthByUrl.get(relay.url);
+    if (health && health.ok === false) return t('relayStatusDegraded');
+    if (health && typeof health.version === 'string' && health.version) return t('relayStatusOkVersion', health.version);
+    if (health) return t('relayStatusOk');
+    if (isOriginRelay(relay) && window._serverFeatures) return t('relayStatusOk');
+    return t('relayStatusUnknown');
   }
   async function removeHomeRelay(url) {
     if (Array.isArray(_settings.relays)) {
@@ -14102,7 +14116,7 @@ async function initMessenger(dbName) {
     settings: () => _settings, myName: () => myName, activeContact: () => activeContact, listTab: () => _listTab,
     privacyHideReadReceipts: () => _privacyHideReadReceipts, privacyHideTyping: () => _privacyHideTyping,
     setPrivacyHideReadReceipts: v => { _privacyHideReadReceipts = v; }, setPrivacyHideTyping: v => { _privacyHideTyping = v; },
-    _focusActive, _fanoutCount, homeRelays, isOriginRelay, _relayBlockedUrls,
+    _focusActive, _fanoutCount, homeRelays, isOriginRelay, _relayBlockedUrls, _relayStatusText,
     _validTabOrder, saveSettings, _applyTabOrder, _applyTabVisibility, _showChatsTab, _setActiveTab,
     renderContacts, _setConvName, _updateFocusBanner, _addRelayFlow, removeHomeRelay, relayFingerprint,
     showConfirm, showToast, shareInvite, showMigratePanel, showMigrationGuide, _profileUI,
