@@ -4827,8 +4827,7 @@ async function initMessenger(dbName) {
     }
   }
   function _serverGateAdd() { _addRelayFlow().catch(e => _dbg(e, 'server-gate-add')); }
-  // Local room actions live in src/app/local-room.js (extracted under
-  // the line budget: feature work extracts at least what it adds).
+  // Local room actions live in src/app/local-room.js (extracted under the line budget: feature work extracts at least what it adds).
   const _localRoomActions = globalThis.__breezeLocalRoom?.createLocalRoomActions({ getSettings: () => _settings, saveSettings, updateGate: () => _updateServerGate(), showToast, t, shareInvite: (...a) => shareInvite(...a), getMyId: () => myId, dbg: _dbg, P }) || null;
   const _serverHints = globalThis.__breezeServerHints?.createServerHints({ dom: id => _DOM.get(id), t, isNoDefault: () => globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true, relayCount: () => homeRelays().length, hasRoom: () => !!_settings.localRoom, onBannerClick: () => { openSettingsView(); requestAnimationFrame(() => document.querySelector('[data-action="add-relay"]')?.scrollIntoView({ block: 'center' })); }, getActiveContact: () => activeContact, isMock: () => !!globalThis.__breezeMock?.enabled?.(), contactHomes: c => Array.isArray(c?.home) ? c.home.length : 0, queuedFor: pub => _outbox.get(pub)?.length || 0, peerOpen: pub => { const p = peers[pub]; return !!(p?.connected && p.dc?.readyState === 'open'); }, openRendezvous: c => _rendezvous?.open(c), inputBar: () => _DOM.get('msg-input-bar'), roomJoined: () => !!_settings.localRoom?.joined, openPairing: () => _offlinePairing?.open() }) || null;
   function _updateDeliveryHint() { return _serverHints?.updateDeliveryHint(); }
@@ -4864,8 +4863,7 @@ async function initMessenger(dbName) {
     if (mainGated && overlayWasHidden) overlay.querySelector?.('.server-gate-add')?.focus();
     for (const id of ['msg-name-random', 'msg-name', 'msg-alias', 'b-msg-setup-random', 'b-msg-setup', 'b-msg-setup-simple', 'b-msg-setup-restore-toggle']) _serverGateControl(_DOM.get(id), setupGated);
     _DOM.get('setup-restore-more')?.querySelectorAll('button').forEach(btn => _serverGateControl(btn, setupGated));
-    if (typeof _updateNoDefaultBanner === 'function') _updateNoDefaultBanner();
-    if (typeof _updateDeliveryHint === 'function') _updateDeliveryHint();
+    if (typeof _updateNoDefaultBanner === 'function') _updateNoDefaultBanner(); if (typeof _updateDeliveryHint === 'function') _updateDeliveryHint();
   }
   function _preflightRelayUrl(raw) {
     if (typeof raw !== 'string') return { error: 'invalid' };
