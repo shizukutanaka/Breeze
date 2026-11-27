@@ -48,8 +48,27 @@ function extractFunction(name) {
   return INDEX.slice(start, matchBrace(INDEX, open) + 1);
 }
 
+// _preflightRelayUrl contains a regex with a '//' sequence, which the
+// string-aware matchBrace above misreads as a line comment; extract it
+// with a plain brace counter instead (the function body carries no
+// braces inside strings, so the count is exact).
+function extractPlainFunction(name) {
+  const start = INDEX.indexOf(`function ${name}(`);
+  expect(start, `${name} exists in index.html`).toBeGreaterThan(-1);
+  const open = INDEX.indexOf('{', start);
+  let depth = 0;
+  for (let i = open; i < INDEX.length; i++) {
+    if (INDEX[i] === '{') depth++;
+    else if (INDEX[i] === '}') {
+      depth--;
+      if (depth === 0) return INDEX.slice(start, i + 1);
+    }
+  }
+  throw new Error('unbalanced braces');
+}
+
 function buildAttestation({ fetchT, home = [], serving = 'https://serving.test' } = {}) {
-  const source = `${extractFunction('_relayAttestCheck')}\n${extractFunction('attestNewRelay')}
+  const source = `${extractFunction('_relayAttestCheck')}\n${extractPlainFunction('_preflightRelayUrl')}\n${extractFunction('attestNewRelay')}
     return { _relayAttestCheck, attestNewRelay };`;
   const normalize = (raw) => {
     try {
