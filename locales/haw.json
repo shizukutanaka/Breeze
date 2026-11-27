@@ -1191,5 +1191,8 @@
   "mockSeedB2": "Hiki iaʻu ke hoʻouna i kahi leka?",
   "mockSeedB3": "ʻAe. Hana ʻia nā pane ma ka ʻāina ma hope o ka lohi pōkole.",
   "mockSeedG1": "Welina mai i ka hui laʻana.",
-  "mockSeedG2": "Kōkua kēia e hōʻike i ke ʻano o nā kamaʻilio pūʻulu."
+  "mockSeedG2": "Kōkua kēia e hōʻike i ke ʻano o nā kamaʻilio pūʻulu.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

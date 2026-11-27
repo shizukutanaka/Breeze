@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Sunthani tabu kumanja",
   "helpSetTabOrder": "Amasintha dongosolo la ma tabu apansi. Kokani mzere, kapena gwiritsani ntchito mabatani a muvi; Bar ya tabu imasintha nthawi yomweyo. Macheza amatha kukonzedwanso koma nthawi zonse amawonetsedwa.",
   "settingsInstallApp": "Ikani pulogalamuyi",
-  "helpSetInstallApp": "Amatsegula kukhazikitsa pulogalamu kamodzi-kudina pamene msakatuli amapereka. Ngati prompt imeneyo sakupezeka, ikuwonetsa malangizo okhazikitsa kapena chikwangwani chotsitsa kompyuta m'malo mwake."
+  "helpSetInstallApp": "Amatsegula kukhazikitsa pulogalamu kamodzi-kudina pamene msakatuli amapereka. Ngati prompt imeneyo sakupezeka, ikuwonetsa malangizo okhazikitsa kapena chikwangwani chotsitsa kompyuta m'malo mwake.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

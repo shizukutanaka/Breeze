@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Move tab kurudyi",
   "helpSetTabOrder": "Chinja kurongeka kwemabhenefiti epasi. Dhonza mutsara, kana kushandisa mabhatani emiseve; Iyo tab bar inogadziridzwa pakarepo. Chats inogona kudzokororwa asi inogara ichiratidzwa.",
   "settingsInstallApp": "Isa iyo app",
-  "helpSetInstallApp": "Inovhura imwe-click app yekumisikidza kana bhurawuza richipa. Kana iyo prompt isingawanikwe, inoratidza mirayiridzo yekuisa kana desktop yekudhawunirodha banner pachinzvimbo."
+  "helpSetInstallApp": "Inovhura imwe-click app yekumisikidza kana bhurawuza richipa. Kana iyo prompt isingawanikwe, inoratidza mirayiridzo yekuisa kana desktop yekudhawunirodha banner pachinzvimbo.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

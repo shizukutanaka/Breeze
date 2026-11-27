@@ -1191,5 +1191,8 @@
   "mockSeedG1": "Добредојдовте во групата за примерок.",
   "mockSeedG2": "Ова помага да покаже какви групни разговори изгледаат.",
   "settingsInstallApp": "Инсталирајте ја апликацијата",
-  "helpSetInstallApp": "Отвора инсталација на апликацијата со еден клик кога прелистувачот ја нуди. Ако тоа барање не е достапно, прикажува инструкции за инсталација или банер за преземање на десктоп верзијата."
+  "helpSetInstallApp": "Отвора инсталација на апликацијата со еден клик кога прелистувачот ја нуди. Ако тоа барање не е достапно, прикажува инструкции за инсталација или банер за преземање на десктоп верзијата.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

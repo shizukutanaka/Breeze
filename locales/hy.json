@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Տեղափոխեք ներդիրը աջ",
   "helpSetTabOrder": "Փոխում է ստորին ներդիրների հերթականությունը։ Քաշեք տողը կամ օգտագործեք սլաքի կոճակները։ Ներդիրի տողը անմիջապես թարմացվում է։ Զրույցները կարելի է վերադասավորել, բայց դրանք միշտ ցուցադրվում են։",
   "settingsInstallApp": "Տեղադրեք հավելվածը",
-  "helpSetInstallApp": "Բացում է մեկ սեղմումով հավելվածի տեղադրումը, երբ բրաուզերը առաջարկում է այն։ Եթե այդ հուշումը հասանելի չէ, ապա ցուցադրվում է տեղադրման հրահանգները կամ աշխատասեղանի ներբեռնման բաները։"
+  "helpSetInstallApp": "Բացում է մեկ սեղմումով հավելվածի տեղադրումը, երբ բրաուզերը առաջարկում է այն։ Եթե այդ հուշումը հասանելի չէ, ապա ցուցադրվում է տեղադրման հրահանգները կամ աշխատասեղանի ներբեռնման բաները։",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

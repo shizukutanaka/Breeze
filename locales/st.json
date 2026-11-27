@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Sutumetsa tab ka ho le letona",
   "helpSetTabOrder": "Fetola tatellano ea li-tab tse ka tlase. Hula mola, kapa sebelisa likonopo tsa motsu; Tab bar e ntlafatsoa hang-hang. Lipuisano li ka hlophisoa bocha, empa li lula li bontšoa.",
   "settingsInstallApp": "Kenya app",
-  "helpSetInstallApp": "E bula ho kenya ts'ebeliso ea ho tobetsa e le 'ngoe ha sebatli se fana ka sona. Haeba prompt eo e sa fumanehe, bonts'a litaelo tsa ho kenya kapa banner ea download ea desktop ho e-na le hoo."
+  "helpSetInstallApp": "E bula ho kenya ts'ebeliso ea ho tobetsa e le 'ngoe ha sebatli se fana ka sona. Haeba prompt eo e sa fumanehe, bonts'a litaelo tsa ho kenya kapa banner ea download ea desktop ho e-na le hoo.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }
