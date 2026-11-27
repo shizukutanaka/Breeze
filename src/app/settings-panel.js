@@ -37,6 +37,7 @@ export function settingsPanelHtml(v) {
     return `<div class="settings-row settings-relay-row">${ico('globe')}<span class="settings-row-label"><span>${esc(r.label)}${r.origin ? ' ' + esc(t('relayOriginTag')) : ''}</span>${fp}</span><span class="settings-row-value">${rm}</span></div>`;
   }).join('');
 
+  const roomRow = v.localRoom ? `<div class="settings-row settings-relay-row">${ico('globe')}<span class="settings-row-label"><span>${esc(t('gateLocalRoomLabel'))}</span> <span class="settings-row-sub">${esc(t('gateLocalHosting'))}</span></span><span class="settings-row-value"><button type="button" class="btn btn-o btn-sm" data-action="stop-local-room">${esc(t('gateLocalStop'))}</button></span></div>` : '';
   const fanoutOpts = [1, 2, 3].map((n) => `<option value="${n}"${v.fanout === n ? ' selected' : ''}>${n}</option>`).join('');
   const installStandalone = typeof window !== 'undefined' && ((typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) || window.navigator?.standalone);
   const installElectron = typeof window !== 'undefined' && window.process?.versions?.electron;
@@ -78,7 +79,7 @@ export function settingsPanelHtml(v) {
       + `<div class="settings-row settings-status-row">${ico('clock')}<span class="settings-row-label settings-status" data-autobackup-status>…</span></div>`
       + action('autobackup-arm', 'lock', t('autoBackupArmBtn'), ' hidden')
       + action('migrate-device', 'arrow-up', t('migrateDeviceBtn')))
-    + section(t('settingsRelays'), relayRows
+    + section(t('settingsRelays'), roomRow + relayRows
       + action('add-relay', 'plus', t('relayAddBtn'))
       + selectRow('fanout', 'users', t('relayFanoutLabel'), fanoutOpts)
       + selectRow('power-mode', 'sun', t('powerModeLabel'), options(POWER_MODES, v.powerMode))
