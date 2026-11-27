@@ -483,7 +483,7 @@
   "relayAddTimeout": "Tiu servilo tro longe ne respondis — atendu iom kaj reprovu. Se tio ripetiĝas, kontrolu ĉu la servilo funkcias kaj ne estas superŝarĝita.",
   "relayAddNotBreeze": "Tiu adreso respondis, sed ne ŝajnas esti Breeze-servilo — certigu ke la URL montras al via Breeze-servilo, ne al retejo aŭ alia apo, kaj reprovu.",
   "relayAdded": "HejmoREM aldonis: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Servilo aldonita. Poste invitu amikon por komenci babiladon.",
   "relayRemoved": "Hejmdosieroj forigitaj: {0}",
   "relayFailover": "Per sox {0} ne respondis \"Anav\") anstataŭe liveras per {1}.",
   "relayRemoveConfirm": "Forigu {0} el viaj hejmoj? La mesaĝaj donitaĵoj jam tenas la datumojn, sed ĝi nur ne plu ricevas novajn kopiojn.",

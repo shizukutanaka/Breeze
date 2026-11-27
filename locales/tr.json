@@ -485,7 +485,7 @@
   "relayAddTimeout": "Sunucunun yanıtı çok uzun sürdü — biraz bekleyip yeniden deneyin. Tekrarlanırsa sunucunun çalıştığını ve aşırı yüklenmediğini kontrol edin.",
   "relayAddNotBreeze": "Adres yanıt verdi, ancak bir Breeze sunucusuna benzemiyor — URL’nin bir web sitesine veya başka bir uygulamaya değil Breeze sunucunuza işaret ettiğinden emin olun, sonra yeniden deneyin.",
   "relayAdded": "Ana aktarıcı eklendi: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Sunucu eklendi. Şimdi sohbet etmeye başlamak için bir arkadaşınızı davet edin.",
   "relayRemoved": "Ana aktarıcı kaldırıldı: {0}",
   "relayFailover": "Aktarıcı {0} yanıt vermedi — bunun yerine {1} üzerinden teslim edildi.",
   "relayRemoveConfirm": "{0} ana aktarıcılarınızdan kaldırılsın mı? Aktarıcı zaten elinde tuttuğu verileri saklar; yalnızca yeni kopyaları almayı durdurur.",

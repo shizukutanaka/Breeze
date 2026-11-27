@@ -540,7 +540,7 @@
   "relayAddTimeout": "Serverim bija nepieciešams pārāk daudz laika, lai atbildētu — uzgaidiet mirkli un mēģiniet vēlreiz. Ja tas atkārtojas, pārbaudiet, vai serveris darbojas un nav pārslogots.",
   "relayAddNotBreeze": "Šī adrese atbildēja, bet neizskatās pēc Breeze servera — pārliecinieties, ka URL norāda uz jūsu Breeze serveri, nevis uz vietni vai citu lietotni, un mēģiniet vēlreiz.",
   "relayAdded": "Mājas relī pievienots: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Serveris ir pievienots. Tālāk uzaiciniet draugu, lai varētu sākt sarunu.",
   "relayRemoved": "Mājas relī izņemts: {0}",
   "relayFailover": "Relay {0} neatbilda – vietā piegādāja caur {1}.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

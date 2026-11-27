@@ -485,7 +485,7 @@
   "relayAddTimeout": "Server ɗin ya ɗauki lokaci mai tsawo don amsa — jira kaɗan sannan a sake gwadawa. Idan ya ci gaba, duba ko server yana aiki kuma ba ya cike da matsananciyar aiki.",
   "relayAddNotBreeze": "Adireshin ya amsa, amma bai kama server Breeze ba — tabbatar cewa URL ɗin yana kai wa server Breeze ɗinka, ba shafin yanar gizo ko wani app ba, sannan a sake gwadawa.",
   "relayAdded": "An ƙara relay na gida: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "An ƙara server ɗin. Na gaba, gayyaci aboki domin fara hira.",
   "relayRemoved": "An cire relay na gida: {0}",
   "relayFailover": "Relay {0} bai amsa ba — an isar ta {1} maimakon haka.",
   "relayRemoveConfirm": "Cire {0} daga relays na gidanka? Relay yana riƙe bayanan da ya riga ya riƙe; yana daina karɓar sabbin kwafi kawai.",

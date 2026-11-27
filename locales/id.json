@@ -263,7 +263,7 @@
   "relayAddTimeout": "Server itu terlalu lama merespons — tunggu sebentar dan coba lagi. Jika terus terjadi, periksa bahwa server berjalan dan tidak kelebihan beban.",
   "relayAddNotBreeze": "Alamat itu merespons, tetapi tidak tampak seperti server Breeze — pastikan URL mengarah ke server Breeze Anda, bukan ke situs web atau aplikasi lain, lalu coba lagi.",
   "relayAdded": "Relai rumah ditambahkan: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server ditambahkan. Selanjutnya, undang teman untuk mulai mengobrol.",
   "relayRemoved": "Relai rumah dihapus: {0}",
   "relayRemoveConfirm": "Hapus {0} dari relai rumah Anda? Relai tetap menyimpan data yang sudah dimilikinya; hanya berhenti menerima salinan baru.",
   "relayFanoutLabel": "Salinan per kontak (pengiriman redundan):",

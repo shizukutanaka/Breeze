@@ -483,7 +483,7 @@
   "relayAddTimeout": "Dy server die te lang oer it antwurdzjen — wachtsje even en besykje it opnij. As it bart bliuwt, kontrolearje dan oft de server rint en net oerbelêste is.",
   "relayAddNotBreeze": "Dat adres antwurde, mar it liket gjin Breeze-server te wêzen — kontrolearje oft de URL nei jo Breeze-server wiist en net nei in webside of oare app, en besykje it opnij.",
   "relayAdded": "Persoanlike map taheakje: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server tafoege. Nooi no in freon út om te begjinnen te chatten.",
   "relayRemoved": "Home relay removed: {0}",
   "relayFailover": "Op 'e nij begjinne as {0} is net reagearre — levere troch {1}",
   "relayRemoveConfirm": "{0} fuortsmite út jo persoanlike nijsoanfier? Dan sille de gegevens dy' t jo op dit stuit bewarre hawwe, net bewarre wurde.",

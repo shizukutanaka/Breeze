@@ -483,7 +483,7 @@
   "relayAddTimeout": "De Server huet ze laang fir eng Äntwert gebraucht — waart e Moment a probéiert nach eng Kéier. Wann dat weider geschitt, kontrolléiert, ob de Server leeft a net iwwerlaascht ass.",
   "relayAddNotBreeze": "Déi Adress huet geäntwert, mee et gesäit net wéi ee Breeze-Server aus — vergewëssert Iech, datt d’URL op äre Breeze-Server weist, net op eng Websäit oder eng aner App, a probéiert nach eng Kéier.",
   "relayAdded": "D'Home- Zesummendroung dobäigemaach: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server derbäigesat. Luet duerno e Frënd an, fir mat dem Chatten unzefänken.",
   "relayRemoved": "Home Ufro ewechgeholl: {0}",
   "relayFailover": "Relay {0} didn't answer — delivered via {1} instead.",
   "relayRemoveConfirm": "{0} aus ärem Heim läschen? D'Relay behënnert d'Daten schonn, mais nëmmen neie Kopien an.",

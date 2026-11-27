@@ -487,7 +487,7 @@
   "relayAddTimeout": "Ghabh am frithealaiche sin ro fhada gus freagairt — fan greis agus feuch a-rithist. Ma tha e a' cumail a' tachairt, dèan cinnteach gu bheil am frithealaiche a' ruith agus nach eil e ro-luchdaichte.",
   "relayAddNotBreeze": "Fhreagair an seòladh sin, ach chan eil coltas frithealaiche Breeze air — dèan cinnteach gu bheil an URL a' comharrachadh ris an fhrithealaiche Breeze agad, chan ann ri làrach-lìn no aplacaid eile, agus feuch a-rithist.",
   "relayAdded": "Cuirear ath-sheachad sa bhaile ris: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Chaidh am frithealadair a chur ris. Às dèidh sin, cuir cuireadh do charaid airson còmhradh a thòiseachadh.",
   "relayRemoved": "Chaidh ath-sheachad a' bhaile a thoirt air falbh: {0}",
   "relayFailover": "Cha deach {0} a fhreagairt air ais — seachad tro {1} an àite.",
   "relayRemoveConfirm": "Thoir air falbh {0} bhon ath-sheachadan a' bhaile agad? Coinnidh an t-ath-shlàinte an dàta a tha aige mar-thà; stadaidh seo dìreach lethbhreacan ùra.",

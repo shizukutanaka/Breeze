@@ -487,7 +487,7 @@
   "relayAddTimeout": "Poslužitelju je trebalo predugo da odgovori — pričekajte trenutak i pokušajte ponovno. Ako se to ponavlja, provjerite da poslužitelj radi i da nije preopterećen.",
   "relayAddNotBreeze": "Adresa je odgovorila, ali ne liči na Breeze poslužitelj — provjerite da URL pokazuje na vaš Breeze poslužitelj, a ne na web-stranicu ili drugu aplikaciju, pa pokušajte ponovno.",
   "relayAdded": "Matični relej je dodan: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Poslužitelj je dodan. Zatim pozovite prijatelja da počnete razgovarati.",
   "relayRemoved": "Matični relej je uklonjen: {0}",
   "relayFailover": "Relej {0} nije odgovorio — dostavljeno putem {1}.",
   "relayRemoveConfirm": "Ukloniti {0} iz matičnih releja? Relej zadržava podatke koje već ima; samo prestaje primati nove kopije.",

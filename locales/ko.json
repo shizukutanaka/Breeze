@@ -263,7 +263,7 @@
   "relayAddTimeout": "서버가 응답하는 데 너무 오래 걸렸습니다 — 잠시 후 다시 시도하세요. 계속 발생하면 서버가 실행 중이고 과부하가 아닌지 확인하세요.",
   "relayAddNotBreeze": "해당 주소는 응답했지만 Breeze 서버로 보이지 않습니다 — URL이 웹사이트나 다른 앱이 아닌 Breeze 서버를 가리키는지 확인한 후 다시 시도하세요.",
   "relayAdded": "홈 릴레이가 추가되었습니다: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "서버가 추가되었습니다. 이제 친구를 초대해 대화를 시작하세요.",
   "relayRemoved": "홈 릴레이가 삭제되었습니다: {0}",
   "relayRemoveConfirm": "{0}을(를) 홈 릴레이에서 삭제할까요? 릴레이에 이미 저장된 데이터는 그대로 남고, 새 복사본만 더 이상 전달되지 않습니다.",
   "relayFanoutLabel": "연락처별 사본 수 (중복 전송):",

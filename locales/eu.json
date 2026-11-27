@@ -538,7 +538,7 @@
   "relayAddTimeout": "Zerbitzari horrek erantzuteko denbora gehiegi behar izan zuen — itxaron une bat eta saiatu berriro. Berriz gertatzen bada, egiaztatu zerbitzaria martxan dagoela eta ez dagoela gainkargatuta.",
   "relayAddNotBreeze": "Helbideak erantzun du, baina ez dirudi Breeze zerbitzaria denik — ziurtatu URLak zure Breeze zerbitzariari egiten diola erreferentzia, ez webgune bati edo beste aplikazio bati, eta saiatu berriro.",
   "relayAdded": "Etxeko igorlea gehituta: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Zerbitzaria gehitu da. Orain, gonbidatu lagun bat txateatzen hasteko.",
   "relayRemoved": "Etxeko igorlea kenduta: {0}",
   "relayFailover": "Errelea {0}-(e)k ez du erantzun - horren ordez {1} bidez bidali da.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

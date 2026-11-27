@@ -538,7 +538,7 @@
   "relayAddTimeout": "Ese servidor tardou demasiado en responder — agarda un momento e inténtao de novo. Se segue a pasar, comproba que o servidor estea en execución e non sobrecargado.",
   "relayAddNotBreeze": "Ese enderezo respondeu, pero non parece un servidor Breeze — asegúrate de que o URL apunte ao teu servidor Breeze, non a un sitio web nin a outra aplicación, e inténtao de novo.",
   "relayAdded": "Engadiuse o relé persoal: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Servidor engadido. A continuación, convida un amigo para comezar a conversar.",
   "relayRemoved": "Eliminado o relé persoal: {0}",
   "relayFailover": "Relay {0} non contestaba, entregou por {1}.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

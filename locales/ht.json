@@ -484,7 +484,7 @@
   "relayAddTimeout": "Sèvè sa a pran twòp tan pou li reponn — tann yon ti moman epi eseye ankò. Si sa kontinye, verifye ke sèvè a ap mache epi li pa twò chaje.",
   "relayAddNotBreeze": "Adrès sa a te reponn, men li pa sanble yon sèvè Breeze — asire w ke URL la ap montre sèvè Breeze ou a, pa yon sit wèb oswa yon lòt aplikasyon, epi eseye ankò.",
   "relayAdded": "Relè lakay ajoute: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Sèvè a ajoute. Apre sa, envite yon zanmi pou ou ka kòmanse chatte.",
   "relayRemoved": "Relè lakay retire: {0}",
   "relayFailover": "Relè {0} pa t reponn — li te delivre pa {1} pito.",
   "relayRemoveConfirm": "Retire {0} nan relè lakay ou? Relè a kenbe done li deja kenbe; Li jis sispann resevwa nouvo kopi.",

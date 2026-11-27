@@ -538,7 +538,7 @@
   "relayAddTimeout": "Серверот одговараше предолго — почекајте малку и обидете се повторно. Ако продолжи, проверете дали серверот работи и не е преоптоварен.",
   "relayAddNotBreeze": "Адресата одговори, но не изгледа како Breeze сервер — проверете дека URL покажува кон вашиот Breeze сервер, а не кон веб-страница или друга апликација, и обидете се повторно.",
   "relayAdded": "Домашниот реле додаден: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Серверот е додаден. Потоа поканете пријател за да започнете разговор.",
   "relayRemoved": "Домашниот реле отстрани: {0}",
   "relayFailover": "Relay {0} не одговори — наместо тоа доставено преку {1}.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

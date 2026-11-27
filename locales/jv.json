@@ -538,7 +538,7 @@
   "relayAddTimeout": "Server iku suwe banget mbales — enteni sedhela banjur coba maneh. Yen isih kedadeyan, priksa manawa server mlaku lan ora kakehan beban.",
   "relayAddNotBreeze": "Alamat iku wis mbales, nanging ora katon kaya server Breeze — priksa manawa URL nuduh menyang server Breeze-mu, dudu menyang situs web utawa aplikasi liyane, banjur coba maneh.",
   "relayAdded": "Relay ngarep ditambahake: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server wis ditambahake. Sabanjuré, undang kanca supaya bisa miwiti ngobrol.",
   "relayRemoved": "Ngarep relay dibusak: {0}",
   "relayFailover": "Relay {0} ora mangsuli - dikirim liwat {1}.",
   "relayRemoveConfirm": "Mbusak {0} saka relay ngarep? Relay nyimpen data sing wis ana; iku mung mandheg nampa salinan anyar.",

@@ -483,7 +483,7 @@
   "relayAddTimeout": "Server ahụ were oge ogologo iji zaa — chere obere oge ma nwaa ọzọ. Ọ bụrụ na ọ gaa n’ihu, lelee ma server na-arụ ọrụ ma oke ọrụ adịghị ya.",
   "relayAddNotBreeze": "Adreesị ahụ zara, ma ọ dịghị ka server Breeze — chọpụta na URL ahụ na-ezo aka na server Breeze gị, ọ bụghị weebụsaịtị ma ọ bụ ngwa ọzọ, wee nwaa ọzọ.",
   "relayAdded": "Etinyere relay ụlọ: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Etinyere server. Ọzọ, kpọọ enyi ka ị bido nkparịta ụka.",
   "relayRemoved": "Ewepụrụ relay ụlọ: {0}",
   "relayFailover": "Relay {0} azaghị — ezigara site na {1} kama.",
   "relayRemoveConfirm": "Wepụ {0} na relay ụlọ gị? Relay na-edebe data o nwere ugbu a; ọ na-akwụsị ịnata mbipụta ọhụrụ.",

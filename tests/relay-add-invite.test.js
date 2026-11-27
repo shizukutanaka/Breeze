@@ -79,7 +79,10 @@ describe('relayAddedInvitePrompt i18n', () => {
       expect(table.relayAddedInvitePrompt, `${file} defines relayAddedInvitePrompt`).toBeDefined();
       expect(Object.keys(table).sort(), `${file} key set matches en`).toEqual(enKeys);
       if (file === 'ja.json') expect(table.relayAddedInvitePrompt).toBe(JA_PROMPT);
-      else expect(table.relayAddedInvitePrompt).toBe(EN_PROMPT);
+      // Backfilled 2026-11-27: every locale now holds a real translation of
+      // this first-run path string, so the invariant is "differs from en"
+      // (the previous pin froze the introduction state, English everywhere).
+      else expect(table.relayAddedInvitePrompt).not.toBe(EN_PROMPT);
     }
   });
 });
