@@ -7,10 +7,11 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { collectDeclaredIds, collectLookups, deadWirings } from '../tools/dead-wiring.mjs';
+import { collectDeclaredIds, collectLookups, deadWirings, readRuntimeClientSource } from '../tools/dead-wiring.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const html = readFileSync(join(HERE, '..', 'index.html'), 'utf8');
+const runtimeSrc = readRuntimeClientSource(join(HERE, '..'));
 
 describe('dead-wiring — lookup spellings', () => {
   it('detects _DOM.get and getElementById in all three quote styles', () => {
@@ -54,15 +55,21 @@ describe('dead-wiring — declaration spellings', () => {
 });
 
 describe('dead-wiring — real file verdict', () => {
-  it('index.html has zero dead literal lookups', () => {
-    expect(deadWirings(html)).toEqual([]);
+  it('index.html has zero dead literal lookups against the runtime client declaration set', () => {
+    expect(deadWirings(html, runtimeSrc)).toEqual([]);
   });
 
-  it('every literal lookup in index.html resolves (consistency check on the live file)', () => {
+  it('every literal lookup in index.html resolves (consistency check on the live runtime client)', () => {
     const want = collectLookups(html);
-    const have = collectDeclaredIds(html);
+    const have = collectDeclaredIds(runtimeSrc);
     const missing = [...want.keys()].filter((id) => !have.has(id));
     expect(missing).toEqual([]);
     expect(want.size).toBeGreaterThan(50); // sanity: the scan actually found lookups
+  });
+
+  it('the slash popover lookup resolves to the id assigned by the extracted module', () => {
+    expect(collectLookups(html).has('slash-picker')).toBe(true);
+    expect(collectDeclaredIds(html).has('slash-picker')).toBe(false);
+    expect(collectDeclaredIds(runtimeSrc).has('slash-picker')).toBe(true);
   });
 });

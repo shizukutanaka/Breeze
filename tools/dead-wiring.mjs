@@ -22,12 +22,25 @@
 // getElementById — a lone double-quoted or backticked call used to slip through the
 // single-quote-only scan (the same blind spot i18n-check had for t("key")).
 // ============================================================================
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const HTML = join(ROOT, 'index.html');
+
+// Extracted src/app modules create DOM in the same document as index.html
+// (the slash picker is one example), so their literal id declarations are part
+// of the runtime declaration set even though the lookup may stay in index.html.
+export function readRuntimeClientSource(root = ROOT) {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  const appDir = join(root, 'src', 'app');
+  const modules = readdirSync(appDir)
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => readFileSync(join(appDir, f), 'utf8'))
+    .join('\n');
+  return html + '\n' + modules;
+}
 
 // Every id the file can produce, in markup OR in JS strings. Backtick variants are
 // legal inside template literals (`id="x"` scanned by the same regex once the backtick
@@ -55,23 +68,26 @@ export function collectLookups(html) {
   return want;
 }
 
-// Lookup ids that no declaration can satisfy.
-export function deadWirings(html) {
-  const have = collectDeclaredIds(html);
+// Lookup ids that no declaration can satisfy. declarationSrc defaults to the
+// same source for unit tests; the live gate passes the combined runtime client
+// source so ids created by extracted modules satisfy lookups in index.html.
+export function deadWirings(html, declarationSrc = html) {
+  const have = collectDeclaredIds(declarationSrc);
   return [...collectLookups(html).entries()].filter(([id]) => !have.has(id));
 }
 
 export function main() {
   const html = readFileSync(HTML, 'utf8');
-  const dead = deadWirings(html);
+  const runtimeSrc = readRuntimeClientSource();
+  const dead = deadWirings(html, runtimeSrc);
   if (dead.length) {
     console.error(`dead-wiring: FAIL — ${dead.length} lookup(s) target an id that never exists`);
     for (const [id, line] of dead) console.error(`  - index.html:${line}  _DOM.get('${id}') — no element ever has this id`);
     console.error('  Either the element was removed (delete the dead handler) or the id is a typo.');
     process.exit(1);
   }
-  const want = collectLookups(html), have = collectDeclaredIds(html);
-  console.log(`dead-wiring: OK — ${want.size} literal id lookup(s), all resolve (${have.size} ids declared)`);
+  const want = collectLookups(html), have = collectDeclaredIds(runtimeSrc);
+  console.log(`dead-wiring: OK — ${want.size} literal id lookup(s), all resolve (${have.size} runtime ids declared)`);
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) main();
