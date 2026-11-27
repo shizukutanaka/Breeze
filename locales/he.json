@@ -487,7 +487,7 @@
   "relayAddTimeout": "לשרת לקח יותר מדי זמן לענות — המתן רגע ונסה שוב. אם זה חוזר, בדוק שהשרת פועל ואינו עמוס.",
   "relayAddNotBreeze": "הכתובת ענתה, אך אינה נראית כמו שרת Breeze — ודא שהכתובת מפנה לשרת ה-Breeze שלך ולא לאתר או לאפליקציה אחרת, ונסה שוב.",
   "relayAdded": "ממסר בית נוסף: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "השרת נוסף. עכשיו הזמינו חבר כדי להתחיל לשוחח.",
   "relayRemoved": "ממסר בית הוסר: {0}",
   "relayFailover": "הממסר {0} לא ענה — נמסר דרך {1} במקום.",
   "relayRemoveConfirm": "להסיר את {0} מממסרי הבית שלכם? הממסר שומר את הנתונים שכבר יש לו; הוא פשוט מפסיק לקבל עותקים חדשים.",

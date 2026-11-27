@@ -484,7 +484,7 @@
   "relayAddTimeout": "Seva seo se nkuile nako e telele ho araba — ema hanyane ebe u lekola hape. Haeba ho tsoelapele, sheba hore seva se a tsamaea mme ha se na boinolo ba ho sebedisoa.",
   "relayAddNotBreeze": "Aterese eo e arabile, empa ha e bonahale e le seva sa Breeze — netefatsa hore URL e supa seva sa hau sa Breeze, eseng sebaka sa marang-rang kapa app e ngoe, ebe u lekola hape.",
   "relayAdded": "Home Ho Ho Ho says: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Seva e kentsoe. Kamora moo, mema motswalle hore le qale ho buisana.",
   "relayRemoved": "Home Relay e tlositsoe: {0}",
   "relayFailover": "Relay {0} ha ea ka ea araba — e fanoe ka {1} ho e-na le hoo.",
   "relayRemoveConfirm": "Tlosa {0} ho li-relays tsa hau tsa lapeng? Relay e boloka data eo e seng e ntse e e tšoere; e emisa feela ho amohela likopi tse ncha.",

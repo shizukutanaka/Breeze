@@ -485,7 +485,7 @@
   "relayAddTimeout": "Il server ha impiegato troppo tempo a rispondere — attendi un momento e riprova. Se il problema persiste, verifica che il server sia in esecuzione e non sovraccarico.",
   "relayAddNotBreeze": "L'indirizzo ha risposto, ma non sembra un server Breeze — assicurati che l'URL punti al tuo server Breeze e non a un sito web o a un'altra app, quindi riprova.",
   "relayAdded": "Relay principale aggiunto: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server aggiunto. Ora invita un amico per iniziare a chattare.",
   "relayRemoved": "Relay principale rimosso: {0}",
   "relayFailover": "Il relay {0} non ha risposto — consegnato invece tramite {1}.",
   "relayRemoveConfirm": "Rimuovere {0} dai tuoi relay principali? Il relay conserva i dati che già detiene; smette solo di ricevere nuove copie.",

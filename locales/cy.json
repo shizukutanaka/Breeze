@@ -491,7 +491,7 @@
   "relayAddTimeout": "Cymerodd y gweinydd hwnnw ormod o amser i ateb — arhoswch foment a rhowch gynnig arall. Os yw'n parhau i ddigwydd, gwiriwch fod y gweinydd yn rhedeg ac nad yw'n orlwytho.",
   "relayAddNotBreeze": "Atebodd y cyfeiriad hwnnw, ond nid yw'n edrych fel gweinydd Breeze — gwnewch yn siŵr bod yr URL yn pwyntio at eich gweinydd Breeze, nid at wefan neu ap arall, yna rhowch gynnig arall.",
   "relayAdded": "Cyfnewid cartref: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Ychwanegwyd y gweinydd. Nesaf, gwahoddwch ffrind fel y gallwch ddechrau sgwrsio.",
   "relayRemoved": "Tynnwyd adfer cartref: {0}",
   "relayFailover": "Wnaeth Relay {0} ddim ateb — fe'i danfonwyd drwy {1} yn lle hynny.",
   "relayRemoveConfirm": "Tynnu {0} o'ch cartref yn ail-osod? Mae'r ail-osod yn cadw'r data mae'n ei ddal yn barod; mae ond yn atal derbyn copïau newydd.",

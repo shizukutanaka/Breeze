@@ -540,7 +540,7 @@
   "relayAddTimeout": "Kadtong server dugay kaayo mitubag — huwat usa ka gutlo ug sulayi pag-usab. Kung magpadayon, susiha nga ang server nagdagan ug dili overloaded.",
   "relayAddNotBreeze": "Kadtong adres mitubag, apan dili kini morag server sa Breeze — siguroha nga ang URL nagtudlo sa imong Breeze server, dili sa usa ka website o laing app, unya sulayi pag-usab.",
   "relayAdded": "Gidugang ang relay sa balay: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Nadugang ang server. Sunod, imbitaha ang usa ka higala aron makasugod mo og chat.",
   "relayRemoved": "Gitangtang ang relay sa balay: {0}",
   "relayFailover": "Ang relay {0} wala motubag — gihatud na hinuon pinaagi sa {1}.",
   "relayRemoveConfirm": "Kuhaa ang {0} gikan sa imong mga relay sa balay? Ang relay nagtipig sa datos nga gihuptan na niini; mohunong ra kini sa pagdawat og bag-ong mga kopya.",

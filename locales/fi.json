@@ -485,7 +485,7 @@
   "relayAddTimeout": "Palvelimen vastaus kesti liian kauan — odota hetki ja yritä uudelleen. Jos ongelma toistuu, tarkista että palvelin on käynnissä eikä ylikuormittunut.",
   "relayAddNotBreeze": "Osoite vastasi, mutta se ei näytä Breeze-palvelimelta — varmista, että URL-osoite osoittaa Breeze-palvelimeesi eikä verkkosivustoon tai toiseen sovellukseen, ja yritä uudelleen.",
   "relayAdded": "Kotivälittäjä lisätty: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Palvelin lisätty. Kutsu seuraavaksi ystävä, jotta voit aloittaa keskustelun.",
   "relayRemoved": "Kotivälittäjä poistettu: {0}",
   "relayFailover": "Välittäjä {0} ei vastannut — toimitettiin sen sijaan välittäjän {1} kautta.",
   "relayRemoveConfirm": "Poistetaanko {0} kotivälittäjistäsi? Välittäjä säilyttää jo hallussaan olevat tiedot; se vain lakkaa vastaanottamasta uusia kopioita.",

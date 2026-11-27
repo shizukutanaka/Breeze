@@ -484,7 +484,7 @@
   "relayAddTimeout": "O servidor demorou demasiado tempo a responder — aguarde um momento e tente novamente. Se continuar a acontecer, verifique se o servidor está em execução e não está sobrecarregado.",
   "relayAddNotBreeze": "O endereço respondeu, mas não parece ser um servidor Breeze — certifique-se de que o URL aponta para o seu servidor Breeze e não para um site ou outra aplicação, e tente novamente.",
   "relayAdded": "Retransmissão doméstica adicionada: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Servidor adicionado. De seguida, convide um amigo para começar a conversar.",
   "relayRemoved": "Retransmissão doméstica removida: {0}",
   "relayFailover": "Relay {0} não respondeu — entreguei via {1} em vez disso.",
   "relayRemoveConfirm": "Remover {0} dos seus relés domésticos? O relé mantém os dados que já contém; simplesmente deixa de receber cópias novas.",

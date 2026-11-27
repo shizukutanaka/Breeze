@@ -485,7 +485,7 @@
   "relayAddTimeout": "Serveren tog för lång tid på sig att svara — vänta en stund och försök igen. Om det fortsätter, kontrollera att servern körs och inte är överbelastad.",
   "relayAddNotBreeze": "Adressen svarade, men den verkar inte vara en Breeze-server — kontrollera att URL:en pekar på din Breeze-server och inte på en webbplats eller annan app, och försök igen.",
   "relayAdded": "Hemrelä tillagt: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server tillagd. Bjud sedan in en vän så att du kan börja chatta.",
   "relayRemoved": "Hemrelä borttaget: {0}",
   "relayFailover": "Relä {0} svarade inte — levererat via {1} i stället.",
   "relayRemoveConfirm": "Ta bort {0} från dina hemreläer? Reläet behåller data det redan har; det slutar bara ta emot nya kopior.",

@@ -484,7 +484,7 @@
   "relayAddTimeout": "Leyo seva ithathe isikhathi eside ukuphendula — linda kancane bese uzama futhi. Uma kuqhubeka, hlola ukuthi iseva iyasebenza futhi ayithwali kakhulu.",
   "relayAddNotBreeze": "Lelo kheli liphendule, kodwa alifani neseva yeBreeze — qiniseka ukuthi i-URL ikhomba kwiserver yakho yeBreeze, hhayi kwebhusayithi noma kwenye i-app, bese uzama futhi.",
   "relayAdded": "Home Ezemidlalo Wanezela: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Iseva yengeziwe. Emva kwalokho, mema umngane ukuze uqale inkulumo.",
   "relayRemoved": "Ukudluliselwa kwasekhaya kususiwe: {0}",
   "relayFailover": "I-Relay {0} ayiphendulanga — ihanjiswe nge-{1} esikhundleni.",
   "relayRemoveConfirm": "Susa {0} kusuka kuma-relays akho asekhaya? I-relay igcina idatha esevele ibambe; Uyeka nje ukuthola amakhophi amasha.",

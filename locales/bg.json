@@ -538,7 +538,7 @@
   "relayAddTimeout": "Този сървър отговори твърде бавно — изчакайте малко и опитайте отново. Ако се повтаря, проверете дали сървърът работи и не е претоварен.",
   "relayAddNotBreeze": "Адресът отговори, но не изглежда като Breeze сървър — уверете се, че URL адресът сочи към вашия Breeze сървър, а не към уебсайт или друго приложение, и опитайте отново.",
   "relayAdded": "Добавени реле на дома: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Сървърът е добавен. След това поканете приятел, за да започнете да чатите.",
   "relayRemoved": "Начало реле отстранено: {0}",
   "relayFailover": "Relay {0} не отговаря – доставено чрез {1}.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

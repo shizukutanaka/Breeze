@@ -485,7 +485,7 @@
   "relayAddTimeout": "Die server deed er te lang over om te antwoorden — wacht even en probeer het opnieuw. Als dit blijft gebeuren, controleer dan of de server draait en niet overbelast is.",
   "relayAddNotBreeze": "Dat adres antwoordde, maar het lijkt geen Breeze-server te zijn — controleer of de URL naar je Breeze-server verwijst en niet naar een website of andere app, en probeer het opnieuw.",
   "relayAdded": "Thuisrelay toegevoegd: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server toegevoegd. Nodig vervolgens een vriend uit om te beginnen met chatten.",
   "relayRemoved": "Thuisrelay verwijderd: {0}",
   "relayFailover": "Relay {0} antwoordde niet — in plaats daarvan afgeleverd via {1}.",
   "relayRemoveConfirm": "{0} verwijderen uit je thuisrelays? De relay bewaart de gegevens die deze al heeft; deze ontvangt alleen geen nieuwe kopieën meer.",

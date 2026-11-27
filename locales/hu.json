@@ -485,7 +485,7 @@
   "relayAddTimeout": "A szerver túl sokáig válaszolt — várj egy pillanatot, és próbáld újra. Ha ismétlődik, ellenőrizd, hogy a szerver fut-e és nincs-e túlterhelve.",
   "relayAddNotBreeze": "A cím válaszolt, de nem tűnik Breeze-szervernek — ellenőrizd, hogy az URL a saját Breeze-szerveredre mutat-e, nem pedig egy weboldalra vagy másik alkalmazásra, majd próbáld újra.",
   "relayAdded": "Otthoni közvetítő hozzáadva: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "A szerver hozzáadva. Ezután hívj meg egy barátot, hogy elkezdhess csevegni.",
   "relayRemoved": "Otthoni közvetítő eltávolítva: {0}",
   "relayFailover": "A közvetítő {0} nem válaszolt — helyette ezen keresztül kézbesítve: {1}.",
   "relayRemoveConfirm": "Eltávolítod {0} közvetítőt az otthoni közvetítőid közül? A közvetítő megtartja a már nála lévő adatokat; csak nem kap új másolatokat.",

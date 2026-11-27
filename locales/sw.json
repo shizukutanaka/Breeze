@@ -485,7 +485,7 @@
   "relayAddTimeout": "Seva hiyo ilichukua muda mrefu kujibu — subiri kidogo kisha jaribu tena. Ikiwa inaendelea kutokea, hakikisha kuwa seva inafanya kazi na haijazidiwa mzigo.",
   "relayAddNotBreeze": "Anwani hiyo ilijibu, lakini haionekani kama seva ya Breeze — hakikisha URL inaelekeza kwenye seva yako ya Breeze, si kwenye tovuti au programu nyingine, kisha jaribu tena.",
   "relayAdded": "Relay ya nyumbani imeongezwa: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Seva imeongezwa. Kisha, mwalike rafiki ili uanze kuzungumza.",
   "relayRemoved": "Relay ya nyumbani imeondolewa: {0}",
   "relayFailover": "Relay {0} haikujibu — imefikishwa kupitia {1} badala yake.",
   "relayRemoveConfirm": "Ondoa {0} kutoka kwenye relay zako za nyumbani? Relay inabaki na data ambayo tayari inayo; inakoma tu kupokea nakala mpya.",

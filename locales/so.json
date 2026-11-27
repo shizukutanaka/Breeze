@@ -484,7 +484,7 @@
   "relayAddTimeout": "Server-kaas wuxuu qaadan waqti dheer inuu jawaabo — sug daqiiqo kadibna isku day mar kale. Haddii ay sii socoto, hubi in server-ku shaqeynayo oo aanu culays badan haysan.",
   "relayAddNotBreeze": "Cinwaankaas wuu jawaabay, laakiin uma eka server Breeze — hubi in URL-ku tilmaamayo server-kaaga Breeze, ee aanu ahayn websaydh ama app kale, kadibna isku day mar kale.",
   "relayAdded": "Home relay ayaa lagu daray: {0}",
-  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
+  "relayAddedInvitePrompt": "Server-ka waa lagu daray. Kadib, casum saaxiib si aad u bilowdo sheekeysiga.",
   "relayRemoved": "Home relay waa la saaray: {0}",
   "relayFailover": "Relay {0} jawaab ma bixin — halkii {1} loo diray.",
   "relayRemoveConfirm": "Ma ka saartaa {0} relays-ka gurigaaga? Relay-gu wuxuu hayaa xogta uu horey u hayay; Wuxuu joojiyaa helitaanka nuqullo cusub.",
