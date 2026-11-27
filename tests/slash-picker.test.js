@@ -175,6 +175,15 @@ describe('slash-picker behaviour', () => {
     expect(items['/search'].innerHTML).toContain('/search hello');
   });
 
+  it('shows the /schedule usage example when filtering by /sch', () => {
+    const h = installHarness();
+    createSlashPicker(h.deps);
+    h.type('/sch');
+    const item = h.picker().querySelectorAll('.mention-item').find((el) => el.dataset.cmd === '/schedule');
+    expect(item).toBeTruthy();
+    expect(item.innerHTML).toContain('/schedule 5m Hello');
+  });
+
   it('renders a matched command without curated metadata bare', () => {
     const h = installHarness();
     createSlashPicker(h.deps);
@@ -227,6 +236,13 @@ describe('slash-picker exported data', () => {
     for (const command of Object.keys(SLASH_EXAMPLES)) {
       expect(SLASH_COMMANDS).toContain(command);
     }
+  });
+
+  it('pins the /schedule example to the accepted relative-time syntax', () => {
+    expect(SLASH_EXAMPLES).toHaveProperty('/schedule');
+    const example = SLASH_EXAMPLES['/schedule'];
+    expect(example.startsWith('/schedule')).toBe(true);
+    expect(example).toMatch(/^\/schedule \d+[smhd]\s+\S+/i);
   });
 
   it('describes exactly the curated first-success and everyday commands', () => {
