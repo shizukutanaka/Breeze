@@ -82,10 +82,10 @@ function gateHarness(settings, { setupVisible = true, mainVisible = false, param
   const mainChild = makeEl(false);
   els['msg-main'].children = [mainChild, els['msg-server-gate']];
   const paramSet = new Set(params);
-  const fn = new Function('homeRelays', '_DOM', 'P',
+  const fn = new Function('homeRelays', '_DOM', 'P', '_settings',
     `${sliceBetween('function _serverGateControl', "// The add-flow's probe")}
      return { _updateServerGate };`);
-  const gate = fn(relays.homeRelays, { get: (id) => els[id] || null }, { has: (k) => paramSet.has(k) });
+  const gate = fn(relays.homeRelays, { get: (id) => els[id] || null }, { has: (k) => paramSet.has(k) }, settings);
   return { ...gate, els, restoreButtons, mainChild, settings };
 }
 

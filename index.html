@@ -1233,6 +1233,8 @@ del.md-del { opacity: .6 }
       <p class="server-gate-desc" data-i18n="gateServerDesc"></p>
       <p class="server-gate-steps" data-i18n="gateServerSteps"></p>
       <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
+      <p class="server-gate-desc" data-i18n="gateLocalDesc"></p>
+      <button type="button" class="btn btn-o server-gate-local" data-i18n="gateStartLocal"></button>
     </div>
     <input type="text" id="msg-name-random" class="field setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup-random" data-i18n="setupRandom"></button>
@@ -1381,6 +1383,8 @@ del.md-del { opacity: .6 }
         <p id="msg-server-gate-desc" class="server-gate-desc" data-i18n="gateServerDesc"></p>
         <p id="msg-server-gate-steps" class="server-gate-steps" data-i18n="gateServerSteps"></p>
         <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
+        <p class="server-gate-desc" data-i18n="gateLocalDesc"></p>
+        <button type="button" class="btn btn-o server-gate-local" data-i18n="gateStartLocal"></button>
       </div>
     </div>
 
@@ -2162,6 +2166,13 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     billingPassOk: 'Pass accepted. This server is ready to use.',
     billingPassInvalid: 'That pass (or payment reference) was not accepted by the server.',
     billingPassNeeded: 'This server needs a valid billing pass. Re-add the server to enter one.',
+    gateStartLocal: 'Start a server on this device',
+    gateLocalDesc: 'For people nearby: this device acts as the server while it is here and awake. Setting it up uses no outside server.',
+    gateLocalStarted: 'Server started on this device. Invite people nearby to connect.',
+    gateLocalRoomLabel: 'Server on this device (local room)',
+    gateLocalHosting: 'Active while this device is awake',
+    gateLocalStop: 'Stop',
+    gateLocalStopped: 'The server on this device was stopped.',
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
@@ -4806,13 +4817,33 @@ async function initMessenger(dbName) {
     }
   }
   function _serverGateAdd() { _addRelayFlow().catch(e => _dbg(e, 'server-gate-add')); }
+  // Local room (on-the-spot server, 2026-11-27 design): this device
+  // itself acts as the server for people nearby, using the existing
+  // in-person pairing and rendezvous paths. The room record lives in
+  // settings; the gate treats an active room as having a server. The
+  // honest limit (host must stay here and awake) is in the gate copy.
+  async function _startLocalRoom() {
+    if (_settings.localRoom) { _updateServerGate(); return; }
+    _settings.localRoom = { startedAt: Date.now() };
+    await saveSettings();
+    _updateServerGate();
+    showToast(t('gateLocalStarted'), 'success');
+    if (myId) { try { await shareInvite(); } catch(e) { _dbg(e, 'local-room-invite'); } }
+  }
+  async function _stopLocalRoom() {
+    if (!_settings.localRoom) return;
+    delete _settings.localRoom;
+    await saveSettings();
+    _updateServerGate();
+    showToast(t('gateLocalStopped'), 'success');
+  }
   function _updateServerGate() {
     const panel = _DOM.get('msg-server-gate-panel');
     const overlay = _DOM.get('msg-server-gate');
     const setup = _DOM.get('msg-setup');
     const main = _DOM.get('msg-main');
     if (!panel || !overlay || !setup || !main) return;
-    const active = globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true && !globalThis.__breezeMock?.enabled?.() && homeRelays().length === 0;
+    const active = globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true && !globalThis.__breezeMock?.enabled?.() && homeRelays().length === 0 && !_settings.localRoom;
     const setupVisible = !setup.classList.contains('hidden');
     const mainVisible = !main.classList.contains('hidden');
     const setupGated = active && setupVisible;
@@ -8134,6 +8165,7 @@ async function initMessenger(dbName) {
     _openSettingsFromUrl();
   }
   document.querySelectorAll('.server-gate-add').forEach(btn => btn.addEventListener('click', _serverGateAdd, { signal: _ac.signal }));
+  document.querySelectorAll('.server-gate-local').forEach(btn => btn.addEventListener('click', () => { _startLocalRoom().catch(e => _dbg(e, 'local-room-start')); }, { signal: _ac.signal }));
   // The first screen's primary action: one tap mints a random identity
   // through createIdentity's existing random generation path and enters
   // the app — no name, no alias, no phrase step. The record stays
@@ -14179,6 +14211,8 @@ async function initMessenger(dbName) {
     _validTabOrder, saveSettings, _applyTabOrder, _applyTabVisibility, _showChatsTab, _setActiveTab,
     renderContacts, _setConvName, _updateFocusBanner, _addRelayFlow, removeHomeRelay, relayFingerprint,
     showConfirm, showToast, shareInvite, showMigratePanel, showMigrationGuide, _profileUI,
+    localRoom: () => _settings.localRoom || null,
+    stopLocalRoom: async () => { await _stopLocalRoom(); _renderSettingsPanel(_DOM.get('settings-body')); },
     getAutoBackupStatus, armAutoBackup, closeSettingsView, _renderSettingsPanel, _dbg,
   }) || null;
   function _renderSettingsPanel(d) { _settingsView?.renderPanel(d); }
