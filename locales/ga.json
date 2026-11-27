@@ -1212,5 +1212,8 @@
   "mockSeedG1": "Fáilte go dtí an grúpa sampla.",
   "mockSeedG2": "Cuidíonn sé seo a thaispeáint cén cosúil comhrá grúpa.",
   "settingsInstallApp": "Suiteáil an aip",
-  "helpSetInstallApp": "Osclaíonn sé seo suiteáil aonchliceáil na h-aip nuair a thairgeann an brabhsálaí é. Mura bhfuil an leid sin ar fáil, taispeánann sé treoracha suiteála nó meirge íoslódála deisce ina ionad."
+  "helpSetInstallApp": "Osclaíonn sé seo suiteáil aonchliceáil na h-aip nuair a thairgeann an brabhsálaí é. Mura bhfuil an leid sin ar fáil, taispeánann sé treoracha suiteála nó meirge íoslódála deisce ina ionad.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

@@ -1191,5 +1191,8 @@
   "tabMoveRight": "ٽيب کي ساڄي طرف منتقل ڪريو",
   "helpSetTabOrder": "هيٺين ٽيبز جي ترتيب تبديل ڪري ٿو. قطار کي ڊريگ ڪريو، يا تير وارا بٽڻ استعمال ڪريو؛ ٽيب بار فوراً اپڊيٽ ٿي وڃي ٿو. چيٽس کي ٻيهر ترتيب ڏئي سگهجي ٿو پر هميشه ڏيکاريو ويندو آهي.",
   "settingsInstallApp": "ايپ انسٽال ڪريو",
-  "helpSetInstallApp": "جڏهن برائوزر ان کي پيش ڪري ٿو ته هڪ ڪلڪ سان ايپ انسٽاليشن کوليندو آهي. جيڪڏهن اهو پرامپٽ موجود نه هجي، ته انسٽال جون هدايتون يا ڊيسڪ ٽاپ ڊائونلوڊ بينر ڏيکاريو ويندو."
+  "helpSetInstallApp": "جڏهن برائوزر ان کي پيش ڪري ٿو ته هڪ ڪلڪ سان ايپ انسٽاليشن کوليندو آهي. جيڪڏهن اهو پرامپٽ موجود نه هجي، ته انسٽال جون هدايتون يا ڊيسڪ ٽاپ ڊائونلوڊ بينر ڏيکاريو ويندو.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

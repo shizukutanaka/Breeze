@@ -2031,6 +2031,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     labelNoneContacts: 'No labels yet. Right-click a contact to add one.',
     labelNoneCmd: 'No labels. Use /label Work, Family to add.',
     enableNotif: 'Enable push notifications', helpSetNotifPerm: "Asks the browser or operating system for permission to show notifications. Breeze cannot grant this itself; if permission was denied before, you may need to change it in browser or system settings.",
+    notifAskTitle: 'Turn on notifications?', notifAskDesc: 'Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.', notifAskAllow: 'Turn on',
     ttEditProfile: 'Edit profile',
     ttClickToCopy: 'Click to copy',
     ttAttach: 'Attach',
@@ -2735,10 +2736,8 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     mockSeedG1: 'Welcome to the sample group.',
     mockSeedG2: 'This helps show what group conversations look like.',
   },
-  // ja (and every future locale) lives in locales/<lang>.json — fetched at boot by _loadLocale()
-  // and merged here. Only English ships inline: it is the reference table and the fallback, so
-  // the app is never blank while a locale file is in flight. Locale files are pure data,
-  // validated by tools/i18n-check.mjs (wired into validate.sh).
+  ja: { notifAskTitle: '通知をオンにしますか？', notifAskDesc: '新しいメッセージや着信が届いたとき、別のアプリを見ていてもお知らせできます。そのために会話の内容がこの端末の外へ出ることはありません。設定でいつでもオフにできます。', notifAskAllow: 'オンにする' },
+  // Other ja strings and future locales live in locales/<lang>.json, fetched at boot and merged here; these three ship inline because the ask can precede that fetch. English remains the reference/fallback; locale files are validated by tools/i18n-check.mjs.
 };
 // Locales with a full translation file in locales/. Everything else falls back to English.
 // (A 924-language × 25-string table, lang.js, used to sit between the two. Deleted: measured,
@@ -8520,8 +8519,7 @@ async function initMessenger(dbName) {
         showToast(t('contactHomeCleared'), 'success');
         return;
       }
-      const preflight = _preflightRelayUrl(trimmed);
-      if (preflight.error) { showToast(t({ invalid: 'relayAddInvalid', insecure: 'relayAddInsecure' }[preflight.error] || 'relayAddInvalid'), 'error'); return; }
+      const preflight = _preflightRelayUrl(trimmed); if (preflight.error) { showToast(t({ invalid: 'relayAddInvalid', insecure: 'relayAddInsecure' }[preflight.error] || 'relayAddInvalid'), 'error'); return; }
       const url = preflight.url;
       const r = await _relayAttestCheck(url + '/api', null);
       if (r.verdict === 'unreachable') {
@@ -9056,10 +9054,12 @@ async function initMessenger(dbName) {
     // Snapshot the input NOW: the draft restore below runs after awaits, and anything the
     // user types in that gap must never be clobbered (fast type-after-click loses text — E2E-found).
     const _inputAtSwitch = _DOM.get('msg-input')?.value ?? '';
-    // v3.1: Request notification permission on first conversation (contextual)
+    // v3.1: Request notification permission on first conversation (contextual). A5: explain in-app first — a denied system prompt cannot be re-asked; declining leaves 'default', so Settings can still ask.
     if (!_notifRequested && typeof Notification !== 'undefined' && Notification.permission === 'default') {
       _notifRequested = true;
-      Notification.requestPermission().catch(e => _dbg(e));
+      showConfirm(t('notifAskTitle'), { desc: t('notifAskDesc'), okText: t('notifAskAllow') })
+        .then(ok => { if (ok) Notification.requestPermission().catch(e => _dbg(e)); })
+        .catch(e => _dbg(e));
     }
     activeContact = contact; refreshSignalPolls(); _updateDeliveryHint(); // D12: the newly open conversation's poll returns to the 15s fallback at once; the one left behind thins out
     contact.unread = 0;

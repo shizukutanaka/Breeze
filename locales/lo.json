@@ -1184,5 +1184,8 @@
   "mockSeedB2": "ຂ້ອຍສາມາດລອງສົ່ງຂໍ້ຄວາມໄດ້ບໍ?",
   "mockSeedB3": "ແມ່ນແລ້ວ. ການຕອບກັບແມ່ນຖືກສ້າງຂຶ້ນພາຍໃນປະເທດຫຼັງຈາກການຊັກຊ້າສັ້ນ.",
   "mockSeedG1": "ຍິນດີຕ້ອນຮັບສູ່ກຸ່ມຕົວຢ່າງ.",
-  "mockSeedG2": "ນີ້ຊ່ວຍສະແດງໃຫ້ເຫັນວ່າການສົນທະນາກຸ່ມເບິ່ງຄືແນວໃດ."
+  "mockSeedG2": "ນີ້ຊ່ວຍສະແດງໃຫ້ເຫັນວ່າການສົນທະນາກຸ່ມເບິ່ງຄືແນວໃດ.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

@@ -1191,5 +1191,8 @@
   "mockSeedB2": "Оё ман метавонам кӯшиш кунам, ки паём фиристам?",
   "mockSeedB3": "Бале. Ҷавобҳо пас аз таъхири кӯтоҳ ба таври маҳаллӣ тавлид мешаванд.",
   "mockSeedG1": "Хуш омадед ба гурӯҳи намунавӣ.",
-  "mockSeedG2": "Ин кӯмак мекунад, ки сӯҳбатҳои гурӯҳӣ чӣ гунаанд."
+  "mockSeedG2": "Ин кӯмак мекунад, ки сӯҳбатҳои гурӯҳӣ чӣ гунаанд.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

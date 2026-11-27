@@ -1191,5 +1191,8 @@
   "tabMoveRight": "מאַך די קוויטל רעכט",
   "helpSetTabOrder": "ענדערונגען די סדר פון די דנאָ טאַבס. שלעפּן אַ רודערן אָדער נוצן די פייַל קנעפּלעך; די קוויטל באַר דערהייַנטיקונגען מיד. טשאַץ קענען זיין ריאָרדערד אָבער איז שטענדיק געוויזן.",
   "settingsInstallApp": "אינסטאַלירן די אַפּ",
-  "helpSetInstallApp": "עפֿענט איין־קליק אַפּ־אינסטאַלאַציע ווען דער בלעטערער ביעט עס אָן. אויב יענע פֿראַגע איז נישט בנימצא, ווײַזט עס אינסטאַלאַציע־אנווייזונגען אָדער דעם דעסקטאָפּ־אָפּלאָד־באַנער."
+  "helpSetInstallApp": "עפֿענט איין־קליק אַפּ־אינסטאַלאַציע ווען דער בלעטערער ביעט עס אָן. אויב יענע פֿראַגע איז נישט בנימצא, ווײַזט עס אינסטאַלאַציע־אנווייזונגען אָדער דעם דעסקטאָפּ־אָפּלאָד־באַנער.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

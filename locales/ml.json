@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Move tab right",
   "helpSetTabOrder": "Changes the order of the bottom tabs. Drag a row, or use the arrow buttons; the tab bar updates immediately. Chats can be reordered but is always shown.",
   "settingsInstallApp": "ആപ്പ് ഇൻസ്റ്റാൾ ചെയ്യുക",
-  "helpSetInstallApp": "ബ്രൗസർ വാഗ്ദാനം ചെയ്യുമ്പോൾ ഒറ്റക്ലിക്ക് ആപ്പ് ഇൻസ്റ്റലേഷൻ തുറക്കുന്നു. ആ പ്രോംപ്റ്റ് ലഭ്യമല്ലെങ്കിൽ, പകരം ഇൻസ്റ്റലേഷൻ നിർദ്ദേശങ്ങളോ ഡെസ്ക്ടോപ്പ് ഡൗൺലോഡ് ബാനറോ കാണിക്കുന്നു."
+  "helpSetInstallApp": "ബ്രൗസർ വാഗ്ദാനം ചെയ്യുമ്പോൾ ഒറ്റക്ലിക്ക് ആപ്പ് ഇൻസ്റ്റലേഷൻ തുറക്കുന്നു. ആ പ്രോംപ്റ്റ് ലഭ്യമല്ലെങ്കിൽ, പകരം ഇൻസ്റ്റലേഷൻ നിർദ്ദേശങ്ങളോ ഡെസ്ക്ടോപ്പ് ഡൗൺലോഡ് ബാനറോ കാണിക്കുന്നു.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

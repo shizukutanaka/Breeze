@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Deplase tab la adwat",
   "helpSetTabOrder": "Chanje lòd onglet anba yo. Trennen yon ranje, oswa itilize bouton flèch yo; ba tab la mete ajou imedyatman. Chat yo ka reòdone men yo toujou montre.",
   "settingsInstallApp": "Enstale aplikasyon an",
-  "helpSetInstallApp": "Louvri enstalasyon aplikasyon ak yon sèl klik lè navigatè a ofri li. Si demann sa a pa disponib, li montre enstriksyon enstalasyon oswa banyè telechajman sou biwo a pito."
+  "helpSetInstallApp": "Louvri enstalasyon aplikasyon ak yon sèl klik lè navigatè a ofri li. Si demann sa a pa disponib, li montre enstriksyon enstalasyon oswa banyè telechajman sou biwo a pito.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

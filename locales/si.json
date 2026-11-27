@@ -1191,5 +1191,8 @@
   "mockSeedB2": "මට පණිවිඩයක් යැවීමට උත්සාහ කළ හැකිද?",
   "mockSeedB3": "ඔව්. කෙටි ප්‍රමාදයකින් පසු ප්‍රතිචාර දේශීයව ජනනය වේ.",
   "mockSeedG1": "සාම්පල කණ්ඩායමට සාදරයෙන් පිළිගනිමු.",
-  "mockSeedG2": "කණ්ඩායම් සංවාද කෙබඳුදැයි පෙන්වීමට මෙය උදවු කරයි."
+  "mockSeedG2": "කණ්ඩායම් සංවාද කෙබඳුදැයි පෙන්වීමට මෙය උදවු කරයි.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

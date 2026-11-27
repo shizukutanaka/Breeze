@@ -1184,5 +1184,8 @@
   "mockSeedB2": "Dupi abdi tiasa nyobian ngirim pesen?",
   "mockSeedB3": "Sumuhun. Balesan dihasilkeun sacara lokal saatos reureuh pondok.",
   "mockSeedG1": "Wilujeng sumping di grup sampel.",
-  "mockSeedG2": "Ieu ngabantuan nunjukkeun kumaha rupa paguneman grup."
+  "mockSeedG2": "Ieu ngabantuan nunjukkeun kumaha rupa paguneman grup.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

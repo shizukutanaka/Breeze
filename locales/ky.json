@@ -1191,5 +1191,8 @@
   "mockSeedB2": "Мен билдирүү жөнөтүүгө аракет кыла аламбы?",
   "mockSeedB3": "Ооба. Жооптор бир аз кечигүүдөн кийин жергиликтүү түрдө түзүлөт.",
   "mockSeedG1": "Үлгү тобуна кош келиңиз.",
-  "mockSeedG2": "Бул топтук сүйлөшүүлөр кандай болорун көрсөтүүгө жардам берет."
+  "mockSeedG2": "Бул топтук сүйлөшүүлөр кандай болорун көрсөтүүгө жардам берет.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

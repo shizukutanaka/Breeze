@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Pestaña pañaman kuyuchiy",
   "helpSetTabOrder": "Ura kaq tablakunapa ordenninta tikran. Huk filata aysay, utaq flechapa botonesninta servichikuy; chay tabla barraqa chaylla musuqyachin. Chats nisqakunataqa musuqmantam ordenayta atikun ichaqa sapa kutim qawachikun.",
   "settingsInstallApp": "Aplicacionta churay",
-  "helpSetInstallApp": "Browser quspanqa huq clicpi aplicacion churanata kichan. Chay qillqa mana kanqa, churanaypaq yachachiynakuta utaq escritorio urayman urqunata banner-ta rikuchin."
+  "helpSetInstallApp": "Browser quspanqa huq clicpi aplicacion churanata kichan. Chay qillqa mana kanqa, churanaypaq yachachiynakuta utaq escritorio urayman urqunata banner-ta rikuchin.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

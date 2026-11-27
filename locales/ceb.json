@@ -1191,5 +1191,8 @@
   "mockSeedB2": "Mahimo ba nako sulayan ang pagpadala usa ka mensahe?",
   "mockSeedB3": "Oo. Ang mga tubag gihimo sa lokal pagkahuman sa mubo nga paglangan.",
   "mockSeedG1": "Welcome sa sample nga grupo.",
-  "mockSeedG2": "Makatabang kini sa pagpakita kung unsa ang hitsura sa mga panag-istoryahanay sa grupo."
+  "mockSeedG2": "Makatabang kini sa pagpakita kung unsa ang hitsura sa mga panag-istoryahanay sa grupo.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }
