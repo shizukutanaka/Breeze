@@ -494,15 +494,15 @@
   "gateJoinedHosting": "Joined in person on this device",
   "deliveryHintText": "{0} message(s) are still only on this device. No relay can carry them, and {1} is not connected. If you are together, pair in person to deliver them.",
   "deliveryHintAction": "Pair in person",
-  "deliveryHintConnect": "Exchange connection codes",
+  "deliveryHintConnect": "Байланыс кодтарын айырбастау",
   "hostWaitText": "Your room is open. Joining happens on the other device only, so nothing appears here when someone joins. To start talking in person, pair face to face.",
   "hostWaitAction": "Pair in person",
-  "gateStartLocal": "Start a server on this device",
+  "gateStartLocal": "Осы құрылғыда серверді іске қосу",
   "gateLocalDesc": "For people nearby: this device acts as the server while it is here and awake. Setting it up uses no outside server.",
   "gateLocalStarted": "Server started on this device. Invite people nearby to connect.",
   "gateLocalRoomLabel": "Server on this device (local room)",
-  "gateLocalHosting": "Active while this device is awake",
-  "gateLocalStop": "Stop",
+  "gateLocalHosting": "Бұл құрылғы ояу тұрғанда белсенді",
+  "gateLocalStop": "Тоқтату",
   "gateLocalStopped": "The server on this device was stopped.",
   "billingPaidDesc": "Бұл сервер ақылы; оның операторы төлемді тікелей алады, ал Breeze авторына ештеңе берілмейді. Төлегеннен кейін осы серверді пайдалану үшін кіру кодын (немесе төлем нөмірін) еңгізіңіз.",
   "billingOpenCheckout": "Төлем бетін ашу",
@@ -1194,5 +1194,5 @@
   "helpSetInstallApp": "Браузер ұсынған кезде қолданбаны бір рет басу арқылы орнатуды ашады. Бұл сұрату қолжетімді болмаса, оның орнына орнату нұсқауларын немесе компьютерге жүктеу баннерін көрсетеді.",
   "notifAskTitle": "Turn on notifications?",
   "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
-  "notifAskAllow": "Turn on"
+  "notifAskAllow": "Қосу"
 }

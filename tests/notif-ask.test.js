@@ -81,7 +81,15 @@ describe('first-conversation notification permission explanation (A5)', () => {
       const table = JSON.parse(readFileSync(join(root, 'locales', file), 'utf8'));
       expect(Object.keys(table).sort(), `${file} key set`).toEqual(referenceKeys);
       for (const key of Object.keys(TEXT)) {
-        expect(table[key], `${file}.${key}`).toBe(file === 'ja.json' ? JA_TEXT[key] : TEXT[key]);
+        if (file === 'ja.json') {
+          expect(table[key], `${file}.${key}`).toBe(JA_TEXT[key]);
+        } else {
+          // Since the 2026-11-27 backfill these keys carry real translations
+          // in most locales; the two-layer rule allows the English source as
+          // fallback, but never an empty value.
+          expect(typeof table[key], `${file}.${key}`).toBe('string');
+          expect(table[key].trim().length, `${file}.${key} non-empty`).toBeGreaterThan(0);
+        }
       }
     }
   });

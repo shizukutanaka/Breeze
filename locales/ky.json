@@ -549,15 +549,15 @@
   "gateJoinedHosting": "Joined in person on this device",
   "deliveryHintText": "{0} message(s) are still only on this device. No relay can carry them, and {1} is not connected. If you are together, pair in person to deliver them.",
   "deliveryHintAction": "Pair in person",
-  "deliveryHintConnect": "Exchange connection codes",
+  "deliveryHintConnect": "Байланыш коддорун алмашуу",
   "hostWaitText": "Your room is open. Joining happens on the other device only, so nothing appears here when someone joins. To start talking in person, pair face to face.",
   "hostWaitAction": "Pair in person",
-  "gateStartLocal": "Start a server on this device",
+  "gateStartLocal": "Бул түзмөктө серверди баштоо",
   "gateLocalDesc": "For people nearby: this device acts as the server while it is here and awake. Setting it up uses no outside server.",
   "gateLocalStarted": "Server started on this device. Invite people nearby to connect.",
   "gateLocalRoomLabel": "Server on this device (local room)",
-  "gateLocalHosting": "Active while this device is awake",
-  "gateLocalStop": "Stop",
+  "gateLocalHosting": "Бул түзмөк ойгонуп турганда активдүү",
+  "gateLocalStop": "Токтотуу",
   "gateLocalStopped": "The server on this device was stopped.",
   "billingPaidDesc": "Бул сервер үчүн акы төлөнөт; анын оператору төлөмдү түздөн-түз алады, Breeze авторуна еч нерсе жетпейт. Төлөгөндөн кийин бул серверди колдонуу үчүн кирүү кодун (же төлөм шилтемесин) киргизиңиз.",
   "billingOpenCheckout": "Төлөм баракчасын ачуу",
@@ -1194,5 +1194,5 @@
   "mockSeedG2": "Бул топтук сүйлөшүүлөр кандай болорун көрсөтүүгө жардам берет.",
   "notifAskTitle": "Turn on notifications?",
   "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
-  "notifAskAllow": "Turn on"
+  "notifAskAllow": "Күйгүзүү"
 }

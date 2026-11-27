@@ -557,7 +557,7 @@
   "gateLocalStarted": "Server started on this device. Invite people nearby to connect.",
   "gateLocalRoomLabel": "Server on this device (local room)",
   "gateLocalHosting": "Active while this device is awake",
-  "gateLocalStop": "Stop",
+  "gateLocalStop": "Туктату",
   "gateLocalStopped": "The server on this device was stopped.",
   "billingPaidDesc": "Бу сервер түләүле, аның операторы түләүне турыдан-туры ала — акча беркайчан да Breeze авторына барып җитми. Түләгәч, бу серверны куллану өчен керү кодын (яки түләү референсын) кертегез.",
   "billingOpenCheckout": "Түләү битен ачыгыз",
@@ -1194,5 +1194,5 @@
   "mockSeedG2": "Бу төркем сөйләшүләренең нинди булуын күрсәтергә ярдәм итә.",
   "notifAskTitle": "Turn on notifications?",
   "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
-  "notifAskAllow": "Turn on"
+  "notifAskAllow": "Кушу"
 }
