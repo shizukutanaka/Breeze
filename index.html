@@ -8519,8 +8519,8 @@ async function initMessenger(dbName) {
         showToast(t('contactHomeCleared'), 'success');
         return;
       }
-      const url = _normalizeRelayUrl(trimmed);
-      if (!url) { showToast(t('relayAddInvalid'), 'error'); return; }
+      const preflight = _preflightRelayUrl(trimmed); if (preflight.error) { showToast(t({ invalid: 'relayAddInvalid', insecure: 'relayAddInsecure' }[preflight.error] || 'relayAddInvalid'), 'error'); return; }
+      const url = preflight.url;
       const r = await _relayAttestCheck(url + '/api', null);
       if (r.verdict === 'unreachable') {
         const errKey = r.reason === 'timeout' ? 'relayAddTimeout' : r.reason === 'not-breeze' ? 'relayAddNotBreeze' : 'relayAddUnreachable';
