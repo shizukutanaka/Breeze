@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS } from '../src/app/slash-picker.js';
+import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, SLASH_FEATURED, SLASH_EXAMPLES } from '../src/app/slash-picker.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
@@ -149,7 +149,40 @@ describe('slash-picker behaviour', () => {
     h.type('/');
     const all = h.picker().querySelectorAll('.mention-item').map((item) => item.dataset.cmd);
     expect(all).toHaveLength(8);
-    expect(all).toEqual(COMMANDS_71.slice(0, 8));
+    expect(all).toEqual(SLASH_FEATURED);
+  });
+
+  it('empty query returns the featured commands in order, each with a description', () => {
+    const h = installHarness();
+    createSlashPicker(h.deps);
+    h.type('/');
+    const items = h.picker().querySelectorAll('.mention-item');
+    expect(items.map((item) => item.dataset.cmd)).toEqual(SLASH_FEATURED);
+    for (const item of items) {
+      const descKey = SLASH_DESCS[item.dataset.cmd];
+      expect(descKey).toBeTruthy();
+      expect(item.innerHTML).toContain('class="i-small-muted"');
+      expect(item.innerHTML).toContain(EN_DESCS[descKey]);
+    }
+  });
+
+  it('shows usage examples for featured commands that have them', () => {
+    const h = installHarness();
+    createSlashPicker(h.deps);
+    h.type('/');
+    const items = Object.fromEntries(h.picker().querySelectorAll('.mention-item').map((item) => [item.dataset.cmd, item]));
+    expect(items['/poll'].innerHTML).toContain('/poll Lunch? | Yes | No');
+    expect(items['/search'].innerHTML).toContain('/search hello');
+  });
+
+  it('renders a matched command without curated metadata bare', () => {
+    const h = installHarness();
+    createSlashPicker(h.deps);
+    h.type('/keywrap');
+    const items = h.picker().querySelectorAll('.mention-item');
+    expect(items).toHaveLength(1);
+    expect(items[0].innerHTML).toBe('/keywrap');
+    expect(items[0].innerHTML).not.toContain('i-small-muted');
   });
 
   it('clicking an item fills the input, removes the picker, and refocuses the composer', () => {
@@ -182,6 +215,18 @@ describe('slash-picker exported data', () => {
   it('keeps the original 71 commands in the original order', () => {
     expect(SLASH_COMMANDS).toEqual(COMMANDS_71);
     expect(SLASH_COMMANDS).toHaveLength(71);
+  });
+
+  it('keeps featured commands valid and examples within the command inventory', () => {
+    expect(SLASH_FEATURED).toHaveLength(8);
+    expect(new Set(SLASH_FEATURED).size).toBe(8);
+    for (const command of SLASH_FEATURED) {
+      expect(SLASH_COMMANDS).toContain(command);
+      expect(SLASH_DESCS).toHaveProperty(command);
+    }
+    for (const command of Object.keys(SLASH_EXAMPLES)) {
+      expect(SLASH_COMMANDS).toContain(command);
+    }
   });
 
   it('describes exactly the curated first-success and everyday commands', () => {
