@@ -206,6 +206,7 @@
   "gateServerTitle": "Yon sèvè nesesè",
   "gateServerDesc": "Breeze pa gen okenn sèvè ofisyèl. Ajoute pwòp sèvè ou pou kòmanse. Yon lyen envitasyon pou kont li pa ase — ou toujou bezwen yon sèvè pa w.",
   "gateAddServer": "Ajoute sèvè ou",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Kreye yon idantite nan mesaje a an premye",
   "deleted": "Mesaj efase",
   "edited": "(modifye)",

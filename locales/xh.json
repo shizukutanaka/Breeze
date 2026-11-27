@@ -206,6 +206,7 @@
   "gateServerTitle": "Kufuneka umncedisi",
   "gateServerDesc": "I-Breeze ayinayo iseva esemthethweni. Yongeza umncedisi wakho ukuze uqalise. Ikhonkco lokumema lodwa akwanelanga — usadinga iseva yakho.",
   "gateAddServer": "Yongeza iseva yakho",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Yenza isazisi kwi-Messenger kuqala",
   "deleted": "Umyalezo ucinyiwe",
   "edited": "(Ihleliwe)",

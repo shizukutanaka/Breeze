@@ -802,6 +802,7 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 .server-gate-card { max-width: 420px; width: 100%; padding: var(--sp-5); border: 1px solid var(--b1); border-radius: var(--rad-lg); background: var(--s1); box-shadow: var(--shadow-float); text-align: center }
 .server-gate-title { color: var(--t1); font-size: var(--fs-title); font-weight: 700; margin-bottom: var(--sp-2) }
 .server-gate-desc { color: var(--t2); font-size: var(--fs-sub); line-height: 1.6; margin-bottom: var(--sp-4) }
+.server-gate-steps { color: var(--t2); font-size: var(--fs-sub); line-height: 1.6; margin-bottom: var(--sp-4) }
 .server-gate-add { max-width: 280px; margin: 0 auto; padding: var(--sp-3) }
 .sidebar-meta { font-size: var(--fs-caption); color: var(--g); font-family: var(--mono) }
 .conv-status { font-size: var(--fs-caption); font-family: var(--mono); color: var(--t3) }
@@ -1230,6 +1231,7 @@ del.md-del { opacity: .6 }
     <div id="msg-server-gate-panel" class="server-gate-panel hidden" role="alert">
       <div class="server-gate-title" data-i18n="gateServerTitle"></div>
       <p class="server-gate-desc" data-i18n="gateServerDesc"></p>
+      <p class="server-gate-steps" data-i18n="gateServerSteps"></p>
       <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
     </div>
     <input type="text" id="msg-name-random" class="field setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
@@ -1373,10 +1375,11 @@ del.md-del { opacity: .6 }
       <div id="settings-body" class="settings-body"></div>
     </div>
 
-    <div id="msg-server-gate" class="server-gate-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="msg-server-gate-title" aria-describedby="msg-server-gate-desc">
+    <div id="msg-server-gate" class="server-gate-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="msg-server-gate-title" aria-describedby="msg-server-gate-desc msg-server-gate-steps">
       <div class="server-gate-card">
         <div id="msg-server-gate-title" class="server-gate-title" data-i18n="gateServerTitle"></div>
         <p id="msg-server-gate-desc" class="server-gate-desc" data-i18n="gateServerDesc"></p>
+        <p id="msg-server-gate-steps" class="server-gate-steps" data-i18n="gateServerSteps"></p>
         <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
       </div>
     </div>
@@ -1844,6 +1847,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     gateServerTitle: 'A server is required',
     gateServerDesc: 'Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.',
     gateAddServer: 'Add your server',
+    gateServerSteps: 'About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.',
     noIdentity: 'Create an identity in the messenger first',
     // Misc
     deleted: 'Message deleted',

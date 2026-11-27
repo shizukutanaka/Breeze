@@ -165,6 +165,7 @@
   "gateServerTitle": "Сервер лозим аст",
   "gateServerDesc": "Breeze сервери расмӣ надорад. Барои оғоз кардани сервери худ илова кунед. Танҳо як истиноди даъват кофӣ нест - ба шумо ҳоло ҳам сервери худ лозим аст.",
   "gateAddServer": "Сервери худро илова кунед",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Аввал дар мессенҷер шахсият эҷод кунед",
   "deleted": "Паём нест карда шуд",
   "edited": "(таҳрир)",

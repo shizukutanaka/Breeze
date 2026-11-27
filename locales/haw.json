@@ -165,6 +165,7 @@
   "gateServerTitle": "Pono kahi kikowaena",
   "gateServerDesc": "ʻAʻohe kikowaena mana o Breeze. Hoʻohui i kāu kikowaena ponoʻī e hoʻomaka. ʻAʻole lawa ka loulou kono wale nō - pono ʻoe i kāu kikowaena ponoʻī.",
   "gateAddServer": "Hoʻohui i kāu kikowaena",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "E hana mua i kahi ʻike ma ka ʻelele",
   "deleted": "Holoi ʻia ka memo",
   "edited": "(hoʻoponopono ʻia)",

@@ -206,6 +206,7 @@
   "gateServerTitle": "هڪ سرور گهربل آهي",
   "gateServerDesc": "بريز جو ڪو سرڪاري سرور ناهي. شروع ڪرڻ لاءِ پنهنجو سرور شامل ڪريو. صرف دعوت جو لنڪ ڪافي ناهي — توهان کي اڃا به پنهنجو سرور گهرجي.",
   "gateAddServer": "پنهنجو سرور شامل ڪريو",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "پهريان ميسينجر ۾ سڃاڻپ ٺاهيو",
   "deleted": "پيغام حذف ڪيو ويو",
   "edited": "(ترميم ٿيل)",

@@ -165,6 +165,7 @@
   "gateServerTitle": "Ka hiahiatia he tūmau",
   "gateServerDesc": "Breeze karekau he tūmau mana. Tāpirihia tō ake tūmau ki te tīmata. Ko te hononga powhiri anake kaore i te rawaka - kei te hiahia tonu koe ki tetahi tūmau ake.",
   "gateAddServer": "Tāpirihia tō tūmau",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Waihangatia he tuakiri i roto i te karere tuatahi",
   "deleted": "Kua mukua te karere",
   "edited": "(kua whakatikahia)",

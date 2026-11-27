@@ -206,6 +206,7 @@
   "gateServerTitle": "Serverek pêwîst e",
   "gateServerDesc": "Breeze serverek fermî tune ye. Ji bo destpêkirinê rajekara xwe lê zêde bikin. Girêdanek vexwendinê bi tena serê xwe ne bes e - hîn jî hewcedariya we bi serverek xwe heye.",
   "gateAddServer": "Rajekara xwe lê zêde bike",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "pêşî di peyamnêr de nasnameyekê biafirînin",
   "deleted": "Peyam hate jêbirin",
   "edited": "(guherandin)",

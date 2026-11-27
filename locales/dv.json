@@ -206,6 +206,7 @@
   "gateServerTitle": "ސަރވަރ އެއް ބޭނުންވޭ",
   "gateServerDesc": "ބްރީޒްގެ ރަސްމީ ސާވަރެއް ނެތެވެ. ސްޓާޓް ކުރަން އަމިއްލަ ސަރވަރ ޖަހާ. އިންވައިޓް ލިންކެއް އެކަނި ނުފުދޭ، އަމިއްލަ ސާވަރެއް ބޭނުންވޭ.",
   "gateAddServer": "ސަރވަރ އެޑް ކުރޭ",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "އެންމެ ފުރަތަމަ މެސެންޖަރުގައި އައިޑެންޓިޓީއެއް ހަދާ",
   "deleted": "މެސެޖް ޑިލީޓް ކުރެވިއްޖެ",
   "edited": "(އެޑިޓްކޮށްފައި)",

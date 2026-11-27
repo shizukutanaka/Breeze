@@ -157,6 +157,61 @@ describe('server-required gate state', () => {
   });
 });
 
+describe('server gate progress display', () => {
+  function inlineEnglish() {
+    const start = INDEX.indexOf('const _I = {');
+    expect(start).toBeGreaterThan(-1);
+    let depth = 0;
+    const brace = INDEX.indexOf('{', start);
+    for (let i = brace; i < INDEX.length; i++) {
+      if (INDEX[i] === '{') depth++;
+      else if (INDEX[i] === '}') {
+        depth--;
+        if (depth === 0) return (0, eval)('(' + INDEX.slice(brace, i + 1) + ')').en;
+      }
+    }
+    throw new Error('unbalanced inline i18n table');
+  }
+
+  it('both gate surfaces show the steps line, and the overlay exposes it to assistive technology', () => {
+    expect(INDEX.match(/data-i18n="gateServerSteps"/g) || []).toHaveLength(2);
+
+    const panel = sliceBetween('id="msg-server-gate-panel"', '<input type="text" id="msg-name-random"');
+    expect(panel).toContain('<p class="server-gate-steps" data-i18n="gateServerSteps"></p>');
+
+    const overlay = sliceBetween('id="msg-server-gate" class=', '<!-- Bottom tab bar');
+    expect(overlay).toContain('<p id="msg-server-gate-steps" class="server-gate-steps" data-i18n="gateServerSteps"></p>');
+    const openTag = INDEX.match(/<div id="msg-server-gate"[^>]*aria-describedby="([^"]+)"/);
+    expect(openTag, 'overlay aria-describedby').toBeTruthy();
+    expect(openTag[1].split(/\s+/)).toEqual(['msg-server-gate-desc', 'msg-server-gate-steps']);
+  });
+
+  it('the inline English text states the expected time and step count', () => {
+    const en = inlineEnglish();
+    expect(en.gateServerSteps).toBeTypeOf('string');
+    expect(en.gateServerSteps).toContain('minute');
+    expect(en.gateServerSteps).toContain('2 steps');
+  });
+
+  it('every locale defines the steps key; Japanese is a real translation', () => {
+    const en = inlineEnglish();
+    const dir = path.join(ROOT, 'locales');
+    const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
+    expect(files.length).toBeGreaterThan(100);
+    for (const file of files) {
+      const table = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
+      expect(table.gateServerSteps, file).toBeTypeOf('string');
+      if (file !== 'ja.json') expect(table.gateServerSteps, file).toBe(en.gateServerSteps);
+    }
+    const ja = JSON.parse(fs.readFileSync(path.join(dir, 'ja.json'), 'utf8'));
+    expect(ja.gateServerSteps).not.toBe(en.gateServerSteps);
+  });
+
+  it('the steps line uses the shared server-gate CSS rule and existing design tokens', () => {
+    expect(INDEX).toContain('.server-gate-steps { color: var(--t2); font-size: var(--fs-sub); line-height: 1.6; margin-bottom: var(--sp-4) }');
+  });
+});
+
 describe('invite home is never adopted as my server', () => {
   const PUB = 'TARGETPUB000' + 't'.repeat(32);
   const existing = { id: PUB.slice(0, 12), pubB64: PUB, name: 'Target', unread: 0 };
