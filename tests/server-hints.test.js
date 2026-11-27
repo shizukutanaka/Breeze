@@ -6,7 +6,7 @@
 // source assertions so the hooks cannot quietly fall off.
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { noDefaultBannerNeeded, deliveryStuck, createServerHints } from '../src/app/server-hints.js';
+import { noDefaultBannerNeeded, deliveryStuck, hostWaiting, createServerHints } from '../src/app/server-hints.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
@@ -66,6 +66,22 @@ function fakeEl() {
   return el;
 }
 
+describe('hostWaiting', () => {
+  const base = { flagOn: true, hasRoom: true, roomJoined: false, chatOpen: false, mockOn: false, relayCount: 0 };
+  it('waits: hosting, no chat open, no relay', () => {
+    expect(hostWaiting(base)).toBe(true);
+  });
+  it('not waiting as a guest (joined), with a chat open, in mock, or with a relay', () => {
+    expect(hostWaiting({ ...base, roomJoined: true })).toBe(false);
+    expect(hostWaiting({ ...base, chatOpen: true })).toBe(false);
+    expect(hostWaiting({ ...base, mockOn: true })).toBe(false);
+    expect(hostWaiting({ ...base, relayCount: 1 })).toBe(false);
+    expect(hostWaiting({ ...base, hasRoom: false })).toBe(false);
+    expect(hostWaiting({ ...base, flagOn: false })).toBe(false);
+    expect(hostWaiting(null)).toBe(false);
+  });
+});
+
 describe('createServerHints factory', () => {
   function makeDeps(over = {}) {
     const banner = fakeEl(); banner.classList.add('hidden');
@@ -76,7 +92,7 @@ describe('createServerHints factory', () => {
     inputBar.parentElement = chatCol;
     chatCol.insertBefore = (el, ref) => { chatCol.children.unshift(el); el.parentElement = chatCol; };
     main.insertBefore = () => {};
-    const state = { relays: 0, room: false, contact: { pubB64: 'PUB', name: 'Alice', home: [] }, queued: 1, peerOpen: false, rvOpenedWith: null, bannerClicks: 0 };
+    const state = { relays: 0, room: false, joined: false, contact: { pubB64: 'PUB', name: 'Alice', home: [] }, queued: 1, peerOpen: false, rvOpenedWith: null, pairingOpened: 0, bannerClicks: 0 };
     const deps = {
       dom: id => (id === 'msg-server-banner' ? banner : id === 'msg-setup' ? setup : null),
       t: (k, ...a) => k + ':' + a.join(','),
@@ -90,6 +106,8 @@ describe('createServerHints factory', () => {
       queuedFor: () => state.queued,
       peerOpen: () => state.peerOpen,
       openRendezvous: c => { state.rvOpenedWith = c; },
+      roomJoined: () => state.joined,
+      openPairing: () => { state.pairingOpened++; },
       inputBar: () => inputBar,
     };
     return { deps: { ...deps, ...over }, banner, chatCol, state };
@@ -107,7 +125,7 @@ describe('createServerHints factory', () => {
     expect(banner.dataset.noDefault).toBeUndefined();
   });
 
-  it('delivery hint appears only while stuck and its button opens rendezvous for the contact', () => {
+  it('delivery hint appears only while stuck; unpaired contacts get the pairing entry', () => {
     const { deps, chatCol, state } = makeDeps();
     const hints = createServerHints(deps);
     globalThis.document = { createElement: () => fakeEl() };
@@ -119,8 +137,51 @@ describe('createServerHints factory', () => {
       const btn = hint.children[1];
       expect(btn.textContent).toBe('deliveryHintAction:');
       btn._click();
-      expect(state.rvOpenedWith).toBe(state.contact);
+      // Measured: connection codes refuse for an invite contact (no pinned
+      // signing key yet), so the first step offered is in-person pairing.
+      expect(state.pairingOpened).toBe(1);
+      expect(state.rvOpenedWith).toBeNull();
       state.peerOpen = true;
+      hints.updateDeliveryHint();
+      expect(hint.classList.contains('hidden')).toBe(true);
+    } finally {
+      delete globalThis.document;
+    }
+  });
+
+  it('once paired, the delivery hint offers connection codes instead', () => {
+    const { deps, chatCol, state } = makeDeps();
+    state.contact = { pubB64: 'PUB', name: 'Alice', home: [], sigPub: 'SIG' };
+    const hints = createServerHints(deps);
+    globalThis.document = { createElement: () => fakeEl() };
+    try {
+      hints.updateDeliveryHint();
+      const hint = chatCol.children[0];
+      const btn = hint.children[1];
+      expect(btn.textContent).toBe('deliveryHintConnect:');
+      btn._click();
+      expect(state.rvOpenedWith).toBe(state.contact);
+      expect(state.pairingOpened).toBe(0);
+    } finally {
+      delete globalThis.document;
+    }
+  });
+
+  it('host hint shows while hosting with no chat open, and offers pairing', () => {
+    const { deps, chatCol, state } = makeDeps();
+    state.contact = null;
+    state.room = true;
+    const hints = createServerHints(deps);
+    globalThis.document = { createElement: () => fakeEl() };
+    try {
+      hints.updateDeliveryHint();
+      const hint = chatCol.children[0];
+      expect(hint).toBeTruthy();
+      expect(hint.classList.contains('hidden')).toBe(false);
+      expect(hint.children[0].textContent).toBe('hostWaitText:');
+      hint.children[1]._click();
+      expect(state.pairingOpened).toBe(1);
+      state.joined = true; // the joined record lives on the guest's device: no waiting there
       hints.updateDeliveryHint();
       expect(hint.classList.contains('hidden')).toBe(true);
     } finally {
@@ -145,6 +206,7 @@ describe('index.html wiring', () => {
   it('the gate refresh also refreshes the banner (room start/stop)', () => {
     const gate = html.slice(html.indexOf('function _updateServerGate()'), html.indexOf('function _preflightRelayUrl'));
     expect(gate).toContain('_updateNoDefaultBanner();');
+    expect(gate).toContain('_updateDeliveryHint();');
   });
   it('delivery hint refreshes on send, on status updates, and on chat open', () => {
     expect(html).toContain('_mock?.afterSend(contact);\n    _updateDeliveryHint();');
@@ -154,7 +216,10 @@ describe('index.html wiring', () => {
   });
   it('EN keys exist in the inline English table', () => {
     expect(html).toContain("deliveryHintText: '{0} message(s) are still only on this device.");
-    expect(html).toContain("deliveryHintAction: 'Exchange connection codes'");
+    expect(html).toContain("deliveryHintAction: 'Pair in person'");
+    expect(html).toContain("deliveryHintConnect: 'Exchange connection codes'");
+    expect(html).toContain("hostWaitText: 'Your room is open.");
+    expect(html).toContain("hostWaitAction: 'Pair in person'");
   });
 });
 
@@ -167,11 +232,16 @@ describe('locale keys', () => {
       const loc = JSON.parse(readFileSync(new URL(f, dir), 'utf8'));
       expect(loc.deliveryHintText, f).toBeTruthy();
       expect(loc.deliveryHintAction, f).toBeTruthy();
+      expect(loc.deliveryHintConnect, f).toBeTruthy();
+      expect(loc.hostWaitText, f).toBeTruthy();
+      expect(loc.hostWaitAction, f).toBeTruthy();
     }
   });
   it('ja carries the real translation', () => {
     const ja = JSON.parse(readFileSync(new URL('ja.json', dir), 'utf8'));
-    expect(ja.deliveryHintAction).toBe('接続コードを交換');
-    expect(ja.deliveryHintText).toContain('接続コードを交換すると');
+    expect(ja.deliveryHintAction).toBe('対面ペアリング');
+    expect(ja.deliveryHintConnect).toBe('接続コードを交換');
+    expect(ja.deliveryHintText).toContain('対面ペアリングで届けられます');
+    expect(ja.hostWaitAction).toBe('対面ペアリング');
   });
 });
