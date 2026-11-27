@@ -3287,9 +3287,9 @@ window.addEventListener('beforeunload', () => {
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
     if (typeof _retryQueue !== 'undefined' && _retryQueue.length > 0) {
-      localStorage.setItem('brz-retry-queue', JSON.stringify(_retryQueue.slice(0, 50)));
+      localStorage.setItem('brz-retry-queue-' + getActiveAccountId(), JSON.stringify(_retryQueue.slice(0, 50)));
     } else {
-      localStorage.removeItem('brz-retry-queue');
+      localStorage.removeItem('brz-retry-queue-' + getActiveAccountId());
     }
   } catch {}
 });
@@ -6662,7 +6662,9 @@ async function initMessenger(dbName) {
       // Primary: IDB settings store
       const saved = await dbGet('settings', 'retryQueue');
       // Fallback: localStorage (from beforeunload emergency save)
-      const lsFallback = localStorage.getItem('brz-retry-queue');
+      const _rqAcct = typeof getActiveAccountId === 'function' ? getActiveAccountId() : '0';
+      const lsScoped = localStorage.getItem('brz-retry-queue-' + _rqAcct);
+      const lsFallback = lsScoped != null ? lsScoped : localStorage.getItem('brz-retry-queue');
       const items = (Array.isArray(saved) && saved.length > 0) ? saved : (lsFallback ? JSON.parse(lsFallback) : []);
       if (Array.isArray(items) && items.length > 0) {
         for (const item of items) { if (item.to && item.payload) _retryQueue.push({ ...item, attempts: 0 }); }
@@ -6672,6 +6674,7 @@ async function initMessenger(dbName) {
       // Clean up both sources
       await dbPut('settings', [], 'retryQueue');
       localStorage.removeItem('brz-retry-queue');
+      localStorage.removeItem('brz-retry-queue-' + _rqAcct);
     } catch(e) { _dbg(e, 'retry-restore'); _diagBump('retryRestoreFail'); }
   }
 
@@ -8986,8 +8989,18 @@ async function initMessenger(dbName) {
 
   let _notifRequested = false;
   let _drafts = {};
-  try { _drafts = JSON.parse(localStorage.getItem('brz-drafts') || '{}'); } catch { _drafts = {}; }
-  function _persistDrafts() { try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts)); } catch {} }
+  // Multi-account isolation: drafts are account-scoped. The pre-fix
+  // shared 'brz-drafts' key let one account's unsent text surface in
+  // another account's composer for the same contact. The legacy shared
+  // value is claimed once by the first account that inits (the outbox
+  // migration pattern) and the shared key is removed.
+  const _draftsKey = 'brz-drafts-' + getActiveAccountId();
+  try {
+    let rawDrafts = localStorage.getItem(_draftsKey);
+    if (rawDrafts === null) { rawDrafts = localStorage.getItem('brz-drafts'); if (rawDrafts !== null) { try { localStorage.setItem(_draftsKey, rawDrafts); } catch {} try { localStorage.removeItem('brz-drafts'); } catch {} } }
+    _drafts = JSON.parse(rawDrafts || '{}');
+  } catch { _drafts = {}; }
+  function _persistDrafts() { try { localStorage.setItem(_draftsKey, JSON.stringify(_drafts)); } catch {} }
   _vault.caches.add({ clear: () => { _groupProtection?.clear(); _drafts = {}; _settings = {}; _retryQueue.length = 0; _userId = ''; activeContact = null; _attribDevCache.clear(); _sealCapsCache.clear(); _relayInfoCache.clear(); _myDevCache = null; for (const k in _crossAccountUnread) delete _crossAccountUnread[k]; for (const id of ['msg-input', 'msg-messages', 'msg-contacts', 'msg-conv-name']) { const el = _DOM.get(id); if (el) { el.replaceChildren(); if ('value' in el) el.value = ''; } } } });
 
   let openConversation = async function(contact) {
