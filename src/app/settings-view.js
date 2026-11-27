@@ -49,6 +49,7 @@ export function createSettingsView(deps) {
       notifPerm: typeof Notification !== 'undefined' && Notification.permission === 'granted', autoBackup: settings.autoBackup !== false,
       fanout: deps._fanoutCount(), powerMode: ['auto', 'normal', 'saver', 'emergency'].includes(settings.powerMode) ? settings.powerMode : 'auto',
       relays: deps.homeRelays().map(r => ({ label: r.label || r.url, url: r.url, origin: deps.isOriginRelay(r), blocked: deps._relayBlockedUrls.has(r.url), status: typeof deps._relayStatusText === 'function' ? deps._relayStatusText(r) : '' })),
+      localRoom: typeof deps.localRoom === 'function' ? deps.localRoom() : null,
       tabCalls: settings.tabCalls !== false, tabContacts: settings.tabContacts !== false,
       tabSelf: settings.tabSelf !== false, tabSettings: settings.tabSettings !== false, tabOrder: deps._validTabOrder(),
     }));
@@ -125,6 +126,8 @@ export function createSettingsView(deps) {
     d.addEventListener('click', async (ev) => {
       const addBtn = ev.target.closest('[data-action="add-relay"]');
       if (addBtn) { deps.haptic.tap(); await deps._addRelayFlow(); return; }
+      const stopRoomBtn = ev.target.closest('[data-action="stop-local-room"]');
+      if (stopRoomBtn) { deps.haptic.tap(); await deps.stopLocalRoom(); return; }
       const rmBtn = ev.target.closest('[data-action="remove-relay"]');
       if (!rmBtn) return;
       deps.haptic.tap();

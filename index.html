@@ -1233,6 +1233,9 @@ del.md-del { opacity: .6 }
       <p class="server-gate-desc" data-i18n="gateServerDesc"></p>
       <p class="server-gate-steps" data-i18n="gateServerSteps"></p>
       <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
+      <p class="server-gate-desc" data-i18n="gateLocalDesc"></p>
+      <button type="button" class="btn btn-o server-gate-local" data-i18n="gateStartLocal"></button>
+      <button type="button" class="btn btn-g server-gate-join hidden"></button>
     </div>
     <input type="text" id="msg-name-random" class="field setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup-random" data-i18n="setupRandom"></button>
@@ -1381,6 +1384,8 @@ del.md-del { opacity: .6 }
         <p id="msg-server-gate-desc" class="server-gate-desc" data-i18n="gateServerDesc"></p>
         <p id="msg-server-gate-steps" class="server-gate-steps" data-i18n="gateServerSteps"></p>
         <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
+        <p class="server-gate-desc" data-i18n="gateLocalDesc"></p>
+        <button type="button" class="btn btn-o server-gate-local" data-i18n="gateStartLocal"></button>
       </div>
     </div>
 
@@ -1437,6 +1442,10 @@ window.__breezeDialogs = { createDialogs };
 <script type="module">
 import { applyLandingLinks } from './src/app/landing-links.js';
 window.__breezeLandingLinks = { applyLandingLinks };
+</script>
+<script type="module">
+import { inviteParam, inviteHostName, createLocalRoomActions } from './src/app/local-room.js';
+window.__breezeLocalRoom = { inviteParam, inviteHostName, createLocalRoomActions };
 </script>
 <script type="module">
 import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS } from './src/app/slash-picker.js';
@@ -2156,6 +2165,25 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     relayAddNotBreeze: 'That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.',
     relayAdded: 'Home relay added: {0}',
     relayAddedInvitePrompt: 'Server added. Next, invite a friend so you can start chatting.',
+    billingPaidDesc: 'This server is paid. Its operator charges for it directly — payment never goes to the Breeze author. After paying, enter the pass (or your payment reference) to use this server.',
+    billingOpenCheckout: 'Open the payment page',
+    billingPassPrompt: 'Enter your pass (bzpass_…) or your payment reference',
+    billingPassOk: 'Pass accepted. This server is ready to use.',
+    billingPassInvalid: 'That pass (or payment reference) was not accepted by the server.',
+    billingPassNeeded: 'This server needs a valid billing pass. Re-add the server to enter one.',
+    gateStartLocal: 'Start a server on this device',
+    gateLocalDesc: 'For people nearby: this device acts as the server while it is here and awake. Setting it up uses no outside server.',
+    gateLocalStarted: 'Server started on this device. Invite people nearby to connect.',
+    gateLocalRoomLabel: 'Server on this device (local room)',
+    gateLocalHosting: 'Active while this device is awake',
+    gateLocalStop: 'Stop',
+    gateLocalStopped: 'The server on this device was stopped.',
+    gateJoinInvite: 'Join {0} — no server needed',
+    gateJoinInviteAnon: 'Join your inviter — no server needed',
+    gateJoinedStarted: 'Joined on this device. Create your ID to connect with your inviter.',
+    gateJoinedRoomLabel: 'Room of {0} (joined)',
+    gateJoinedRoomAnon: 'Inviter room (joined)',
+    gateJoinedHosting: 'Joined in person on this device',
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
@@ -3282,9 +3310,9 @@ window.addEventListener('beforeunload', () => {
   // v3.6: Emergency save retry queue (sync — beforeunload can't await)
   try {
     if (typeof _retryQueue !== 'undefined' && _retryQueue.length > 0) {
-      localStorage.setItem('brz-retry-queue', JSON.stringify(_retryQueue.slice(0, 50)));
+      localStorage.setItem('brz-retry-queue-' + getActiveAccountId(), JSON.stringify(_retryQueue.slice(0, 50)));
     } else {
-      localStorage.removeItem('brz-retry-queue');
+      localStorage.removeItem('brz-retry-queue-' + getActiveAccountId());
     }
   } catch {}
 });
@@ -3855,11 +3883,23 @@ const _replayCache = {
 const _relayPinGate = { blocked: false, checking: false, attesting: false, verdict: null, _settleVerdict: null };
 
 // API helper (DRY for 48+ POST calls): returns Response, not auto-parsed, so callers can check .ok/.status; opts forwarded for signal etc.
+let _billingBlockNotedAt = 0;
+async function _noteBillingBlock(res) {
+  if (!res || res.status !== 402) return res;
+  try {
+    const d = await res.clone().json().catch(() => null);
+    if (d && typeof d.code === 'string' && d.code.startsWith('BILLING_') && Date.now() - _billingBlockNotedAt > MS.MIN) { _billingBlockNotedAt = Date.now(); showToast(t('billingPassNeeded'), 'error', 8000); }
+  } catch(e) { _dbg(e, 'billing-note'); }
+  return res;
+}
+globalThis.__breezeNoteBillingBlock = _noteBillingBlock;
 async function postAPIRaw(path, body, opts = {}) {
   if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) {
     const post = globalThis.__breezeNoDefaultPrimaryPost;
     return post ? post(path, body, opts) : null;
   }
+  const _bp = globalThis.__breezeBillingPass?.(globalThis.location?.origin || '');
+  if (_bp && body && typeof body === 'object' && !body.pass) body = { ...body, pass: _bp };
   if (!_relayPinGate.attesting) {
     if (_relayPinGate.blocked) return null;
     if (_relayPinGate.verdict) {
@@ -3867,7 +3907,8 @@ async function postAPIRaw(path, body, opts = {}) {
       if (_relayPinGate.blocked) return null;
     }
   }
-  return fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
+  const _rawRes = await fetchT(API + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
+  return globalThis.__breezeNoteBillingBlock ? globalThis.__breezeNoteBillingBlock(_rawRes) : _rawRes;
 }
 
 // ═══ Title helper — Account name + unread count ═══
@@ -4751,7 +4792,10 @@ async function initMessenger(dbName) {
     if (!relay || (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true && isOriginRelay(relay))) return postAPIRaw(path, body, opts);
     if (_relayBlockedUrls.has(relay.url)) return null;
     if (!await ensureRelayVerified(relay)) return null;
-    return fetchT(relayApiBase(relay) + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
+    const bp = globalThis.__breezeBillingPass?.(relay.url);
+    if (bp && body && typeof body === 'object' && !body.pass) body = { ...body, pass: bp };
+    const relayRes = await fetchT(relayApiBase(relay) + path, { method: 'POST', headers: _H, body: JSON.stringify(body), ...opts }).catch(() => null);
+    return globalThis.__breezeNoteBillingBlock ? globalThis.__breezeNoteBillingBlock(relayRes) : relayRes;
   }
   globalThis.__breezeNoDefaultPrimaryApi = () => homeRelays()[0] ? relayApiBase(homeRelays()[0]) : '';
   globalThis.__breezeNoDefaultPrimaryPost = (path, body, opts = {}) => homeRelays()[0] ? postAPIRelay(homeRelays()[0], path, body, opts) : null;
@@ -4785,19 +4829,36 @@ async function initMessenger(dbName) {
     }
   }
   function _serverGateAdd() { _addRelayFlow().catch(e => _dbg(e, 'server-gate-add')); }
+  // Local room actions live in src/app/local-room.js (extracted under
+  // the line budget: feature work extracts at least what it adds).
+  const _localRoomActions = globalThis.__breezeLocalRoom?.createLocalRoomActions({ getSettings: () => _settings, saveSettings, updateGate: () => _updateServerGate(), showToast, t, shareInvite: (...a) => shareInvite(...a), getMyId: () => myId, dbg: _dbg, P }) || null;
+  function _startLocalRoom() { return _localRoomActions?.start() || Promise.resolve(); }
+  function _stopLocalRoom() { return _localRoomActions?.stop() || Promise.resolve(); }
+  function _joinLocalRoom() { return _localRoomActions?.join() || Promise.resolve(); }
+  function _inviteParam(k) { return globalThis.__breezeLocalRoom?.inviteParam(P, k) ?? null; }
+  function _inviteHostName() { return globalThis.__breezeLocalRoom?.inviteHostName(P) ?? null; }
   function _updateServerGate() {
     const panel = _DOM.get('msg-server-gate-panel');
     const overlay = _DOM.get('msg-server-gate');
     const setup = _DOM.get('msg-setup');
     const main = _DOM.get('msg-main');
     if (!panel || !overlay || !setup || !main) return;
-    const active = globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true && !globalThis.__breezeMock?.enabled?.() && homeRelays().length === 0;
+    const active = globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true && !globalThis.__breezeMock?.enabled?.() && homeRelays().length === 0 && !_settings.localRoom;
     const setupVisible = !setup.classList.contains('hidden');
     const mainVisible = !main.classList.contains('hidden');
     const setupGated = active && setupVisible;
     const mainGated = active && mainVisible;
     const overlayWasHidden = overlay.classList.contains('hidden');
     panel.classList.toggle('hidden', !setupGated);
+    const joinBtn = panel.querySelector?.('.server-gate-join');
+    if (joinBtn) {
+      const hasInvite = setupGated && !!_inviteParam('add');
+      joinBtn.classList.toggle('hidden', !hasInvite);
+      if (hasInvite) {
+        const host = _inviteHostName();
+        joinBtn.textContent = host ? t('gateJoinInvite', host) : t('gateJoinInviteAnon');
+      }
+    }
     overlay.classList.toggle('hidden', !mainGated);
     for (const child of main.children || []) _serverGateInert(child, child !== overlay && mainGated);
     if (mainGated && overlayWasHidden) overlay.querySelector?.('.server-gate-add')?.focus();
@@ -4872,6 +4933,28 @@ async function initMessenger(dbName) {
   // -> confirm. Nothing is stored before the user confirms the
   // fingerprint, and the pin stored is the key whose holder just
   // proved possession — never a string copied off a health page.
+  function _billingPassFor(url) { const m = _settings.billingPasses; return (m && typeof m[url] === 'string') ? m[url] : ''; }
+  async function _setBillingPass(url, pass) { if (!_settings.billingPasses || typeof _settings.billingPasses !== 'object') _settings.billingPasses = {}; if (pass) _settings.billingPasses[url] = pass; else delete _settings.billingPasses[url]; await saveSettings(); }
+  globalThis.__breezeBillingPass = (url) => _billingPassFor(url);
+  async function _billingApi(url, path, body) { try { const r = await fetchT(relayApiBase({ url }) + path, { method: 'POST', headers: _H, body: JSON.stringify(body) }); return r ? await r.json().catch(() => null) : null; } catch(e) { _dbg(e, 'billing-api'); return null; } }
+  // Paid-relay step of the add flow: verify a stored pass, else offer
+  // the operator's checkout page and a pass / payment-reference entry.
+  // The reference path exists so a plain gateway payment link works
+  // end to end: the relay exchanges the reference for the pass once.
+  async function _billingPassFlow(url, billing) {
+    const have = _billingPassFor(url);
+    if (have) { const c = await _billingApi(url, '/billing/check', { pass: have }); if (c?.ok) return true; await _setBillingPass(url, ''); }
+    if (billing.checkoutUrl && await showConfirm(t('billingPaidDesc'), { okText: t('billingOpenCheckout') })) { try { window.open(billing.checkoutUrl, '_blank', 'noopener'); } catch(e) { _dbg(e, 'billing-open'); } }
+    const entered = await showPrompt(t('billingPassPrompt'), '', { placeholder: 'bzpass_…' });
+    if (!entered) return false;
+    let pass = entered.trim();
+    if (!pass.startsWith('bzpass_')) { const cl = await _billingApi(url, '/billing/claim', { paymentRef: pass }); if (cl?.ok && typeof cl.pass === 'string') pass = cl.pass; else { showToast(t('billingPassInvalid'), 'error', 8000); return false; } }
+    const chk = await _billingApi(url, '/billing/check', { pass });
+    if (!chk?.ok) { showToast(t('billingPassInvalid'), 'error', 8000); return false; }
+    await _setBillingPass(url, pass);
+    showToast(t('billingPassOk'), 'success');
+    return true;
+  }
   async function _addRelayFlow() {
     const raw = await showPrompt(t('relayAddPrompt'), '', { placeholder: 'https://relay.example.com' });
     if (!raw) return;
@@ -4886,6 +4969,7 @@ async function initMessenger(dbName) {
     let label = '';
     try { label = new URL(res.url).host; } catch(_e) { label = res.url; }
     await addHomeRelay({ url: res.url, pin: res.relayKey, label, health: res.health });
+    if (res.health?.billing?.required) { try { await _billingPassFlow(res.url, res.health.billing); } catch(e) { _dbg(e, 'billing-flow'); } }
     showToast(t('relayAdded', res.url), 'success');
     auditLog('security', `Home relay added: ${res.url} — fingerprint ${res.fingerprint}.`);
     // Take effect now, not at the next timer tick: the replenish
@@ -5357,6 +5441,7 @@ async function initMessenger(dbName) {
     focusStrict: false,      // focus mode: true = silence everything, false = let VIPs through
     relayPin: '',            // stage-2 step 4: TOFU pin of the serving relay's Ed25519 identity key ('' = none pinned)
     relays: [],              // stage-2 step 5: ADDED home relays [{ url, pin, label }] — the serving origin is implicit (always first in homeRelays(), its pin is relayPin above), so the default [] resolves to exactly one relay
+    billingPasses: {},       // operator billing (phase 1, 2026-11-27): paid-relay passes by relay URL { url: pass } — the pass is a revocable, expiring bearer token issued by the relay operator, never payment data
     fanout: 2,               // stage-2 step 6: how many of a contact's home relays receive a copy of each message (1–3; 2 = one redundant copy)
     ktBlockOnTamper: false,  // D05: opt-in — refuse to start a session when the KT chain verdict is tampered or the pinned chain head vanished (default: warn only)
     powerMode: 'auto',       // power saving: auto (by battery) | normal | saver | emergency. Throttles LISTENING only — sending is never delayed. See _effectivePowerMode.
@@ -6617,7 +6702,9 @@ async function initMessenger(dbName) {
       // Primary: IDB settings store
       const saved = await dbGet('settings', 'retryQueue');
       // Fallback: localStorage (from beforeunload emergency save)
-      const lsFallback = localStorage.getItem('brz-retry-queue');
+      const _rqAcct = typeof getActiveAccountId === 'function' ? getActiveAccountId() : '0';
+      const lsScoped = localStorage.getItem('brz-retry-queue-' + _rqAcct);
+      const lsFallback = lsScoped != null ? lsScoped : localStorage.getItem('brz-retry-queue');
       const items = (Array.isArray(saved) && saved.length > 0) ? saved : (lsFallback ? JSON.parse(lsFallback) : []);
       if (Array.isArray(items) && items.length > 0) {
         for (const item of items) { if (item.to && item.payload) _retryQueue.push({ ...item, attempts: 0 }); }
@@ -6627,6 +6714,7 @@ async function initMessenger(dbName) {
       // Clean up both sources
       await dbPut('settings', [], 'retryQueue');
       localStorage.removeItem('brz-retry-queue');
+      localStorage.removeItem('brz-retry-queue-' + _rqAcct);
     } catch(e) { _dbg(e, 'retry-restore'); _diagBump('retryRestoreFail'); }
   }
 
@@ -8086,6 +8174,8 @@ async function initMessenger(dbName) {
     _openSettingsFromUrl();
   }
   document.querySelectorAll('.server-gate-add').forEach(btn => btn.addEventListener('click', _serverGateAdd, { signal: _ac.signal }));
+  document.querySelectorAll('.server-gate-local').forEach(btn => btn.addEventListener('click', () => { _startLocalRoom().catch(e => _dbg(e, 'local-room-start')); }, { signal: _ac.signal }));
+  document.querySelectorAll('.server-gate-join').forEach(btn => btn.addEventListener('click', () => { _joinLocalRoom().catch(e => _dbg(e, 'local-room-join')); }, { signal: _ac.signal }));
   // The first screen's primary action: one tap mints a random identity
   // through createIdentity's existing random generation path and enters
   // the app — no name, no alias, no phrase step. The record stays
@@ -8939,8 +9029,18 @@ async function initMessenger(dbName) {
 
   let _notifRequested = false;
   let _drafts = {};
-  try { _drafts = JSON.parse(localStorage.getItem('brz-drafts') || '{}'); } catch { _drafts = {}; }
-  function _persistDrafts() { try { localStorage.setItem('brz-drafts', JSON.stringify(_drafts)); } catch {} }
+  // Multi-account isolation: drafts are account-scoped. The pre-fix
+  // shared 'brz-drafts' key let one account's unsent text surface in
+  // another account's composer for the same contact. The legacy shared
+  // value is claimed once by the first account that inits (the outbox
+  // migration pattern) and the shared key is removed.
+  const _draftsKey = 'brz-drafts-' + getActiveAccountId();
+  try {
+    let rawDrafts = localStorage.getItem(_draftsKey);
+    if (rawDrafts === null) { rawDrafts = localStorage.getItem('brz-drafts'); if (rawDrafts !== null) { try { localStorage.setItem(_draftsKey, rawDrafts); } catch {} try { localStorage.removeItem('brz-drafts'); } catch {} } }
+    _drafts = JSON.parse(rawDrafts || '{}');
+  } catch { _drafts = {}; }
+  function _persistDrafts() { try { localStorage.setItem(_draftsKey, JSON.stringify(_drafts)); } catch {} }
   _vault.caches.add({ clear: () => { _groupProtection?.clear(); _drafts = {}; _settings = {}; _retryQueue.length = 0; _userId = ''; activeContact = null; _attribDevCache.clear(); _sealCapsCache.clear(); _relayInfoCache.clear(); _myDevCache = null; for (const k in _crossAccountUnread) delete _crossAccountUnread[k]; for (const id of ['msg-input', 'msg-messages', 'msg-contacts', 'msg-conv-name']) { const el = _DOM.get(id); if (el) { el.replaceChildren(); if ('value' in el) el.value = ''; } } } });
 
   let openConversation = async function(contact) {
@@ -14119,6 +14219,8 @@ async function initMessenger(dbName) {
     _validTabOrder, saveSettings, _applyTabOrder, _applyTabVisibility, _showChatsTab, _setActiveTab,
     renderContacts, _setConvName, _updateFocusBanner, _addRelayFlow, removeHomeRelay, relayFingerprint,
     showConfirm, showToast, shareInvite, showMigratePanel, showMigrationGuide, _profileUI,
+    localRoom: () => _settings.localRoom || null,
+    stopLocalRoom: async () => { await _stopLocalRoom(); _renderSettingsPanel(_DOM.get('settings-body')); },
     getAutoBackupStatus, armAutoBackup, closeSettingsView, _renderSettingsPanel, _dbg,
   }) || null;
   function _renderSettingsPanel(d) { _settingsView?.renderPanel(d); }
