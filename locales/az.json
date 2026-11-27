@@ -480,6 +480,7 @@
   "relayAddSelf": "Bu URL elə bu relenin özüdür — o artıq sizin ev relenizdir.",
   "relayAddDuplicate": "Bu rele artıq ev relelərinizdədir.",
   "relayAddKeyless": "Bu relenin şəxsiyyət açarı yoxdur, ona görə bərkidilə bilməz — ev relesi kimi əlavə edilə bilməz.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Bu rele yoxlanıla bilmədi — URL-i yoxlayın və yenidən cəhd edin.",
   "relayAdded": "Ev relesi əlavə edildi: {0}",
   "relayRemoved": "Ev relesi silindi: {0}",

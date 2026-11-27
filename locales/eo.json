@@ -478,6 +478,7 @@
   "relayAddSelf": "Tiu URLo mem estas la transdonita \"Fosige ĝi estas jam via hejma transdonisto.\"",
   "relayAddDuplicate": "Tiu transdonisto jam estas en viaj hejmoj.",
   "relayAddKeyless": "Tio, kio ne havas identecon, do ĝi ne povas esti pugata per ĝi, ne povas esti aldonita kiel hejmo de AMLEM.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Ne eblis kontroli la retadreson kaj reprovu.",
   "relayAdded": "HejmoREM aldonis: {0}",
   "relayRemoved": "Hejmdosieroj forigitaj: {0}",

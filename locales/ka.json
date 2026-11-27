@@ -480,6 +480,7 @@
   "relayAddSelf": "ეს URL თავად ეს სარელეოა — ის უკვე თქვენი მთავარი სარელეოა.",
   "relayAddDuplicate": "ეს სარელეო უკვე თქვენს მთავარ სარელეოებშია.",
   "relayAddKeyless": "ამ სარელეოს იდენტობის გასაღები არ აქვს, ამიტომ მისი ჩამაგრება შეუძლებელია — ის ვერ დაემატება მთავარ სარელეოდ.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ამ სარელეოს შემოწმება ვერ მოხერხდა — შეამოწმეთ URL და სცადეთ ხელახლა.",
   "relayAdded": "მთავარი სარელეო დაემატა: {0}",
   "relayRemoved": "მთავარი სარელეო წაიშალა: {0}",

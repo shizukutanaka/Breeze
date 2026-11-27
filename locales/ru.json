@@ -484,6 +484,7 @@
   "relayAddSelf": "Этот URL — само это реле, оно уже ваше домашнее реле.",
   "relayAddDuplicate": "Это реле уже есть в ваших домашних реле.",
   "relayAddKeyless": "У этого реле нет ключа личности, поэтому его нельзя закрепить — его нельзя добавить как домашнее реле.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Это реле не удалось проверить — проверьте URL и повторите.",
   "relayAdded": "Домашнее реле добавлено: {0}",
   "relayRemoved": "Домашнее реле удалено: {0}",

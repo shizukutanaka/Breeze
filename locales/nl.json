@@ -480,6 +480,7 @@
   "relayAddSelf": "Die URL is deze relay zelf — deze is al je thuisrelay.",
   "relayAddDuplicate": "Die relay staat al in je thuisrelays.",
   "relayAddKeyless": "Die relay heeft geen identiteitssleutel, dus deze kan niet worden vastgezet — deze kan niet als thuisrelay worden toegevoegd.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Die relay kon niet worden geverifieerd — controleer de URL en probeer opnieuw.",
   "relayAdded": "Thuisrelay toegevoegd: {0}",
   "relayRemoved": "Thuisrelay verwijderd: {0}",

@@ -484,6 +484,7 @@
   "relayAddSelf": "Tato URL je tento relay samotný — už je vaším domácím relay.",
   "relayAddDuplicate": "Tento relay už ve vašich domácích relay je.",
   "relayAddKeyless": "Tento relay nemá klíč identity, takže ho nelze připnout — nelze ho přidat jako domácí relay.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Tento relay se nepodařilo ověřit — zkontrolujte URL a zkuste to znovu.",
   "relayAdded": "Domácí relay přidán: {0}",
   "relayRemoved": "Domácí relay odebrán: {0}",

@@ -479,6 +479,7 @@
   "relayAddSelf": "Esse URL é este relé em si — já é o seu relé doméstico.",
   "relayAddDuplicate": "Esse relé já está nos teus relés domésticos.",
   "relayAddKeyless": "Esse relé não tem chave de identidade, por isso não pode ser fixado — não pode ser adicionado como retransmissão principal.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Esse retransmissor não pôde ser verificado — verifique o URL e tente novamente.",
   "relayAdded": "Retransmissão doméstica adicionada: {0}",
   "relayRemoved": "Retransmissão doméstica removida: {0}",

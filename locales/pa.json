@@ -480,6 +480,7 @@
   "relayAddSelf": "ਉਹ URL ਇਹੀ ਰਿਲੇਅ ਹੈ — ਇਹ ਪਹਿਲਾਂ ਹੀ ਤੁਹਾਡਾ ਹੋਮ ਰਿਲੇਅ ਹੈ।",
   "relayAddDuplicate": "ਉਹ ਰਿਲੇਅ ਪਹਿਲਾਂ ਹੀ ਤੁਹਾਡੇ ਹੋਮ ਰਿਲੇਅ ਵਿੱਚ ਹੈ।",
   "relayAddKeyless": "ਉਸ ਰਿਲੇਅ ਕੋਲ ਕੋਈ ਪਛਾਣ ਕੁੰਜੀ ਨਹੀਂ, ਇਸ ਲਈ ਇਸਨੂੰ ਪਿੰਨ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ — ਇਸਨੂੰ ਹੋਮ ਰਿਲੇਅ ਵਜੋਂ ਸ਼ਾਮਲ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਦਾ।",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ਉਸ ਰਿਲੇਅ ਦੀ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੋ ਸਕੀ — URL ਦੇਖ ਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
   "relayAdded": "ਹੋਮ ਰਿਲੇਅ ਸ਼ਾਮਲ ਹੋ ਗਿਆ: {0}",
   "relayRemoved": "ਹੋਮ ਰਿਲੇਅ ਹਟਾ ਦਿੱਤਾ ਗਿਆ: {0}",

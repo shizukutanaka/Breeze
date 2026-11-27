@@ -479,6 +479,7 @@
   "relayAddSelf": "Loo URL yile relay ngokwayo — sele i-relay yakho yasekhaya.",
   "relayAddDuplicate": "Le relay sele ikwi-relays yakho yasekhaya.",
   "relayAddKeyless": "Loo relay ayinaso isitshixo sesazisi, ngoko ayinakufakwa - ayinakongezwa njenge-relay yasekhaya.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Loo relay ayikwazanga ukuqinisekiswa — khangela i-URL uze uzame kwakhona.",
   "relayAdded": "Home Iindaba {0}",
   "relayRemoved": "I-Relays yasekhaya isusiwe: {0}",

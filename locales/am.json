@@ -480,6 +480,7 @@
   "relayAddSelf": "ያ URL ይህ ሪሌይ ራሱ ነው — አስቀድሞ የቤት ሪሌይዎ ነው።",
   "relayAddDuplicate": "ያ ሪሌይ አስቀድሞ በቤት ሪሌዮችዎ ውስጥ አለ።",
   "relayAddKeyless": "ያ ሪሌይ የማንነት ቁልፍ የለውም፣ ስለዚህ ሊሰካ አይችልም — እንደ ቤት ሪሌይ ሊጨመር አይችልም።",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ያ ሪሌይ ሊረጋገጥ አልቻለም — URLውን ይፈትሹ እና እንደገና ይሞክሩ።",
   "relayAdded": "የቤት ሪሌይ ታክሏል፤ {0}",
   "relayRemoved": "የቤት ሪሌይ ተወግዷል፤ {0}",

@@ -480,6 +480,7 @@
   "relayAddSelf": "Den URL er dette relæ selv — det er allerede dit hjemmerelæ.",
   "relayAddDuplicate": "Det relæ er allerede blandt dine hjemmerelæer.",
   "relayAddKeyless": "Det relæ har ingen identitetsnøgle, så det kan ikke fastgøres — det kan ikke tilføjes som hjemmerelæ.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Det relæ kunne ikke verificeres — tjek URL'en, og prøv igen.",
   "relayAdded": "Hjemmerelæ tilføjet: {0}",
   "relayRemoved": "Hjemmerelæ fjernet: {0}",

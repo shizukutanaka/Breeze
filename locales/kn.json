@@ -535,6 +535,7 @@
   "relayAddSelf": "ಆ URL ಈ ರಿಲೇ ಆಗಿದೆ - ಇದು ಈಗಾಗಲೇ ನಿಮ್ಮ ಹೋಮ್ ರಿಲೇ ಆಗಿದೆ.",
   "relayAddDuplicate": "ಆ ರಿಲೇ ಈಗಾಗಲೇ ನಿಮ್ಮ ಹೋಮ್ ರಿಲೇಗಳಲ್ಲಿದೆ.",
   "relayAddKeyless": "ಆ ರಿಲೇಗೆ ಯಾವುದೇ ಗುರುತಿನ ಕೀ ಇಲ್ಲ, ಆದ್ದರಿಂದ ಅದನ್ನು ಪಿನ್ ಮಾಡಲಾಗುವುದಿಲ್ಲ - ಇದನ್ನು ಹೋಮ್ ರಿಲೇ ಆಗಿ ಸೇರಿಸಲಾಗುವುದಿಲ್ಲ.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ಆ ರಿಲೇಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗಲಿಲ್ಲ - URL ಅನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
   "relayAdded": "ಹೋಮ್ ರಿಲೇ ಸೇರಿಸಲಾಗಿದೆ: {0}",
   "relayRemoved": "ಹೋಮ್ ರಿಲೇ ತೆಗೆದುಹಾಕಲಾಗಿದೆ: {0}",

@@ -535,6 +535,7 @@
   "relayAddSelf": "সেই URLটোৱেই হৈছে এই ৰিলে নিজেই — ই ইতিমধ্যে আপোনাৰ ঘৰুৱা ৰিলে।",
   "relayAddDuplicate": "সেই ৰিলে ইতিমধ্যে আপোনাৰ ঘৰুৱা ৰিলেত আছে।",
   "relayAddKeyless": "সেই ৰিলেৰ কোনো পৰিচয় চাবি নাই, গতিকে ইয়াক পিন কৰিব নোৱাৰি — ইয়াক ঘৰুৱা ৰিলে হিচাপে যোগ কৰিব নোৱাৰি।",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "সেই ৰিলে পৰীক্ষা কৰিব পৰা নগ'ল — URL পৰীক্ষা কৰক আৰু পুনৰ চেষ্টা কৰক।",
   "relayAdded": "হোম ৰিলে যোগ কৰা হৈছে: {0}",
   "relayRemoved": "হোম ৰিলে আঁতৰোৱা হৈছে: {0}",

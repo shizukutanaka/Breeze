@@ -535,6 +535,7 @@
   "relayAddSelf": "ئۇ URL دەل مۇشۇ يەتكۈزۈشنىڭ ئۆزى - ئۇ ئاللىبۇرۇن سىزنىڭ ئۆيىڭىزگە يەتكۈزۈلگەن.",
   "relayAddDuplicate": "بۇ يەتكۈزۈش پائالىيىتى ئاللىقاچان ئۆيىڭىزنىڭ رېلىسىدا.",
   "relayAddKeyless": "ئۇ يەتكۈزۈشنىڭ كىملىك ​​ئاچقۇچى يوق ، شۇڭا ئۇنى باغلىغىلى بولمايدۇ - ئۇنى ئۆي يەتكۈزۈش شەكلىدە قوشقىلى بولمايدۇ.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "بۇ يەتكۈزۈشنى دەلىللىگىلى بولمىدى - URL نى تەكشۈرۈپ قايتا سىناڭ.",
   "relayAdded": "ئائىلە يەتكۈزۈش پائالىيىتى قوشۇلدى: {0}",
   "relayRemoved": "ئائىلە يەتكۈزۈش پائالىيىتى چىقىرىۋېتىلدى: {0}",

@@ -258,6 +258,7 @@
   "relayAddSelf": "URL tersebut adalah relai ini sendiri — sudah menjadi relai rumah Anda.",
   "relayAddDuplicate": "Relai tersebut sudah ada di relai rumah Anda.",
   "relayAddKeyless": "Relai tersebut tidak memiliki kunci identitas, sehingga tidak dapat disematkan — tidak dapat ditambahkan sebagai relai rumah.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relai tersebut tidak dapat diverifikasi — periksa URL dan coba lagi.",
   "relayAdded": "Relai rumah ditambahkan: {0}",
   "relayRemoved": "Relai rumah dihapus: {0}",

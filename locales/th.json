@@ -258,6 +258,7 @@
   "relayAddSelf": "URL นั้นคือรีเลย์นี้เอง — เป็นรีเลย์หลักของคุณอยู่แล้ว",
   "relayAddDuplicate": "รีเลย์นั้นอยู่ในรีเลย์หลักของคุณอยู่แล้ว",
   "relayAddKeyless": "รีเลย์นั้นไม่มีคีย์ระบุตัวตน จึงปักหมุดไม่ได้ — เพิ่มเป็นรีเลย์หลักไม่ได้",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ไม่สามารถยืนยันรีเลย์นั้นได้ — โปรดตรวจสอบ URL แล้วลองอีกครั้ง",
   "relayAdded": "เพิ่มรีเลย์หลักแล้ว: {0}",
   "relayRemoved": "ลบรีเลย์หลักแล้ว: {0}",

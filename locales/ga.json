@@ -539,6 +539,7 @@
   "relayAddSelf": "That URL is this relay itself — it is already your home relay.",
   "relayAddDuplicate": "Tá an sealaí sin cheana féin i do reaisí bhaile.",
   "relayAddKeyless": "That relay has no identity key, so it cannot be pinned — it cannot be added as a home relay.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "That relay could not be verified — check the URL and try again.",
   "relayAdded": "Cuir seilse baile leis: {0}",
   "relayRemoved": "Bainthe seilse baile: {0}",

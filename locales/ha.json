@@ -480,6 +480,7 @@
   "relayAddSelf": "Wannan URL relay ɗin nan ne da kansa — ya riga ya zama relay na gidanka.",
   "relayAddDuplicate": "Wannan relay ya riga ya kasance a cikin relays na gidanka.",
   "relayAddKeyless": "Wannan relay ba shi da maɓallin shaida, don haka ba za a iya liƙa shi ba — ba za a iya ƙara shi a matsayin relay na gida ba.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Ba a iya tabbatar da wannan relay ba — duba URL kuma sake gwadawa.",
   "relayAdded": "An ƙara relay na gida: {0}",
   "relayRemoved": "An cire relay na gida: {0}",

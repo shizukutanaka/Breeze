@@ -478,6 +478,7 @@
   "relayAddSelf": "ထို URL သည် ဤရီလေး ကိုယ်တိုင် ဖြစ်ပါသည် — ၎င်းသည် သင့်မူရင်း ရီလေး ဖြစ်ပြီးသားပါ။",
   "relayAddDuplicate": "ထိုရီလေးသည် သင့်မူရင်း ရီလေးများတွင် ရှိပြီးသားပါ။",
   "relayAddKeyless": "ထိုရီလေးတွင် အမှတ်အသား သော့ မရှိပါ၊ ထို့ကြောင့် ပင်ထိုး၍ မရပါ — မူရင်း ရီလေးအဖြစ် ထည့်၍ မရပါ။",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ထိုရီလေးကို အတည်ပြု၍ မရပါ — URL ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။",
   "relayAdded": "မူရင်း ရီလေး ထည့်ပြီးပါပြီ: {0}",
   "relayRemoved": "မူရင်း ရီလေး ဖယ်ရှားပြီးပါပြီ: {0}",

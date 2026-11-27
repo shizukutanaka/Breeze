@@ -488,6 +488,7 @@
   "relayAddSelf": "هذا الرابط هو هذا المرحّل نفسه — إنه مرحّلك الرئيسي بالفعل.",
   "relayAddDuplicate": "هذا المرحّل موجود في مرحّلاتك الرئيسية بالفعل.",
   "relayAddKeyless": "هذا المرحّل ليس لديه مفتاح هوية، لذا لا يمكن تثبيته — لا يمكن إضافته كمرحّل رئيسي.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "تعذر التحقق من هذا المرحّل — تحقق من الرابط وحاول مجددًا.",
   "relayAdded": "تمت إضافة المرحّل الرئيسي: {0}",
   "relayRemoved": "تمت إزالة المرحّل الرئيسي: {0}",

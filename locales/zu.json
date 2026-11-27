@@ -479,6 +479,7 @@
   "relayAddSelf": "Leyo URL yile relay uqobo - isivele iyi-relay yakho yasekhaya.",
   "relayAddDuplicate": "Lokho kudluliselwa sekuvele ku-relays yakho yasekhaya.",
   "relayAddKeyless": "Leyo relay ayinawo ukhiye wobunikazi, ngakho-ke ayikwazi ukufakwa - ayikwazi ukwengezwa njenge-relays yasekhaya.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Lokho kudluliselwa akukwazanga ukuqinisekiswa — hlola i-URL bese uzama futhi.",
   "relayAdded": "Home Ezemidlalo Wanezela: {0}",
   "relayRemoved": "Ukudluliselwa kwasekhaya kususiwe: {0}",

@@ -480,6 +480,7 @@
   "relayAddSelf": "Бұл URL осы реленің өзі — ол бұрыннан сіздің үй релеңіз.",
   "relayAddDuplicate": "Бұл реле бұрыннан үй релелеріңізде бар.",
   "relayAddKeyless": "Бұл реледе сәйкестік кілті жоқ, сондықтан оны бекітуге болмайды — оны үй релесi ретінде қосуға болмайды.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Бұл релені тексеру мүмкін болмады — URL мекенжайын тексеріп, қайта әрекет етіңіз.",
   "relayAdded": "Үй релесi қосылды: {0}",
   "relayRemoved": "Үй релесi алып тасталды: {0}",

@@ -486,6 +486,7 @@
   "relayAddSelf": "Y LAU hwnnw yw' r ail- gyflwyniad ei hun — dyma' ch cartref yn barod.",
   "relayAddDuplicate": "Mae’r cyfnewid hwnnw eisoes yn eich cartrefi.",
   "relayAddKeyless": "Nid oes gan yr adleoliad hwnnw unrhyw allwedd adnabod, felly ni ellir ei binio — ni ellir ei ychwanegu fel adleoliad cartref.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Nid oedd modd dilysu'r ail-osodiad hwnnw — gwiriwch y LAU a cheisiwch eto.",
   "relayAdded": "Cyfnewid cartref: {0}",
   "relayRemoved": "Tynnwyd adfer cartref: {0}",

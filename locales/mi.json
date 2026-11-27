@@ -535,6 +535,7 @@
   "relayAddSelf": "Ko taua URL ko tenei rere ano - ko to rere kainga.",
   "relayAddDuplicate": "Ko taua rerei kei roto i o rerei kaainga.",
   "relayAddKeyless": "Karekau he taviri tuakiri o taua rei, no reira kare e taea te titi - kaore e taea te taapiri hei rei kaainga.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Kare e taea te manatoko taua rei - tirohia te URL ka ngana ano.",
   "relayAdded": "Taapiri kainga: {0}",
   "relayRemoved": "Kua tangohia te taara o te kainga: {0}",

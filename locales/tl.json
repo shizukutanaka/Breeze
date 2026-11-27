@@ -480,6 +480,7 @@
   "relayAddSelf": "Ang URL na iyon ay ang relay na ito mismo — home relay mo na ito.",
   "relayAddDuplicate": "Nasa iyong mga home relay na ang relay na iyon.",
   "relayAddKeyless": "Walang identity key ang relay na iyon, kaya hindi ito mai-pin — hindi ito maaaring idagdag bilang home relay.",
+  "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Hindi ma-verify ang relay na iyon — suriin ang URL at subukang muli.",
   "relayAdded": "Naidagdag ang home relay: {0}",
   "relayRemoved": "Naalis ang home relay: {0}",
