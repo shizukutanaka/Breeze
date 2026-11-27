@@ -455,7 +455,7 @@ utility names are legacy hooks rather than literal measurements — for example
   create group (plain name field, no `group:` prefix knowledge needed).
 - **Chat header**: a search icon (in-chat search) and an overflow menu routing
   to existing commands (`/security`, `/mute`, `/pin`, `/poll`); typing `/` in
-  the composer opens a suggestion popover sourced from `_SLASH_COMMANDS`.
+  the composer opens a suggestion popover sourced from `SLASH_COMMANDS` in `src/app/slash-picker.js`.
 - **Self card**: the user's own profile card sits at the top of the contact
   list and scrolls with it; the profile panel shows the full public-key ID with
   a copy button, and the header name and the card open the same editor.
@@ -526,7 +526,7 @@ utility names are legacy hooks rather than literal measurements — for example
 
 ## 5. Slash Commands
 
-> The suggestion list `_SLASH_COMMANDS` in `index.html` holds 71 commands
+> The suggestion list `SLASH_COMMANDS` in `src/app/slash-picker.js` holds 71 commands
 > (counted 2026-11-25) and also feeds the composer's `/` suggestion popover;
 > the exact set drifts as commands are added/removed — grep that array and the
 > `val === '/...'` dispatch sites for the live list rather than trust this section.
