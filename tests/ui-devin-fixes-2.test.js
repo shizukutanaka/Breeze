@@ -30,6 +30,7 @@ const profileSrc = readFileSync(new URL('../src/app/profile.js', import.meta.url
 const settingsPanelSrc = readFileSync(new URL('../src/app/settings-panel.js', import.meta.url), 'utf8');
 const settingsViewSrc = readFileSync(new URL('../src/app/settings-view.js', import.meta.url), 'utf8');
 const accountTabsSrc = readFileSync(new URL('../src/app/account-tabs.js', import.meta.url), 'utf8');
+const slashPickerSrc = readFileSync(new URL('../src/app/slash-picker.js', import.meta.url), 'utf8');
 const ja = JSON.parse(readFileSync(new URL('../locales/ja.json', import.meta.url), 'utf8'));
 
 function sliceBetween(startMarker, endMarker) {
@@ -38,6 +39,14 @@ function sliceBetween(startMarker, endMarker) {
   expect(start, startMarker).toBeGreaterThan(-1);
   expect(end, endMarker).toBeGreaterThan(start);
   return html.slice(start, end);
+}
+
+function sliceSourceBetween(src, startMarker, endMarker) {
+  const start = src.indexOf(startMarker);
+  const end = src.indexOf(endMarker, start);
+  expect(start, startMarker).toBeGreaterThan(-1);
+  expect(end, endMarker).toBeGreaterThan(start);
+  return src.slice(start, end);
 }
 
 // ── (a) settings view ───────────────────────────────────────────────
@@ -233,10 +242,10 @@ describe('(f) chat header search/menu and slash suggestions', () => {
   });
 
   it('typing / opens the suggestion popover from the /help command set', () => {
-    expect(html).toContain('const _SLASH_COMMANDS = [');
-    const fn = sliceBetween("_DOM.get('msg-input')?.addEventListener('input', (e) => {\n    const input = e.target;\n    const m = ", '// v3.1: Shared image-preview');
+    expect(slashPickerSrc).toContain('export const SLASH_COMMANDS = [');
+    const fn = sliceSourceBetween(slashPickerSrc, "input?.addEventListener('input', (e) => {\n    const input = e.target;\n    const m = ", '  return { commands: SLASH_COMMANDS };');
     expect(fn).toContain("pk.id = 'slash-picker'");
-    expect(fn).toContain('_SLASH_COMMANDS.filter(');
+    expect(fn).toContain('SLASH_COMMANDS.filter(');
     expect(fn).toContain("input.value = item.dataset.cmd + ' '");
   });
 

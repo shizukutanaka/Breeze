@@ -75,7 +75,7 @@ describe('landing-links module wiring', () => {
   });
 
   it('a missing landing-links bridge is included in the module-failure toast condition', () => {
-    expect(html).toContain('if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs || !globalThis.__breezeLandingLinks) showToast');
+    expect(html).toContain('if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs || !globalThis.__breezeLandingLinks || !globalThis.__breezeSlashPicker) showToast');
   });
 });
 

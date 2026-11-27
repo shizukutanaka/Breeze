@@ -1417,6 +1417,10 @@ import { applyLandingLinks } from './src/app/landing-links.js';
 window.__breezeLandingLinks = { applyLandingLinks };
 </script>
 <script type="module">
+import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS } from './src/app/slash-picker.js';
+window.__breezeSlashPicker = { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS };
+</script>
+<script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
 // below (index.html carries a hard line budget — validate.sh). The bridges
 // are read opportunistically, so boot survives without them — but these are
@@ -2535,6 +2539,22 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     cmdWallpaperHelp: 'ocean · sunset · forest · midnight · aurora · reset<br>Or: /wallpaper #1a2b3c',
     cmdReactionTitle: 'Reaction Stats',
     cmdReactionTotal: 'Total: %d reactions',
+    cmdDescHelp: 'List all commands',
+    cmdDescSearch: 'Search this chat',
+    cmdDescPoll: 'Start a poll',
+    cmdDescTimer: 'Disappearing messages timer',
+    cmdDescSchedule: 'Schedule a message',
+    cmdDescPin: 'Pin a message',
+    cmdDescPins: 'List pinned messages',
+    cmdDescMute: 'Mute this conversation',
+    cmdDescInvite: 'Invite link for this chat',
+    cmdDescQr: 'Show my QR code',
+    cmdDescShare: 'Share my contact',
+    cmdDescAdd: 'Add a contact',
+    cmdDescNewgroup: 'Create a group',
+    cmdDescExport: 'Export this chat',
+    cmdDescBackup: 'Back up my data',
+    cmdDescSettings: 'Open settings',
     uiNewVersion: 'New version available.',
     uiUpdateReady: 'Update ready.',
     uiRestartUpdate: 'Restart to update',
@@ -4153,7 +4173,7 @@ document.addEventListener('keydown', (e) => {
 async function initMessenger(dbName) {
   // Still locked from before this page load (reload, reopened tab): lock before anything renders.
   try { if (localStorage.getItem('brz-locked')) showLockScreen(); } catch(e) { _dbg(e, 'lock-restore'); }
-  try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs || !globalThis.__breezeLandingLinks) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // either bridge unset ⇒ its module block aborted: /security, calls, backup or the dialog foundation would otherwise do nothing, silently
+  try { await _appModulesReady; if (!globalThis.__breezeOfflinePairing || !globalThis.__breezeDialogs || !globalThis.__breezeLandingLinks || !globalThis.__breezeSlashPicker) showToast(t('toastModulesFailed'), 'error', MS.MIN); } catch(e) { _dbg(e, 'app-modules-ready'); } // either bridge unset ⇒ its module block aborted: /security, calls, backup or the dialog foundation would otherwise do nothing, silently
   if (!globalThis.__breezeVault) throw new Error(t('vaultFailed')); if (!globalThis.__breezeContactVerify) throw new Error(t('toastModulesFailed'));
   let _contactVerify = null, _groupProtection = null;
   const _vault = globalThis.__breezeVault.getVault({ t, dbg: _dbg, accounts: getAccounts, restoreAccounts: saveAccounts, reload: () => location.reload(),
@@ -10570,39 +10590,9 @@ async function initMessenger(dbName) {
     });
   });
 
-  // Slash-command suggestions: typing "/" opens a small popover of the
-  // commands from /help, filtered by what is typed so far; picking one
-  // completes it in the input (with a trailing space for its argument).
-  // The 60+ commands stay the single implementation — this is only a
-  // discovery surface for them.
-  const _SLASH_COMMANDS = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/online', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/vault', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
-  _DOM.get('msg-input')?.addEventListener('input', (e) => {
-    const input = e.target;
-    const m = input.value.match(/^\/(\w*)$/);
-    const existing = _DOM.get('slash-picker');
-    if (!m) { existing?.remove(); return; }
-    const q = m[1].toLowerCase();
-    const matches = _SLASH_COMMANDS.filter(c => c.slice(1).startsWith(q)).slice(0, 8);
-    if (!matches.length) { existing?.remove(); return; }
-    let pk = existing;
-    if (!pk) {
-      pk = document.createElement('div');
-      pk.id = 'slash-picker';
-      pk.className = 'mention-picker';
-      pk.setAttribute('role', 'listbox');
-      input.parentElement.classList.add('i-rel');
-      input.parentElement.appendChild(pk);
-    }
-    safeSetHTML(pk, matches.map(c => `<div class="mention-item i-ctx-row" role="option" data-cmd="${esc(c)}">${esc(c)}</div>`).join(''));
-    pk.querySelectorAll('.mention-item').forEach(item => {
-      item.onmouseenter = () => { pk.querySelectorAll('.mention-item').forEach(i => i.classList.remove('i-bg-s2')); item.classList.add('i-bg-s2'); };
-      item.onclick = () => {
-        input.value = item.dataset.cmd + ' ';
-        pk.remove();
-        input.focus();
-      };
-    });
-  });
+  // Slash-command suggestions live in src/app/slash-picker.js; the bridge is
+  // optional so a failed module load degrades discovery rather than boot.
+  globalThis.__breezeSlashPicker?.createSlashPicker({ input: _DOM.get('msg-input'), DOM: _DOM, t, esc, safeSetHTML });
 
   // v3.1: Shared image-preview confirmation for paste + drag-drop (the two
   // flows built the same overlay twice; consolidated in the D19 pass, which
