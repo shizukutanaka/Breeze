@@ -637,9 +637,14 @@ utility names are legacy hooks rather than literal measurements — for example
 
 ## 6. Billing Model
 
-No billing is implemented. Every account gets every feature, with no plan gating and unlimited
-local accounts. See [SECURITY.md](SECURITY.md)'s "Removed: multi-account billing" section — it
-was built at one point and removed, but the docs kept describing it as live.
+The app itself implements no billing: every account gets every feature, with no plan gating
+and unlimited local accounts, and the app never handles money. A relay operator may
+optionally require a billing pass on their own relay — passes are issued through the
+operator's own payment gateway (signed webhook) and checked by the relay (HTTP 402 when a
+paid operation has no valid pass); see `server/README.md`'s "Charging for your relay"
+section. Relays without billing enabled are unaffected. See [SECURITY.md](SECURITY.md)'s
+"Removed: multi-account billing" section for the earlier, different system that was built
+at one point and removed.
 
 ---
 

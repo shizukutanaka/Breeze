@@ -3,8 +3,10 @@
 Most messengers are a service: a company or foundation operates the
 servers, and the product lives exactly as long as that operator can
 keep paying. Breeze is built the other way around. It is software —
-one HTML file plus an interchangeable relay — whose default relay is
-deliberately kept too small to matter, whose heavy use is billed to
+one HTML file plus an interchangeable relay — whose entrance relays are
+deliberately kept too small to matter (no official relay is operated, and
+the distributed builds ship with none configured; "the default relay" below
+means any entrance relay an operator chooses to run under this design), whose heavy use is billed to
 the user's own placement by design, and which anyone can redeploy
 verbatim. If donations stopped tomorrow, or the project changed
 hands, nothing about your ability to use Breeze would change, because
