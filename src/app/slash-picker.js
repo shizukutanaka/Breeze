@@ -1,10 +1,10 @@
 // Slash-command discovery popover for the composer. This module is only a
 // discovery surface for the command implementations: it filters their name
 // inventory and fronts concise descriptions for first-success actions.
-export const SLASH_COMMANDS = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/online', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/vault', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
+export const SLASH_COMMANDS = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/vault', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
 
 export const SLASH_FEATURED = ['/invite', '/add', '/search', '/poll', '/timer', '/pin', '/export', '/help'];
-export const SLASH_EXAMPLES = { '/search': '/search hello', '/poll': '/poll Lunch? | Yes | No', '/schedule': '/schedule 5m Hello', '/export': '/export json' };
+export const SLASH_EXAMPLES = { '/search': '/search hello', '/poll': '/poll Lunch? | Yes | No', '/schedule': '/schedule 5m Hello', '/export': '/export json', '/contacts': '/contacts export' };
 
 export const SLASH_DESCS = {
   '/help': 'cmdDescHelp',
