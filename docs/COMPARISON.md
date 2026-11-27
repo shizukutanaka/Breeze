@@ -28,7 +28,7 @@ would like them to be. Where Breeze loses, this page says so.
 | Calls | 1:1 voice/video, plus group voice calls up to 8 (full mesh, signalling E2EE) | `tests/call-signal.test.js`, `tests/group-call.test.js`; `GCALL_MAX_PARTICIPANTS` in `src/app/group-call.js` | 1:1 and group calls | 1:1 and group calls (E2EE: 1:1 only [L2]) |
 | Self-hosting | Yes: Cloudflare, Docker or plain Node; registration can be closed with an allowlist | `docs/SELF_HOSTING.md`; `REGISTRATION_ALLOWLIST` in `_worker.js`; `tests/node-host.test.js` | Practically no | No |
 | Moving in | Invite links, QR, `@alias@relay` addresses; chat-history import for LINE / WhatsApp / Telegram exports | `src/app/import-parsers.js` (`parseLINE` / `parseWhatsApp` / `parseTelegram`); `tests/relay-discovery.test.js` | Usernames, QR, group links; the phone-number wall remains [S1] | Platform-internal only |
-| What it costs to run | The app is free (MIT). The default relay is a free entrance up to a fair-use quota; past that, cost sits with each user's own placement — never with a central operator | `docs/COST_MODEL.md` (the measured model), `tests/mailbox-usage-quota.test.js` | Non-profit + donations | Ads, payments, paid official accounts |
+| What it costs to run | The app is free (MIT). The distributed builds ship with no server configured — you add your own relay (self-hosted, or an operator's). An operator may offer a free entrance up to a fair-use quota on their relay; past that, cost sits with each user's own placement — never with a central operator | `docs/COST_MODEL.md` (the measured model), `tests/mailbox-usage-quota.test.js` | Non-profit + donations | Ads, payments, paid official accounts |
 
 ## Where Breeze loses — stated plainly
 
