@@ -66,8 +66,8 @@ describe('settings help translations', () => {
     }
   });
 
-  it('ships exactly the English key set in all 81 locale JSONs, including every help key', () => {
-    expect(localeFiles.length).toBe(81);
+  it('ships exactly the English key set in all 91 locale JSONs, including every help key', () => {
+    expect(localeFiles.length).toBe(91);
     const enKeys = Object.keys(EN).sort();
     for (const file of localeFiles) {
       const T = JSON.parse(readFileSync(join(root, 'locales', file), 'utf8'));
