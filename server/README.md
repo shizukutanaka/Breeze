@@ -64,6 +64,47 @@ exists on the host.
 
 ## Configuration
 
+### Charging for your relay (operator billing, optional)
+
+You can charge for your own relay. The relay never handles money or
+card data: your payment gateway (your own account) collects payment
+and sends this server a signed webhook; the server issues a
+time-boxed **pass** that the app presents on cost-creating
+operations. The app author is never in the money flow.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `BILLING_ENABLED` | off | `true` turns the pass gate on |
+| `BILLING_WEBHOOK_SECRET` | — | Your gateway's webhook signing secret (required when enabled; webhooks fail closed without it) |
+| `BILLING_CHECKOUT_URL` | — | Your payment page (https). Advertised in `/api/health`; the app shows it to users of your relay |
+| `BILLING_PASS_DAYS` | `30` | Pass lifetime in days (1–366). Passes are never permanent |
+| `BILLING_OPERATOR_TOKEN` | — | Your credential for `POST /api/billing/revoke` (header `x-breeze-operator`) |
+
+Setup with Stripe (any HMAC-webhook gateway works the same way):
+
+1. Create a payment link (or checkout) in your Stripe account and set
+   `BILLING_CHECKOUT_URL` to it.
+2. In Stripe, add a webhook endpoint `https://<your-relay>/api/billing/webhook`
+   for `checkout.session.completed`, `invoice.paid`,
+   `charge.refunded`, `customer.subscription.deleted`, and
+   `invoice.payment_failed`; put its signing secret in
+   `BILLING_WEBHOOK_SECRET`.
+3. Set `BILLING_ENABLED=true` and redeploy/restart.
+
+How a buyer gets in: they pay on your payment page, then in the app
+they add your relay and enter either the pass (shown by your own
+delivery, e.g. the webhook response or your receipt mail) or their
+payment reference (the checkout session id) — the app exchanges the
+reference for the pass exactly once via `POST /api/billing/claim`.
+Refunds and cancellations revoke the pass automatically. A pass binds
+to the first account that uses it; revoke one manually with
+`POST /api/billing/revoke` (`{ "pass": "…" }` or `{ "paymentRef": "…" }`).
+
+Generic gateways: POST events shaped
+`{ "id": "<event-id>", "type": "payment.succeeded" | "payment.refunded", "paymentRef": "<your-reference>", "days": 30 }`
+with header `x-breeze-signature: <hex HMAC-SHA256 of the raw body>`.
+
+
 Host settings:
 
 | Variable | Default | Meaning |

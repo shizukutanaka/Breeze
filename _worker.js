@@ -226,6 +226,11 @@ export default {
         turnIssueCap: parseInt(env.TURN_MONTHLY_ISSUE_CAP) || 0,
         turnIssuedThisMonth: await turnIssueCount(env),
         vapidPublicKey: env.VAPID_PUBLIC_KEY || null,
+        // Operator billing (phase 1): whether this relay requires a paid
+        // pass, and where the operator's payment page lives. The payment
+        // page is the OPERATOR's gateway page — money never flows to the
+        // app author, and the client says so in its paid-relay UI.
+        billing: { required: billingEnabled(env), checkoutUrl: billingCheckoutUrl(env) },
         // Stage-2 step 4: the relay's persistent Ed25519 identity (public
         // half), for the client's TOFU pin — null when the operator has not
         // provisioned one, in which case clients keep the pre-step-4
@@ -256,7 +261,7 @@ export default {
           'account-delete', 'group-leave', 'group-delete', 'group-admin',
           'group-transfer', 'group-rename', 'msg-disappear-enforce',
           'sealed-sender', 'franking', 'prekey-x3dh',
-          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest', 'prekey-home', 'backup-simple', 'presence-auth',
+          'batch-alias', 'group-caps', 'ktlog-get', 'push-unsubscribe', 'prekey-fetch-batch', 'prekey-status', 'alias-delete', 'alias-auth', 'backup-auth', 'push-auth', 'drop-server-id', 'group-auth', 'group-ban', 'queue-auth', 'prekey-auth', 'plain-deprecation', 'delete-sweep', 'relay-attest', 'prekey-home', 'backup-simple', 'presence-auth', ...(billingEnabled(env) ? ['billing-pass'] : []),
         ],
         crypto: ['X25519', 'Ed25519', 'AES-256-GCM', 'HKDF-SHA256', 'Double Ratchet', 'Sender Key O(1)'],
         ts: Date.now(),
@@ -293,6 +298,10 @@ export default {
     const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
     if (env.KV) {
       const limits = {
+        '/api/billing/webhook': 60,
+        '/api/billing/claim': 10,
+        '/api/billing/check': 20,
+        '/api/billing/revoke': 10,
         '/api/signal': 60,
         '/api/msg/send': 30,
         '/api/msg/poll': 40,
@@ -434,6 +443,8 @@ export default {
       if (!env.KV) {
         return json({ error: 'Storage not configured. Bind a KV namespace named "KV" in Pages settings.', code: 'KV_NOT_CONFIGURED' }, 503, request);
       }
+      const billingBlock = await billingGate(path, body, env, request);
+      if (billingBlock) return billingBlock;
       switch (path) {
         case '/api/signal':    return await handleSignal(body, ip, env, request, ctx);
         case '/api/msg/send':  return plainDeprecated(await handleMsgSend(body, ip, env, request));
@@ -456,6 +467,10 @@ export default {
         case '/api/prekey/fetch/batch': return await handlePreKeyFetchBatch(body, env, request);
         case '/api/prekey/status':      return await handlePreKeyStatus(body, env, request);
         case '/api/ktlog/get':        return await handleKtLogGet(body, env, request);
+        case '/api/billing/webhook': return await handleBillingWebhook(body, env, request, bodyText);
+        case '/api/billing/claim':   return await handleBillingClaim(body, env, request);
+        case '/api/billing/check':   return await handleBillingCheck(body, env, request);
+        case '/api/billing/revoke':  return await handleBillingRevoke(body, env, request);
         case '/api/relay/attest':     return await handleRelayAttest(body, env, request);
         case '/api/sealed/send':      return await handleSealedSend(body, env, request);
         case '/api/sealed/poll':      return await handleSealedPoll(body, env, request);
@@ -5187,6 +5202,216 @@ function plainDeprecated(res) {
   const r = new Response(res.body, res);
   r.headers.set('Deprecation', 'true');
   return r;
+}
+
+
+// ==== Operator billing (monetization gateway, phase 1, 2026-11-27) ====
+// An operator may charge for their own relay. The relay never touches
+// money or card data: the operator's payment gateway (Stripe or any
+// HMAC-webhook provider, on the OPERATOR's account) collects payment
+// and notifies this worker; the worker issues a time-boxed PASS the
+// client presents on cost-creating operations. The app author is never
+// in the money flow. Design: Breeze-マネタイズゲートウェイ設計-2026-11-27,
+// decisions/2026-11-27-breeze-billing-pass.md (JEV 002).
+// Operator env:
+//   BILLING_ENABLED=true     — turn the pass gate on
+//   BILLING_WEBHOOK_SECRET   — the gateway's webhook signing secret
+//   BILLING_CHECKOUT_URL     — the operator's payment page (https only;
+//                              advertised in /api/health)
+//   BILLING_PASS_DAYS        — pass lifetime in days (default 30, 1..366)
+//   BILLING_OPERATOR_TOKEN   — operator credential for /api/billing/revoke
+const BILLING_GATED_PATHS = new Set([
+  '/api/prekey/upload', '/api/alias/set', '/api/sealed/send', '/api/msg/send',
+  '/api/group/create', '/api/group/join', '/api/backup/upload',
+  '/api/push/subscribe', '/api/drop/create',
+]);
+function billingEnabled(env) { return !!env && env.BILLING_ENABLED === 'true'; }
+function billingCheckoutUrl(env) {
+  const u = env && env.BILLING_CHECKOUT_URL;
+  return (typeof u === 'string' && u.startsWith('https://')) ? u : null;
+}
+function billingPassDays(env) {
+  const n = parseInt(env && env.BILLING_PASS_DAYS, 10);
+  return Number.isFinite(n) ? Math.min(366, Math.max(1, n)) : 30;
+}
+function timingSafeEqStr(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
+async function hmacSha256Hex(secret, text) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+// Webhook signature check over the RAW body. Stripe-Signature
+// (t=...,v1=..., HMAC over "t.body", 5-minute tolerance) when present,
+// otherwise the generic x-breeze-signature (hex HMAC over the body).
+// Fails closed: billing on but no secret configured is a rejection.
+async function verifyBillingWebhookSignature(env, request, bodyText) {
+  const secret = env.BILLING_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const stripe = request.headers.get('stripe-signature');
+  if (stripe) {
+    let t = null; const v1s = [];
+    for (const part of stripe.split(',')) {
+      const i = part.indexOf('=');
+      if (i < 0) continue;
+      const k = part.slice(0, i).trim(); const v = part.slice(i + 1).trim();
+      if (k === 't') t = v; else if (k === 'v1') v1s.push(v);
+    }
+    if (!t || v1s.length === 0) return false;
+    const ts = parseInt(t, 10);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
+    const expected = await hmacSha256Hex(secret, `${t}.${bodyText}`);
+    return v1s.some((v) => timingSafeEqStr(expected, v));
+  }
+  const generic = request.headers.get('x-breeze-signature');
+  if (generic) {
+    const expected = await hmacSha256Hex(secret, bodyText);
+    return timingSafeEqStr(expected, generic.toLowerCase());
+  }
+  return false;
+}
+function newBillingPassToken() {
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return 'bzpass_' + Array.from(b).map((x) => x.toString(16).padStart(2, '0')).join('');
+}
+async function issueBillingPass(env, paymentRef, days) {
+  const token = newBillingPassToken();
+  const hash = await sha256Hex(token);
+  const now = Date.now();
+  const rec = { expiresAt: now + days * TTL.DAY * 1000, boundTo: null, paymentRef: paymentRef || null, createdAt: now };
+  await kvPut(env, `billing:pass:${hash}`, JSON.stringify(rec));
+  if (paymentRef) {
+    await kvPut(env, `billing:byref:${paymentRef}`, hash);
+    // The claim record is the ONLY place the plain token rests: the
+    // buyer picks it up once with their payment reference. TTL-bounded
+    // and token-free after the claim.
+    await kvPut(env, `billing:claim:${paymentRef}`, JSON.stringify({ token, expiresAt: rec.expiresAt, claimed: false }), { expirationTtl: TTL.DAY * 7 });
+  }
+  return { token, expiresAt: rec.expiresAt };
+}
+async function lookupBillingPass(env, token) {
+  if (typeof token !== 'string' || !token.startsWith('bzpass_') || token.length > 128) return null;
+  const hash = await sha256Hex(token);
+  const raw = await kvGet(env, `billing:pass:${hash}`);
+  if (!raw) return null;
+  let rec;
+  try { rec = JSON.parse(raw); } catch { return null; }
+  if (!rec || typeof rec.expiresAt !== 'number' || rec.expiresAt <= Date.now()) return null;
+  return { hash, rec };
+}
+async function revokeBillingPassByRef(env, paymentRef) {
+  const hash = await kvGet(env, `billing:byref:${paymentRef}`);
+  if (!hash) return false;
+  await kvDel(env, `billing:pass:${hash}`);
+  await kvDel(env, `billing:byref:${paymentRef}`);
+  await kvDel(env, `billing:claim:${paymentRef}`);
+  return true;
+}
+async function handleBillingWebhook(body, env, request, bodyText) {
+  if (!billingEnabled(env)) return json({ error: 'Billing is not enabled on this relay', code: 'BILLING_DISABLED' }, 404, request);
+  if (!(await verifyBillingWebhookSignature(env, request, bodyText))) {
+    return json({ error: 'Invalid webhook signature', code: 'BILLING_BAD_SIGNATURE' }, 401, request);
+  }
+  const eventId = typeof body.id === 'string' && body.id ? body.id : null;
+  if (eventId) {
+    if (await kvGet(env, `billing:event:${eventId}`)) return json({ ok: true, deduped: true }, 200, request);
+    await kvPut(env, `billing:event:${eventId}`, '1', { expirationTtl: TTL.DAY * 30 });
+  }
+  const type = typeof body.type === 'string' ? body.type : '';
+  const obj = (body.data && typeof body.data === 'object' && body.data.object && typeof body.data.object === 'object') ? body.data.object : {};
+  let action = null; let paymentRef = null; let days = billingPassDays(env);
+  if (type === 'checkout.session.completed' || type === 'invoice.paid' || type === 'payment_intent.succeeded') {
+    action = 'issue'; paymentRef = typeof obj.id === 'string' ? obj.id : null;
+  } else if (type === 'charge.refunded') {
+    action = 'revoke'; paymentRef = (typeof obj.payment_intent === 'string' && obj.payment_intent) || (typeof obj.id === 'string' ? obj.id : null);
+  } else if (type === 'customer.subscription.deleted' || type === 'invoice.payment_failed') {
+    action = 'revoke'; paymentRef = typeof obj.id === 'string' ? obj.id : null;
+  } else if (type === 'payment.succeeded') {
+    action = 'issue'; paymentRef = typeof body.paymentRef === 'string' ? body.paymentRef : null;
+    if (Number.isFinite(body.days)) days = Math.min(366, Math.max(1, Math.floor(body.days)));
+  } else if (type === 'payment.refunded') {
+    action = 'revoke'; paymentRef = typeof body.paymentRef === 'string' ? body.paymentRef : null;
+  }
+  if (!action || !validPaymentRef(paymentRef)) return json({ ok: true, ignored: true }, 200, request);
+  if (action === 'issue') {
+    const issued = await issueBillingPass(env, paymentRef, days);
+    // The caller proved knowledge of the webhook secret, so returning
+    // the pass here is safe (for Stripe this response is ignored; the
+    // buyer claims the pass with their payment reference instead).
+    return json({ ok: true, issued: true, pass: issued.token, expiresAt: issued.expiresAt }, 200, request);
+  }
+  return json({ ok: true, revoked: await revokeBillingPassByRef(env, paymentRef) }, 200, request);
+}
+function validPaymentRef(ref) { return typeof ref === 'string' && /^[A-Za-z0-9_\-:.]{1,128}$/.test(ref); }
+async function handleBillingClaim(body, env, request) {
+  if (!billingEnabled(env)) return json({ error: 'Billing is not enabled on this relay', code: 'BILLING_DISABLED' }, 404, request);
+  const ref = typeof body.paymentRef === 'string' ? body.paymentRef : '';
+  if (!validPaymentRef(ref)) return json({ error: 'paymentRef required', code: 'INVALID_FIELD' }, 400, request);
+  const raw = await kvGet(env, `billing:claim:${ref}`);
+  if (!raw) return json({ error: 'No pass is waiting for this payment reference', code: 'PASS_NOT_FOUND' }, 404, request);
+  let claim;
+  try { claim = JSON.parse(raw); } catch { return json({ error: 'No pass is waiting for this payment reference', code: 'PASS_NOT_FOUND' }, 404, request); }
+  if (claim.claimed || !claim.token) return json({ error: 'This pass was already claimed', code: 'PASS_ALREADY_CLAIMED' }, 410, request);
+  const token = claim.token;
+  await kvPut(env, `billing:claim:${ref}`, JSON.stringify({ claimed: true, expiresAt: claim.expiresAt }), { expirationTtl: TTL.DAY });
+  return json({ ok: true, pass: token, expiresAt: claim.expiresAt }, 200, request);
+}
+async function handleBillingCheck(body, env, request) {
+  if (!billingEnabled(env)) return json({ ok: true, billing: false }, 200, request);
+  const found = await lookupBillingPass(env, body.pass);
+  if (!found) return json({ ok: false, code: 'BILLING_PASS_INVALID' }, 200, request);
+  return json({ ok: true, expiresAt: found.rec.expiresAt, bound: !!found.rec.boundTo }, 200, request);
+}
+async function handleBillingRevoke(body, env, request) {
+  const expected = env.BILLING_OPERATOR_TOKEN;
+  if (!expected) return json({ error: 'Operator token is not configured on this relay', code: 'BILLING_NOT_CONFIGURED' }, 503, request);
+  if (!timingSafeEqStr(request.headers.get('x-breeze-operator') || '', expected)) {
+    return json({ error: 'Unauthorized', code: 'UNAUTHORIZED' }, 401, request);
+  }
+  if (typeof body.pass === 'string' && body.pass) {
+    const found = await lookupBillingPass(env, body.pass);
+    if (!found) return json({ ok: true, revoked: false }, 200, request);
+    await kvDel(env, `billing:pass:${found.hash}`);
+    if (found.rec.paymentRef) {
+      await kvDel(env, `billing:byref:${found.rec.paymentRef}`);
+      await kvDel(env, `billing:claim:${found.rec.paymentRef}`);
+    }
+    return json({ ok: true, revoked: true }, 200, request);
+  }
+  if (typeof body.paymentRef === 'string' && body.paymentRef) {
+    return json({ ok: true, revoked: await revokeBillingPassByRef(env, body.paymentRef) }, 200, request);
+  }
+  return json({ error: 'pass or paymentRef required', code: 'INVALID_FIELD' }, 400, request);
+}
+// The gate: when the operator turned billing on, cost-creating
+// operations require a valid pass. Rides the router (one choke point)
+// rather than each handler, and fails with an honest 402 + the
+// operator's checkout URL so the client can guide the user.
+async function billingGate(path, body, env, request) {
+  if (!billingEnabled(env) || !BILLING_GATED_PATHS.has(path)) return null;
+  const checkoutUrl = billingCheckoutUrl(env);
+  const token = (typeof body.pass === 'string' && body.pass) || request.headers.get('x-breeze-pass') || '';
+  if (!token) return json({ error: 'This relay requires a billing pass', code: 'BILLING_PASS_REQUIRED', checkoutUrl }, 402, request);
+  const found = await lookupBillingPass(env, token);
+  if (!found) return json({ error: 'Billing pass is invalid or expired', code: 'BILLING_PASS_INVALID', checkoutUrl }, 402, request);
+  const userId = typeof body.userId === 'string' && body.userId ? body.userId : null;
+  if (found.rec.boundTo && userId && found.rec.boundTo !== userId) {
+    return json({ error: 'Billing pass is bound to another account', code: 'BILLING_PASS_BOUND' }, 403, request);
+  }
+  if (!found.rec.boundTo && userId) {
+    found.rec.boundTo = userId;
+    await kvPut(env, `billing:pass:${found.hash}`, JSON.stringify(found.rec));
+  }
+  return null;
 }
 
 async function sha256Short(text) {
