@@ -31,7 +31,8 @@ export function settingsPanelHtml(v) {
   }).join('');
 
   const relayRows = v.relays.map((r) => {
-    const fp = `<span class="settings-row-sub" data-relay-fp="${esc(r.url)}">…</span>${r.blocked ? ' ⚠' : ''}`;
+    const status = typeof r.status === 'string' && r.status ? ` <span class="settings-row-sub" data-relay-status="${esc(r.url)}">${esc(r.status)}</span>` : '';
+    const fp = `<span class="settings-row-sub" data-relay-fp="${esc(r.url)}">…</span>${status}${r.blocked ? ' ⚠' : ''}`;
     const rm = r.origin ? '' : `<button type="button" class="btn btn-o btn-sm" data-action="remove-relay" data-url="${esc(r.url)}">${esc(t('relayRemoveBtn'))}</button>`;
     return `<div class="settings-row settings-relay-row">${ico('globe')}<span class="settings-row-label"><span>${esc(r.label)}${r.origin ? ' ' + esc(t('relayOriginTag')) : ''}</span>${fp}</span><span class="settings-row-value">${rm}</span></div>`;
   }).join('');

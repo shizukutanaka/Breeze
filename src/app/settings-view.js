@@ -48,7 +48,7 @@ export function createSettingsView(deps) {
       focus: deps._focusActive(), focusStrict: settings.focusStrict, autoLock: localStorage.getItem('brz-autolock') === '1',
       notifPerm: typeof Notification !== 'undefined' && Notification.permission === 'granted', autoBackup: settings.autoBackup !== false,
       fanout: deps._fanoutCount(), powerMode: ['auto', 'normal', 'saver', 'emergency'].includes(settings.powerMode) ? settings.powerMode : 'auto',
-      relays: deps.homeRelays().map(r => ({ label: r.label || r.url, url: r.url, origin: deps.isOriginRelay(r), blocked: deps._relayBlockedUrls.has(r.url) })),
+      relays: deps.homeRelays().map(r => ({ label: r.label || r.url, url: r.url, origin: deps.isOriginRelay(r), blocked: deps._relayBlockedUrls.has(r.url), status: typeof deps._relayStatusText === 'function' ? deps._relayStatusText(r) : '' })),
       tabCalls: settings.tabCalls !== false, tabContacts: settings.tabContacts !== false,
       tabSelf: settings.tabSelf !== false, tabSettings: settings.tabSettings !== false, tabOrder: deps._validTabOrder(),
     }));
