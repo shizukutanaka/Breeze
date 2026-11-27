@@ -1235,6 +1235,7 @@ del.md-del { opacity: .6 }
       <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
       <p class="server-gate-desc" data-i18n="gateLocalDesc"></p>
       <button type="button" class="btn btn-o server-gate-local" data-i18n="gateStartLocal"></button>
+      <button type="button" class="btn btn-g server-gate-join hidden"></button>
     </div>
     <input type="text" id="msg-name-random" class="field setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup-random" data-i18n="setupRandom"></button>
@@ -1441,6 +1442,10 @@ window.__breezeDialogs = { createDialogs };
 <script type="module">
 import { applyLandingLinks } from './src/app/landing-links.js';
 window.__breezeLandingLinks = { applyLandingLinks };
+</script>
+<script type="module">
+import { inviteParam, inviteHostName, createLocalRoomActions } from './src/app/local-room.js';
+window.__breezeLocalRoom = { inviteParam, inviteHostName, createLocalRoomActions };
 </script>
 <script type="module">
 import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS } from './src/app/slash-picker.js';
@@ -2173,6 +2178,12 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     gateLocalHosting: 'Active while this device is awake',
     gateLocalStop: 'Stop',
     gateLocalStopped: 'The server on this device was stopped.',
+    gateJoinInvite: 'Join {0} — no server needed',
+    gateJoinInviteAnon: 'Join your inviter — no server needed',
+    gateJoinedStarted: 'Joined on this device. Create your ID to connect with your inviter.',
+    gateJoinedRoomLabel: 'Room of {0} (joined)',
+    gateJoinedRoomAnon: 'Inviter room (joined)',
+    gateJoinedHosting: 'Joined in person on this device',
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
@@ -4817,26 +4828,14 @@ async function initMessenger(dbName) {
     }
   }
   function _serverGateAdd() { _addRelayFlow().catch(e => _dbg(e, 'server-gate-add')); }
-  // Local room (on-the-spot server, 2026-11-27 design): this device
-  // itself acts as the server for people nearby, using the existing
-  // in-person pairing and rendezvous paths. The room record lives in
-  // settings; the gate treats an active room as having a server. The
-  // honest limit (host must stay here and awake) is in the gate copy.
-  async function _startLocalRoom() {
-    if (_settings.localRoom) { _updateServerGate(); return; }
-    _settings.localRoom = { startedAt: Date.now() };
-    await saveSettings();
-    _updateServerGate();
-    showToast(t('gateLocalStarted'), 'success');
-    if (myId) { try { await shareInvite(); } catch(e) { _dbg(e, 'local-room-invite'); } }
-  }
-  async function _stopLocalRoom() {
-    if (!_settings.localRoom) return;
-    delete _settings.localRoom;
-    await saveSettings();
-    _updateServerGate();
-    showToast(t('gateLocalStopped'), 'success');
-  }
+  // Local room actions live in src/app/local-room.js (extracted under
+  // the line budget: feature work extracts at least what it adds).
+  const _localRoomActions = globalThis.__breezeLocalRoom?.createLocalRoomActions({ getSettings: () => _settings, saveSettings, updateGate: () => _updateServerGate(), showToast, t, shareInvite: (...a) => shareInvite(...a), getMyId: () => myId, dbg: _dbg, P }) || null;
+  function _startLocalRoom() { return _localRoomActions?.start() || Promise.resolve(); }
+  function _stopLocalRoom() { return _localRoomActions?.stop() || Promise.resolve(); }
+  function _joinLocalRoom() { return _localRoomActions?.join() || Promise.resolve(); }
+  function _inviteParam(k) { return globalThis.__breezeLocalRoom?.inviteParam(P, k) ?? null; }
+  function _inviteHostName() { return globalThis.__breezeLocalRoom?.inviteHostName(P) ?? null; }
   function _updateServerGate() {
     const panel = _DOM.get('msg-server-gate-panel');
     const overlay = _DOM.get('msg-server-gate');
@@ -4850,6 +4849,15 @@ async function initMessenger(dbName) {
     const mainGated = active && mainVisible;
     const overlayWasHidden = overlay.classList.contains('hidden');
     panel.classList.toggle('hidden', !setupGated);
+    const joinBtn = panel.querySelector?.('.server-gate-join');
+    if (joinBtn) {
+      const hasInvite = setupGated && !!_inviteParam('add');
+      joinBtn.classList.toggle('hidden', !hasInvite);
+      if (hasInvite) {
+        const host = _inviteHostName();
+        joinBtn.textContent = host ? t('gateJoinInvite', host) : t('gateJoinInviteAnon');
+      }
+    }
     overlay.classList.toggle('hidden', !mainGated);
     for (const child of main.children || []) _serverGateInert(child, child !== overlay && mainGated);
     if (mainGated && overlayWasHidden) overlay.querySelector?.('.server-gate-add')?.focus();
@@ -8166,6 +8174,7 @@ async function initMessenger(dbName) {
   }
   document.querySelectorAll('.server-gate-add').forEach(btn => btn.addEventListener('click', _serverGateAdd, { signal: _ac.signal }));
   document.querySelectorAll('.server-gate-local').forEach(btn => btn.addEventListener('click', () => { _startLocalRoom().catch(e => _dbg(e, 'local-room-start')); }, { signal: _ac.signal }));
+  document.querySelectorAll('.server-gate-join').forEach(btn => btn.addEventListener('click', () => { _joinLocalRoom().catch(e => _dbg(e, 'local-room-join')); }, { signal: _ac.signal }));
   // The first screen's primary action: one tap mints a random identity
   // through createIdentity's existing random generation path and enters
   // the app — no name, no alias, no phrase step. The record stays

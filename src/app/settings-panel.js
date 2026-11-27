@@ -37,7 +37,7 @@ export function settingsPanelHtml(v) {
     return `<div class="settings-row settings-relay-row">${ico('globe')}<span class="settings-row-label"><span>${esc(r.label)}${r.origin ? ' ' + esc(t('relayOriginTag')) : ''}</span>${fp}</span><span class="settings-row-value">${rm}</span></div>`;
   }).join('');
 
-  const roomRow = v.localRoom ? `<div class="settings-row settings-relay-row">${ico('globe')}<span class="settings-row-label"><span>${esc(t('gateLocalRoomLabel'))}</span> <span class="settings-row-sub">${esc(t('gateLocalHosting'))}</span></span><span class="settings-row-value"><button type="button" class="btn btn-o btn-sm" data-action="stop-local-room">${esc(t('gateLocalStop'))}</button></span></div>` : '';
+  const roomRow = v.localRoom ? `<div class="settings-row settings-relay-row">${ico('globe')}<span class="settings-row-label"><span>${esc(v.localRoom.joined ? (v.localRoom.hostName ? t('gateJoinedRoomLabel', v.localRoom.hostName) : t('gateJoinedRoomAnon')) : t('gateLocalRoomLabel'))}</span> <span class="settings-row-sub">${esc(t(v.localRoom.joined ? 'gateJoinedHosting' : 'gateLocalHosting'))}</span></span><span class="settings-row-value"><button type="button" class="btn btn-o btn-sm" data-action="stop-local-room">${esc(t('gateLocalStop'))}</button></span></div>` : '';
   const fanoutOpts = [1, 2, 3].map((n) => `<option value="${n}"${v.fanout === n ? ' selected' : ''}>${n}</option>`).join('');
   const installStandalone = typeof window !== 'undefined' && ((typeof window.matchMedia === 'function' && window.matchMedia('(display-mode: standalone)').matches) || window.navigator?.standalone);
   const installElectron = typeof window !== 'undefined' && window.process?.versions?.electron;
