@@ -4,6 +4,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createServerHints } from '../src/app/server-hints.js';
 
 const ROOT = path.resolve(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -116,11 +117,22 @@ describe('no-default-server unconfigured banner', () => {
     const root = { inserted: null, insertBefore(el, before) { this.inserted = { el, before }; banner.parentElement = { id: 'root' }; } };
     const setup = { parentElement: root };
     const DOM = { get: (id) => id === 'msg-server-banner' ? banner : id === 'msg-setup' ? setup : null };
-    const fn = new Function('homeRelays', '_DOM', 't', 'openSettingsView', 'requestAnimationFrame', 'document',
-      `${sliceBetween('function _updateNoDefaultBanner()', '// The add-flow\'s probe')}
-       return _updateNoDefaultBanner;`);
+    // The banner body lives in src/app/server-hints.js since 2026-11-27
+    // (index.html keeps a one-line delegation); drive the real factory
+    // with the same stubs this harness always used. The wiring side
+    // (openSettingsView on click) is pinned in server-hints.test.js.
     const opened = [];
-    const update = fn(relays.homeRelays, DOM, (k) => k, () => opened.push(true), (cb) => cb(), { querySelector: () => null });
+    const hints = createServerHints({
+      dom: (id) => DOM.get(id), t: (k) => k,
+      isNoDefault: () => globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true,
+      relayCount: () => relays.homeRelays().length,
+      hasRoom: () => !!settings.localRoom,
+      onBannerClick: () => opened.push(true),
+      getActiveContact: () => null, isMock: () => false,
+      contactHomes: () => 0, queuedFor: () => 0, peerOpen: () => false,
+      openRendezvous: () => {}, inputBar: () => null,
+    });
+    const update = () => hints.updateBanner();
     return { update, banner, classes, root, opened };
   }
 

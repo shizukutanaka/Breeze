@@ -797,6 +797,7 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 .setup-restore-more.hidden { display: none }
 .setup-footer { color: var(--t3); margin-top: var(--sp-4); font-size: var(--fs-caption) }
 .server-banner { background: var(--r); color: #000; padding: var(--sp-2) var(--sp-4); font-size: var(--fs-sub); text-align: center; border-radius: var(--rad); margin-bottom: var(--sp-1) }
+.delivery-hint { display: flex; gap: var(--sp-2); align-items: center; justify-content: space-between; background: var(--s1); color: var(--t1); padding: var(--sp-2) var(--sp-4); font-size: var(--fs-sub); border-radius: var(--rad); margin-bottom: var(--sp-1) }
 .server-gate-panel { margin: 0 auto var(--sp-4); padding: var(--sp-4); border: 1px solid var(--b1); border-radius: var(--rad-lg); background: var(--s1); box-shadow: var(--shadow-sm) }
 .server-gate-overlay { position: fixed; inset: 0; z-index: 95; background: rgba(0,0,0,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: var(--sp-5) }
 .server-gate-card { max-width: 420px; width: 100%; padding: var(--sp-5); border: 1px solid var(--b1); border-radius: var(--rad-lg); background: var(--s1); box-shadow: var(--shadow-float); text-align: center }
@@ -1446,6 +1447,8 @@ window.__breezeLandingLinks = { applyLandingLinks };
 <script type="module">
 import { inviteParam, inviteHostName, createLocalRoomActions } from './src/app/local-room.js';
 window.__breezeLocalRoom = { inviteParam, inviteHostName, createLocalRoomActions };
+import { noDefaultBannerNeeded, deliveryStuck, createServerHints } from './src/app/server-hints.js';
+window.__breezeServerHints = { noDefaultBannerNeeded, deliveryStuck, createServerHints };
 </script>
 <script type="module">
 import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS } from './src/app/slash-picker.js';
@@ -2183,7 +2186,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     gateJoinedStarted: 'Joined on this device. Create your ID to connect with your inviter.',
     gateJoinedRoomLabel: 'Room of {0} (joined)',
     gateJoinedRoomAnon: 'Inviter room (joined)',
-    gateJoinedHosting: 'Joined in person on this device',
+    gateJoinedHosting: 'Joined in person on this device', deliveryHintText: '{0} message(s) are still only on this device. No relay can carry them, and {1} is not connected. If you are together, pair in person to deliver them.', deliveryHintAction: 'Pair in person', deliveryHintConnect: 'Exchange connection codes', hostWaitText: 'Your room is open. Joining happens on the other device only, so nothing appears here when someone joins. To start talking in person, pair face to face.', hostWaitAction: 'Pair in person',
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
@@ -2592,6 +2595,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     uiAllCaughtUp: 'All caught up',
     uiNoGroups: 'No groups yet',
     uiAddFirst: 'Add your first contact',
+    emptyOnboard: 'Your conversations will appear here. Send an invite link to start your first one.',
     uiNoPins: 'No pinned messages',
     uiNoFiles: 'No files shared yet.',
     uiNoReactions: 'No reactions in this chat yet.',
@@ -4798,14 +4802,9 @@ async function initMessenger(dbName) {
   }
   globalThis.__breezeNoDefaultPrimaryApi = () => homeRelays()[0] ? relayApiBase(homeRelays()[0]) : '';
   globalThis.__breezeNoDefaultPrimaryPost = (path, body, opts = {}) => homeRelays()[0] ? postAPIRelay(homeRelays()[0], path, body, opts) : null;
-  function _updateNoDefaultBanner() {
-    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true) return;
-    const banner = _DOM.get('msg-server-banner'); if (!banner) return;
-    if (homeRelays().length) { if (banner.dataset.noDefault) { banner.classList.add('hidden'); delete banner.dataset.noDefault; banner.onclick = null; } return; }
-    const setup = _DOM.get('msg-setup'); if (setup && banner.parentElement?.id === 'msg-main') setup.parentElement.insertBefore(banner, setup);
-    banner.dataset.noDefault = '1'; banner.classList.remove('hidden'); banner.textContent = t('serverNoDefault');
-    banner.onclick = () => { openSettingsView(); requestAnimationFrame(() => document.querySelector('[data-action="add-relay"]')?.scrollIntoView({ block: 'center' })); };
-  }
+  // The banner body lives in src/app/server-hints.js (it must agree
+  // with the gate about local rooms; see noDefaultBannerNeeded).
+  function _updateNoDefaultBanner() { return _serverHints?.updateBanner(); }
   function _serverGateControl(el, gated) {
     if (!el) return;
     if (gated) {
@@ -4828,9 +4827,10 @@ async function initMessenger(dbName) {
     }
   }
   function _serverGateAdd() { _addRelayFlow().catch(e => _dbg(e, 'server-gate-add')); }
-  // Local room actions live in src/app/local-room.js (extracted under
-  // the line budget: feature work extracts at least what it adds).
+  // Local room actions live in src/app/local-room.js (extracted under the line budget: feature work extracts at least what it adds).
   const _localRoomActions = globalThis.__breezeLocalRoom?.createLocalRoomActions({ getSettings: () => _settings, saveSettings, updateGate: () => _updateServerGate(), showToast, t, shareInvite: (...a) => shareInvite(...a), getMyId: () => myId, dbg: _dbg, P }) || null;
+  const _serverHints = globalThis.__breezeServerHints?.createServerHints({ dom: id => _DOM.get(id), t, isNoDefault: () => globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true, relayCount: () => homeRelays().length, hasRoom: () => !!_settings.localRoom, onBannerClick: () => { openSettingsView(); requestAnimationFrame(() => document.querySelector('[data-action="add-relay"]')?.scrollIntoView({ block: 'center' })); }, getActiveContact: () => activeContact, isMock: () => !!globalThis.__breezeMock?.enabled?.(), contactHomes: c => Array.isArray(c?.home) ? c.home.length : 0, queuedFor: pub => _outbox.get(pub)?.length || 0, peerOpen: pub => { const p = peers[pub]; return !!(p?.connected && p.dc?.readyState === 'open'); }, openRendezvous: c => _rendezvous?.open(c), inputBar: () => _DOM.get('msg-input-bar'), roomJoined: () => !!_settings.localRoom?.joined, openPairing: () => _offlinePairing?.open() }) || null;
+  function _updateDeliveryHint() { return _serverHints?.updateDeliveryHint(); }
   function _startLocalRoom() { return _localRoomActions?.start() || Promise.resolve(); }
   function _stopLocalRoom() { return _localRoomActions?.stop() || Promise.resolve(); }
   function _joinLocalRoom() { return _localRoomActions?.join() || Promise.resolve(); }
@@ -4863,6 +4863,7 @@ async function initMessenger(dbName) {
     if (mainGated && overlayWasHidden) overlay.querySelector?.('.server-gate-add')?.focus();
     for (const id of ['msg-name-random', 'msg-name', 'msg-alias', 'b-msg-setup-random', 'b-msg-setup', 'b-msg-setup-simple', 'b-msg-setup-restore-toggle']) _serverGateControl(_DOM.get(id), setupGated);
     _DOM.get('setup-restore-more')?.querySelectorAll('button').forEach(btn => _serverGateControl(btn, setupGated));
+    if (typeof _updateNoDefaultBanner === 'function') _updateNoDefaultBanner(); if (typeof _updateDeliveryHint === 'function') _updateDeliveryHint();
   }
   function _preflightRelayUrl(raw) {
     if (typeof raw !== 'string') return { error: 'invalid' };
@@ -8966,11 +8967,9 @@ async function initMessenger(dbName) {
       else if (folder === 'groups') { text = t('uiNoGroups'); actions = [{ label: t('addOptionGroup'), primary: true, onClick: () => _showAddContactPanel('group') }]; }
       else if (folder === 'labels') { text = _activeLabel ? t('labelFilterEmpty', _activeLabel) : t('labelNoneContacts'); actions = [showAllAction]; }
       else {
-        text = t('uiAddFirst');
+        text = contacts.length === 0 ? t('emptyOnboard') : t('uiAddFirst');
         if (contacts.length === 0) actions = [
-          { label: t('addContactTitle'), primary: true, onClick: () => _showAddContactPanel() },
-          { label: t('btnInviteFriend'), onClick: () => shareInvite() },
-          { label: t('btnMigrateApps'), onClick: () => showMigratePanel() },
+          { label: t('btnInviteFriend'), primary: true, onClick: () => shareInvite() },
         ];
       }
       frag.appendChild(_emptyState(text, actions));
@@ -9061,7 +9060,7 @@ async function initMessenger(dbName) {
       _notifRequested = true;
       Notification.requestPermission().catch(e => _dbg(e));
     }
-    activeContact = contact; refreshSignalPolls(); // D12: the newly open conversation's poll returns to the 15s fallback at once; the one left behind thins out
+    activeContact = contact; refreshSignalPolls(); _updateDeliveryHint(); // D12: the newly open conversation's poll returns to the 15s fallback at once; the one left behind thins out
     contact.unread = 0;
     await dbPut('contacts', contact);
     _locUI?.renderLiveChip();
@@ -10159,6 +10158,7 @@ async function initMessenger(dbName) {
   let _prevConnState = ''; // v3.6: Track for SR announcements
   function updateConvStatus() {
     const el = _DOM.get('msg-conv-status');
+    _updateDeliveryHint();
     if (!activeContact) return;
     if (activeContact.isGroup) {
       const online = (activeContact.members || []).filter(m => m.id !== myId && (peers[m.pubB64]?.connected || _presenceCache[m.id])).length;
@@ -10497,6 +10497,7 @@ async function initMessenger(dbName) {
       _profileUI?.sendTo(activeContact).catch(e => _dbg(e, 'profile-first')); // my profile follows the first chat message (never opens the session — see profile.js); a no-op once delivered
     }
     _mock?.afterSend(contact);
+    _updateDeliveryHint();
     renderContacts();
     } catch(err) {
       _dbg(err, 'sendMessage');
@@ -12568,6 +12569,7 @@ async function initMessenger(dbName) {
           const ct = await dbGet('contacts', contact.id).catch(() => null);
           if (!ct?.blocked) flushOutbox(contact.pubB64);
         }, MS.SEC / 2);
+        setTimeout(() => _updateDeliveryHint(), MS.SEC);
       }
       // v3.6: DC heartbeat — ping/pong via state channel for liveness detection
       // Three unanswered probes trigger recovery on the following tick.

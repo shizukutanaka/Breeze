@@ -214,13 +214,18 @@ describe('surfacing wiring (index.html / sw.js / locales)', () => {
     expect(html).toContain('generateInviteMessage, showQRModal, createGroupInviteLink, importChat,');
   });
 
-  it('the contacts empty state offers the invite and migrate doors', () => {
-    expect(html).toContain("label: t('btnInviteFriend')");
-    expect(html).toContain('onClick: () => shareInvite()');
-    expect(html).toContain("label: t('btnMigrateApps')");
-    expect(html).toContain('onClick: () => showMigratePanel()');
-    // …and only in the zero-contacts state, not on every empty folder.
-    expect(html).toContain('if (contacts.length === 0) actions = [');
+  it('the contacts empty state offers only the invite door (E2 onboarding, round 39)', () => {
+    // Since round 39 the zero-contacts empty state is onboarding with a
+    // single action — the invite door. The migrate door lives on in the
+    // settings panel (asserted below), and Add friend in the header.
+    const at = html.indexOf('if (contacts.length === 0) actions = [');
+    expect(at).toBeGreaterThan(-1);
+    const block = html.slice(at, html.indexOf('];', at));
+    expect(block).toContain("label: t('btnInviteFriend'), primary: true");
+    expect(block).toContain('onClick: () => shareInvite()');
+    expect(block).not.toContain('btnMigrateApps');
+    expect(block).not.toContain('showMigratePanel');
+    expect(block).not.toContain('addContactTitle');
   });
 
   it('the settings panel offers the same two doors', () => {
