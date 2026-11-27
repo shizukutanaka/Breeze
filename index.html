@@ -2564,6 +2564,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     uiAllCaughtUp: 'All caught up',
     uiNoGroups: 'No groups yet',
     uiAddFirst: 'Add your first contact',
+    emptyOnboard: 'Your conversations will appear here. Send an invite link to start your first one.',
     uiNoPins: 'No pinned messages',
     uiNoFiles: 'No files shared yet.',
     uiNoReactions: 'No reactions in this chat yet.',
@@ -8876,11 +8877,9 @@ async function initMessenger(dbName) {
       else if (folder === 'groups') { text = t('uiNoGroups'); actions = [{ label: t('addOptionGroup'), primary: true, onClick: () => _showAddContactPanel('group') }]; }
       else if (folder === 'labels') { text = _activeLabel ? t('labelFilterEmpty', _activeLabel) : t('labelNoneContacts'); actions = [showAllAction]; }
       else {
-        text = t('uiAddFirst');
+        text = contacts.length === 0 ? t('emptyOnboard') : t('uiAddFirst');
         if (contacts.length === 0) actions = [
-          { label: t('addContactTitle'), primary: true, onClick: () => _showAddContactPanel() },
-          { label: t('btnInviteFriend'), onClick: () => shareInvite() },
-          { label: t('btnMigrateApps'), onClick: () => showMigratePanel() },
+          { label: t('btnInviteFriend'), primary: true, onClick: () => shareInvite() },
         ];
       }
       frag.appendChild(_emptyState(text, actions));
