@@ -5,7 +5,7 @@ import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, SLASH_FEATURED, SLASH_E
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
 
-const COMMANDS_71 = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/online', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/vault', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
+const COMMANDS_70 = ['/help', '/search', '/searchall', '/pins', '/bookmarks', '/reply', '/poll', '/timer', '/schedule', '/clear', '/export', '/import', '/summarize', '/reactions', '/compact', '/files', '/print', '/rendezvous', '/offlinepair', '/info', '/note', '/pin', '/mute', '/archive', '/unblock', '/members', '/admin', '/add', '/label', '/sort', '/newgroup', '/rename', '/invite', '/qr', '/share', '/contacts', '/focus', '/settings', '/theme', '/wallpaper', '/lock', '/sound', '/compress', '/alias', '/whoami', '/who', '/debug', '/security', '/verify', '/audit', '/retention', '/backup', '/keywrap', '/vault', '/sessions', '/wipe', '/gdpr', '/panic', '/devices', '/link', '/linkto', '/unlink', '/history', '/migrate', '/profile', '/stickers', '/location', '/retry', '/drop', '/room'];
 
 const EN_DESCS = {
   cmdDescHelp: 'List all commands',
@@ -221,9 +221,9 @@ describe('slash-picker behaviour', () => {
 });
 
 describe('slash-picker exported data', () => {
-  it('keeps the original 71 commands in the original order', () => {
-    expect(SLASH_COMMANDS).toEqual(COMMANDS_71);
-    expect(SLASH_COMMANDS).toHaveLength(71);
+  it('keeps the original 70 commands in the original order', () => {
+    expect(SLASH_COMMANDS).toEqual(COMMANDS_70);
+    expect(SLASH_COMMANDS).toHaveLength(70);
   });
 
   it('keeps featured commands valid and examples within the command inventory', () => {
@@ -243,6 +243,18 @@ describe('slash-picker exported data', () => {
     const example = SLASH_EXAMPLES['/schedule'];
     expect(example.startsWith('/schedule')).toBe(true);
     expect(example).toMatch(/^\/schedule \d+[smhd]\s+\S+/i);
+  });
+
+  it('does not include /online, a dead command with no dispatch handler', () => {
+    expect(SLASH_COMMANDS).not.toContain('/online');
+  });
+
+  it('pins the /contacts example to a form the command dispatch actually accepts', () => {
+    expect(SLASH_EXAMPLES).toHaveProperty('/contacts');
+    const example = SLASH_EXAMPLES['/contacts'];
+    expect(example.startsWith('/contacts')).toBe(true);
+    const escaped = example.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    expect(html).toMatch(new RegExp("val === '" + escaped + "'"));
   });
 
   it('describes exactly the curated first-success and everyday commands', () => {
