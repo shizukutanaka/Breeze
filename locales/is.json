@@ -1191,5 +1191,8 @@
   "mockSeedG1": "Velkomin í sýnahópinn.",
   "mockSeedG2": "Þetta hjálpar að sýna hvernig samræður í hópnum líta út.",
   "settingsInstallApp": "Setja upp appið",
-  "helpSetInstallApp": "Opnar uppsetningu appsins með einum smelli þegar vafrinn býður það upp. Ef sú beiðni er ekki tiltæk, sýnir það í staðinn uppsetningarleiðbeiningar eða borða fyrir niðurhal á tölvu."
+  "helpSetInstallApp": "Opnar uppsetningu appsins með einum smelli þegar vafrinn býður það upp. Ef sú beiðni er ekki tiltæk, sýnir það í staðinn uppsetningarleiðbeiningar eða borða fyrir niðurhal á tölvu.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

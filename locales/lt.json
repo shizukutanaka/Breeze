@@ -1205,5 +1205,8 @@
   "mockSeedG1": "Sveiki atrinkimo grupėje.",
   "mockSeedG2": "Tai padeda parodyti, kokias grupės pokalbiai atrodo.",
   "settingsInstallApp": "Įdiegti programą",
-  "helpSetInstallApp": "Atidaro programos diegimą vienu spustelėjimu, kai naršyklė tai siūlo. Jei šis raginimas nepasiekiamas, rodomos diegimo instrukcijos arba darbalaukio atsisiuntimo reklamjuostė."
+  "helpSetInstallApp": "Atidaro programos diegimą vienu spustelėjimu, kai naršyklė tai siūlo. Jei šis raginimas nepasiekiamas, rodomos diegimo instrukcijos arba darbalaukio atsisiuntimo reklamjuostė.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

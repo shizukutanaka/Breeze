@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Tabê rastê bikişîne",
   "helpSetTabOrder": "Rêza tabîyên jêrîn diguherîne. Rêzikekê bikişînin, an bişkokên tîran bikar bînin; barê tabê tavilê nûve dibe. Sohbet dikarin ji nû ve werin rêzkirin lê her tim dihên nîşandan.",
   "settingsInstallApp": "Sepanê saz bike",
-  "helpSetInstallApp": "Dema ku gerok pêşkêş dike sazkirina sepanê bi yek tikandinê vedike. Heke ev daxwaz ne guncaw be, li şûna wê talîmatên sazkirinê an pankarta daxistina sermaseyê nîşan dide."
+  "helpSetInstallApp": "Dema ku gerok pêşkêş dike sazkirina sepanê bi yek tikandinê vedike. Heke ev daxwaz ne guncaw be, li şûna wê talîmatên sazkirinê an pankarta daxistina sermaseyê nîşan dide.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

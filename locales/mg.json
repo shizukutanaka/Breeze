@@ -1191,5 +1191,8 @@
   "mockSeedB2": "Afaka manandrana mandefa hafatra ve aho?",
   "mockSeedB3": "Eny. Mivoaka eo an-toerana ny valiny rehefa misy fahatarana kely.",
   "mockSeedG1": "Tongasoa eto amin'ny vondrona santionany.",
-  "mockSeedG2": "Izany dia manampy amin'ny fanehoana ny endrik'ireo resaka vondrona."
+  "mockSeedG2": "Izany dia manampy amin'ny fanehoana ny endrik'ireo resaka vondrona.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

@@ -1191,5 +1191,8 @@
   "tabMoveRight": "U dhaqaaji tabka midig",
   "helpSetTabOrder": "Waxay beddeshaa nidaamka tab-yada hoose. Jiid saf, ama isticmaal badhamada fallaarta; Tab bar-ku si degdeg ah ayuu u cusbooneysiiyay. Sheekooyinka waa la beddeli karaa laakiin mar walba waa la tusayaa.",
   "settingsInstallApp": "Ku rakib app-ka",
-  "helpSetInstallApp": "Waxay furtaa rakibidda barnaamijka hal-guji ah marka biraawsarku bixiyo. Haddii digniintaas aan la heli karin, waxay muujinaysaa tilmaamaha rakibidda ama banner-ka soo dejinta desktop-ka."
+  "helpSetInstallApp": "Waxay furtaa rakibidda barnaamijka hal-guji ah marka biraawsarku bixiyo. Haddii digniintaas aan la heli karin, waxay muujinaysaa tilmaamaha rakibidda ama banner-ka soo dejinta desktop-ka.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

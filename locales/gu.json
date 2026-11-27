@@ -1191,5 +1191,8 @@
   "mockSeedB2": "શું હું સંદેશ મોકલવાનો પ્રયાસ કરી શકું?",
   "mockSeedB3": "હા. ટૂંકા વિલંબ પછી જવાબો સ્થાનિક રીતે જનરેટ થાય છે.",
   "mockSeedG1": "નમૂના જૂથમાં આપનું સ્વાગત છે.",
-  "mockSeedG2": "આ જૂથ વાર્તાલાપ કેવી દેખાય છે તે બતાવવામાં મદદ કરે છે."
+  "mockSeedG2": "આ જૂથ વાર્તાલાપ કેવી દેખાય છે તે બતાવવામાં મદદ કરે છે.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

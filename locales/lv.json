@@ -1198,5 +1198,8 @@
   "mockSeedG1": "Laipni laipni atlases grupā.",
   "mockSeedG2": "Tas palīdz parādīt, kādas grupas sarunas izskatās.",
   "settingsInstallApp": "Instalēt lietotni",
-  "helpSetInstallApp": "Atver lietotnes instalēšanu ar vienu klikšķi, kad pārlūks to piedāvā. Ja šis uzvednes nav pieejams, tā vietā tiek rādīti instalēšanas norādījumi vai datora lejupielādes reklāmkarogs."
+  "helpSetInstallApp": "Atver lietotnes instalēšanu ar vienu klikšķi, kad pārlūks to piedāvā. Ja šis uzvednes nav pieejams, tā vietā tiek rādīti instalēšanas norādījumi vai datora lejupielādes reklāmkarogs.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

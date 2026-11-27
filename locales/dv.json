@@ -1191,5 +1191,8 @@
   "tabMoveRight": "ޓެބް ކަނާތްފަރާތަށް ގެންދޭ",
   "helpSetTabOrder": "ތިރީގައިވާ ޓެބްތަކުގެ ތަރުތީބު ބަދަލުކުރޭ ބަރި ޑްރެގް ކޮށްލާށެވެ. ޓެބް ބާރ ވަގުތުން އަޕްޑޭޓް ކުރެވެއެވެ. ޗެޓްތައް ރީއޯޑަރު ކުރެވިދާނެ ނަމަވެސް އަބަދުވެސް ދައްކަނީ އެވެ.",
   "settingsInstallApp": "އެޕް އިންސްޓޯލް ކުރޭ",
-  "helpSetInstallApp": "ބްރައުޒަރ އިން އެޕް އިންސްޓޯލް ކުރުމުން އެޕް އިންސްޓޯލްމަންޓް ހުޅުވާލައެވެ. އެ ޕްރޮމްޕްޓް ނުލިބިއްޖެ ނަމަ، އޭގެ ބަދަލުގައި އިންސްޓޯލް އިންސްޓްރަކްޝަން ނުވަތަ ޑެސްކްޓޮޕް ޑައުންލޯޑް ބެނާއެއް ފެންނާނެ އެވެ."
+  "helpSetInstallApp": "ބްރައުޒަރ އިން އެޕް އިންސްޓޯލް ކުރުމުން އެޕް އިންސްޓޯލްމަންޓް ހުޅުވާލައެވެ. އެ ޕްރޮމްޕްޓް ނުލިބިއްޖެ ނަމަ، އޭގެ ބަދަލުގައި އިންސްޓޯލް އިންސްޓްރަކްޝަން ނުވަތަ ޑެސްކްޓޮޕް ޑައުންލޯޑް ބެނާއެއް ފެންނާނެ އެވެ.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

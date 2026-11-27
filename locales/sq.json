@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Lëviz skedën djathtas",
   "helpSetTabOrder": "Ndryshon rendin e skedave të poshtme. Tërhiq një rresht, ose përdor butonat e shigjetave; Shiriti i skedave përditësohet menjëherë. Bisedat mund të riorganizohen, por gjithmonë shfaqen.",
   "settingsInstallApp": "Instaloni aplikacionin",
-  "helpSetInstallApp": "Hap instalimin e aplikacionit me një klikim kur shfletuesi e ofron. Nëse ai njoftim nuk është i disponueshëm, shfaq udhëzimet e instalimit ose banderolën e shkarkimit në desktop."
+  "helpSetInstallApp": "Hap instalimin e aplikacionit me një klikim kur shfletuesi e ofron. Nëse ai njoftim nuk është i disponueshëm, shfaq udhëzimet e instalimit ose banderolën e shkarkimit në desktop.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

@@ -1191,5 +1191,8 @@
   "tabMoveRight": "Shenxisa umnyaka wasekunene",
   "helpSetTabOrder": "Utshintsha ulandelelwano lwee-tab ezisezantsi. Tsala umqolo, okanye usebenzise amaqhosha e-arrow; Ibha yethebhu ihlaziya kwangoko. Iincoko zinokuphinda zihlaziywe, kodwa zihlala zibonisiwe.",
   "settingsInstallApp": "Faka i-app",
-  "helpSetInstallApp": "Ivula ukufakwa kweapp yonqakrazo olunye xa isikhangeli sibonelela. Ukuba loo prompt ayifumaneki, ibonisa imiyalelo yokufaka okanye ibhanile yokukhuphela desktop endaweni yoko."
+  "helpSetInstallApp": "Ivula ukufakwa kweapp yonqakrazo olunye xa isikhangeli sibonelela. Ukuba loo prompt ayifumaneki, ibonisa imiyalelo yokufaka okanye ibhanile yokukhuphela desktop endaweni yoko.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }

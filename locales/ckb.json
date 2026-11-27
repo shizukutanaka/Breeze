@@ -1191,5 +1191,8 @@
   "tabMoveRight": "گوێچکە گوێچکە بگوێزەرەوە بۆ لای ڕاست",
   "helpSetTabOrder": "ریزبەندی خشتەبەندەکانی خوارەوە دەگۆڕێت. ڕیزێک ڕابکێشە، یان دوگمەی تیرەکان بەکاربێنە؛ شریتی خشتەبەند دەستبەجێ نوێ دەکرێتەوە. دەتوانرێت چاتەکان دووبارە ڕێک بخرێنەوە بەڵام هەمیشە پیشان دەدرێت.",
   "settingsInstallApp": "دامەزراندنی کاربەرنامەکە",
-  "helpSetInstallApp": "دامەزراندنی کاربەرنامە بە یەک کرتە دەکاتەوە کاتێک وێبگەڕەکە پێشکەشی دەکات. ئەگەر ئەو داواکارییە بەردەست نەبوو، لە جیاتی ئەوە ڕێنماییەکانی دامەزراندن یان مانشێتی داگرتنی دێسکتۆپ پیشان دەدات."
+  "helpSetInstallApp": "دامەزراندنی کاربەرنامە بە یەک کرتە دەکاتەوە کاتێک وێبگەڕەکە پێشکەشی دەکات. ئەگەر ئەو داواکارییە بەردەست نەبوو، لە جیاتی ئەوە ڕێنماییەکانی دامەزراندن یان مانشێتی داگرتنی دێسکتۆپ پیشان دەدات.",
+  "notifAskTitle": "Turn on notifications?",
+  "notifAskDesc": "Breeze can let you know when a new message or call arrives, even when you are looking at another app. Nothing about your conversations leaves this device to do this, and you can turn notifications off again any time in Settings.",
+  "notifAskAllow": "Turn on"
 }
