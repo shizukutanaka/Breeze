@@ -206,6 +206,7 @@
   "gateServerTitle": "Inodikanwa ServerPartner",
   "gateServerDesc": "Breeze haina server yepamutemo. Wedzera yako wega server kuti utange. Chinongedzo chekukoka chega hachina kukwana — iwe uchiri kuda sevha yako wega.",
   "gateAddServer": "Wedzera server yako",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Ita shuwa kuti iwe unotanga kuzivikanwa muMessenger",
   "deleted": "Mharidzo yakabviswa",
   "edited": "(Yakagadziridzwa)",

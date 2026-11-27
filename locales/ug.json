@@ -165,6 +165,7 @@
   "gateServerTitle": "مۇلازىمېتىر تەلەپ قىلىنىدۇ",
   "gateServerDesc": "Breeze نىڭ رەسمىي مۇلازىمېتىرى يوق. باشلاش ئۈچۈن ئۆزىڭىزنىڭ مۇلازىمېتىرىنى قوشۇڭ. تەكلىپ قىلىش ئۇلىنىشىلا كۇپايە قىلمايدۇ - سىز يەنىلا ئۆزىڭىزنىڭ مۇلازىمېتىرىغا موھتاج.",
   "gateAddServer": "مۇلازىمېتىرىڭىزنى قوشۇڭ",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "ئەلچىدە ئالدى بىلەن كىملىك ​​ھاسىل قىلىڭ",
   "deleted": "ئۇچۇر ئۆچۈرۈلدى",
   "edited": "(تەھرىرلەندى)",

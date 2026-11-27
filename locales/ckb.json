@@ -206,6 +206,7 @@
   "gateServerTitle": "ڕاژەکارێک پێویستە",
   "gateServerDesc": "Breeze هیچ ڕاژەکارێکی فەرمی نییە. زێدەکردنی ڕاژەکاری تایبەت بە خۆت بۆ دەستپێکردن. بەستەری بانگهێشت بەتەنها بەس نییە — هێشتا پێویستت بە ڕاژەکارێکی تایبەت بە خۆت هەیە.",
   "gateAddServer": "زێدەکردنی ڕاژەکارەکەت",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "سەرەتا ناسنامەیەک لە پەیامنێردا دروست بکە",
   "deleted": "نامەکە سڕایەوە",
   "edited": "(دەستکاریکراو)",

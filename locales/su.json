@@ -164,6 +164,7 @@
   "gateServerTitle": "A server diperlukeun",
   "gateServerDesc": "Breeze teu boga server resmi. Tambahkeun server sorangan pikeun ngamimitian. Tautan uleman waé henteu cekap - anjeun masih peryogi server anjeun nyalira.",
   "gateAddServer": "Tambahkeun server Anjeun",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Jieun identitas dina utusan munggaran",
   "deleted": "Pesen dipupus",
   "edited": "(diédit)",

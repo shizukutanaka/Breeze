@@ -206,6 +206,7 @@
   "gateServerTitle": "Server ayaa loo baahan yahay",
   "gateServerDesc": "Breeze ma laha server rasmi ah. Ku dar server-kaaga si aad u bilowdo. Link casuumaad kaliya ma aha mid ku filan — weli waxaad u baahan tahay server adiga kuu gaar ah.",
   "gateAddServer": "Ku dar server-kaaga",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Marka hore samee aqoonsi fariimaha gudaheeda",
   "deleted": "Fariinta waa la tirtiray",
   "edited": "(la tafatiray)",

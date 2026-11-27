@@ -206,6 +206,7 @@
   "gateServerTitle": "Seva ikufunika",
   "gateServerDesc": "Breeze ilibe seva yovomerezeka. Onjezani seva yanu kuti muyambe. Ulalo woitanira wokha sikokwanira - mukufunikirabe seva yanu.",
   "gateAddServer": "Onjezani seva yanu",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Pangani chizindikiritso mu mthenga choyamba",
   "deleted": "Uthenga wochotsedwa",
   "edited": "(kusinthidwa)",

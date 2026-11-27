@@ -206,6 +206,7 @@
   "gateServerTitle": "É necessário um servidor",
   "gateServerDesc": "A Breeze não tem um servidor oficial. Adicione o seu próprio servidor para começar. Só um link de convite não é suficiente — ainda precisa de um servidor seu.",
   "gateAddServer": "Adicione o seu servidor",
+  "gateServerSteps": "About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.",
   "noIdentity": "Crie primeiro uma identidade no mensageiro",
   "deleted": "Mensagem eliminada",
   "edited": "(editado)",
