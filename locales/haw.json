@@ -540,6 +540,7 @@
   "relayAddTimeout": "Ua lōʻihi loa ka pane ʻana a ua server lā — kali paha a hoʻāʻo hou. Inā mau, e nānā e holo ana ka server a ʻaʻole i piha ka hana.",
   "relayAddNotBreeze": "Ua pane ua wahi lā, akā ʻaʻole ia e like me ka server Breeze — e hōʻoia e kuhikuhi ana ka URL i kāu server Breeze, ʻaʻole i ka pae uēea a i ʻole polokalamu ʻē aʻe, a laila hoʻāʻo hou.",
   "relayAdded": "Hoʻohui ʻia ka relay home: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Wehe ʻia ka relay home: {0}",
   "relayFailover": "ʻAʻole pane ʻo Relay {0} - hāʻawi ʻia ma {1} ma kahi.",
   "relayRemoveConfirm": "Wehe i ka {0} mai kou home relays? Mālama ka relay i ka ʻikepili i paʻa ai; oki wale ia i ka loaa ana i na kope hou.",

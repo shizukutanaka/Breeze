@@ -538,6 +538,7 @@
   "relayAddTimeout": "Serveril kulus vastamiseks liiga kaua aega — oota hetk ja proovi uuesti. Kui see kordub, kontrolli, et server töötab ja pole ülekoormatud.",
   "relayAddNotBreeze": "See aadress vastas, kuid ei näe välja nagu Breeze'i server — veendu, et URL osutab sinu Breeze'i serverile, mitte veebisaidile või muule rakendusele, ja proovi uuesti.",
   "relayAdded": "Kodu relee lisatud: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Kodurelee eemaldatud: {0}",
   "relayFailover": "Relay {0} ei vastanud ~ tarnitud {1} asemel.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

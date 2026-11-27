@@ -489,6 +489,7 @@
   "relayAddTimeout": "Trvalo příliš dlouho, než server odpověděl — chvíli počkejte a zkuste to znovu. Pokud se to opakuje, zkontrolujte, zda server běží a není přetížený.",
   "relayAddNotBreeze": "Tato adresa odpověděla, ale nevypadá jako server Breeze — ujistěte se, že URL odkazuje na váš server Breeze, nikoli na webovou stránku nebo jinou aplikaci, a zkuste to znovu.",
   "relayAdded": "Domácí relay přidán: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Domácí relay odebrán: {0}",
   "relayFailover": "Relay {0} neodpověděl — doručeno místo toho přes {1}.",
   "relayRemoveConfirm": "Odebrat {0} z vašich domácích relay? Relay si ponechá data, která už má; jen přestane dostávat nové kopie.",

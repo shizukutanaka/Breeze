@@ -485,6 +485,7 @@
   "relayAddTimeout": "ያ አገልጋይ ለመመለስ እጅግ ረጅም ጊዜ ወስዷል — ትንሽ ይጠብቁ እና እንደገና ይሞክሩ። ከቀጠለ አገልጋዩ እየሠራ መሆኑን እና እጅግ እንዳልተጫነ ያረጋግጡ።",
   "relayAddNotBreeze": "አድራሻው መልስ ሰጥቷል፣ ግን የBreeze አገልጋይ አይመስለም — ዩአርኤሉ ወደ Breeze አገልጋይዎ እንደሚያመላክት እንጂ ወደ ድህረገጽ ወይም ሌላ መተግበሪያ እንዳልሆነ ያረጋግጡ እና እንደገና ይሞክሩ።",
   "relayAdded": "የቤት ሪሌይ ታክሏል፤ {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "የቤት ሪሌይ ተወግዷል፤ {0}",
   "relayFailover": "ሪሌይ {0} አልመለሰም — በምትኩ በ{1} በኩል ደርሷል።",
   "relayRemoveConfirm": "{0}ን ከቤት ሪሌዮችዎ ያስወግዱ? ሪሌዩ አስቀድሞ ያለውን ውሂብ ያቆያል፤ አዳዲስ ቅጂዎችን መቀበል ብቻ ያቆማል።",

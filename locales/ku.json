@@ -484,6 +484,7 @@
   "relayAddTimeout": "Ew server ji bo bersivdanê demek dirêj girt — hinekî bisekine û dîsa biceribîne. Heke dubare bibe, kontrol bike ka server dixebite û zêde barkiriye nîn e.",
   "relayAddNotBreeze": "Ew navnîşan bersiv da, lê wek servera Breeze naxuya — piştrast bike ka URL ber bi servera te ya Breeze ve nîşan dide, ne malperek an serlêdanek din, paşê dîsa biceribîne.",
   "relayAdded": "Veguhestina malê zêde kir: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Veguhestina malê hate rakirin: {0}",
   "relayFailover": "Relay {0} bersiv neda - li şûna wê bi rêya {1} radest kir.",
   "relayRemoveConfirm": "{0} ji veguhestinên mala xwe derxin? Relay daneyên ku berê digire digire; ew tenê wergirtina kopiyên nû radiwestîne.",

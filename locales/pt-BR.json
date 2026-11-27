@@ -264,6 +264,7 @@
   "relayAddTimeout": "O servidor demorou demais para responder — aguarde um momento e tente novamente. Se continuar acontecendo, verifique se o servidor está em execução e não está sobrecarregado.",
   "relayAddNotBreeze": "O endereço respondeu, mas não parece ser um servidor Breeze — verifique se o URL aponta para o seu servidor Breeze, e não para um site ou outro app, e tente novamente.",
   "relayAdded": "Relay doméstico adicionado: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Relay doméstico removido: {0}",
   "relayRemoveConfirm": "Remover {0} dos seus relays domésticos? O relay mantém os dados que já possui; apenas para de receber novas cópias.",
   "relayFanoutLabel": "Cópias por contato (entrega redundante):",

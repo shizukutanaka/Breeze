@@ -263,6 +263,7 @@
   "relayAddTimeout": "該伺服器回應時間過長——請稍候再試。若持續發生,請確認伺服器正在執行且未過載。",
   "relayAddNotBreeze": "該位址有回應,但看起來不是 Breeze 伺服器——請確認 URL 指向您的 Breeze 伺服器,而非網站或其他應用程式,然後再試一次。",
   "relayAdded": "已新增主中繼：{0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "已移除主中繼：{0}",
   "relayRemoveConfirm": "將 {0} 從主中繼中移除嗎？中繼會保留其已有資料，只是停止接收新副本。",
   "relayFanoutLabel": "每位聯絡人的副本數（冗餘傳送）：",

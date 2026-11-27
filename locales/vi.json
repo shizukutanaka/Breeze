@@ -485,6 +485,7 @@
   "relayAddTimeout": "Máy chủ đó mất quá nhiều thời gian để phản hồi — hãy đợi một lát và thử lại. Nếu vẫn tiếp tục, kiểm tra xem máy chủ có đang chạy và không bị quá tải không.",
   "relayAddNotBreeze": "Địa chỉ đó đã phản hồi, nhưng có vẻ không phải máy chủ Breeze — hãy chắc chắn URL trỏ đến máy chủ Breeze của bạn chứ không phải một trang web hay ứng dụng khác, rồi thử lại.",
   "relayAdded": "Đã thêm máy chủ chuyển tiếp chính: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Đã xóa máy chủ chuyển tiếp chính: {0}",
   "relayFailover": "Máy chủ chuyển tiếp {0} không trả lời — đã gửi qua {1} thay thế.",
   "relayRemoveConfirm": "Xóa {0} khỏi máy chủ chuyển tiếp chính của bạn? Máy chủ vẫn giữ dữ liệu nó đã có; nó chỉ ngừng nhận bản sao mới.",

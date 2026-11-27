@@ -487,6 +487,7 @@
   "relayAddTimeout": "Serverul a răspuns prea lent — așteaptă un moment și încearcă din nou. Dacă se repetă, verifică dacă serverul rulează și nu este supraîncărcat.",
   "relayAddNotBreeze": "Adresa a răspuns, dar nu pare a fi un server Breeze — asigură-te că URL-ul indică serverul tău Breeze, nu un site web sau altă aplicație, apoi încearcă din nou.",
   "relayAdded": "Releu de domiciliu adăugat: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Releu de domiciliu eliminat: {0}",
   "relayFailover": "Releul {0} nu a răspuns — livrat prin {1} în schimb.",
   "relayRemoveConfirm": "Elimini {0} din releele tale de domiciliu? Releul păstrează datele pe care le deține deja; doar nu mai primește copii noi.",

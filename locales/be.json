@@ -487,6 +487,7 @@
   "relayAddTimeout": "Сервер занадта доўга не адказваў — пачакайце крыху і паўтарыце спробу. Калі гэта паўтараецца, праверце, што сервер працуе і не перагружаны.",
   "relayAddNotBreeze": "Адрас адказаў, але не падобны на сервер Breeze — пераканайцеся, што URL паказвае на ваш сервер Breeze, а не на веб-сайт або іншую праграму, і паўтарыце спробу.",
   "relayAdded": "Дададзенае хатняе реле: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Хатняя перадача выдаленыя: {0}",
   "relayFailover": "Relay {0} didn't answer — delivered via {1} instead.",
   "relayRemoveConfirm": "Выдаліць {0} з вашага хатняга пераслання? Перадача захоўвае дадзеныя, якія яна ужо змяшчае, і проста перастане атрымліваць новыя копіі.",

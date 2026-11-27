@@ -485,6 +485,7 @@
   "relayAddTimeout": "Serveru je trebalo predugo da odgovori — sačekajte trenutak i pokušajte ponovo. Ako se to ponavlja, provjerite da server radi i da nije preopterećen.",
   "relayAddNotBreeze": "Adresa je odgovorila, ali ne liči na Breeze server — provjerite da URL pokazuje na vaš Breeze server, a ne na web-stranicu ili drugu aplikaciju, pa pokušajte ponovo.",
   "relayAdded": "Dodani početni relej: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Home relay removed: {0}",
   "relayFailover": "Relay {0} didn't answer — delivered via {1} instead.",
   "relayRemoveConfirm": "Uklonite {0} iz vaših domaćih relejeva? Relej čuva podatke koje već sadrži; samo prestaje primati nove kopije.",

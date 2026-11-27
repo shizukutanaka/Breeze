@@ -538,6 +538,7 @@
   "relayAddTimeout": "Aquest servidor ha trigat massa a respondre — espera un moment i torna-ho a provar. Si continua passant, comprova que el servidor estigui en marxa i no sobrecarregat.",
   "relayAddNotBreeze": "L’adreça ha respost, però no sembla un servidor Breeze — assegura’t que l’URL apunti al teu servidor Breeze, no a un lloc web ni a una altra aplicació, i torna-ho a provar.",
   "relayAdded": "S'ha afegit el relé d' inici: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "S'ha suprimit el relé d' inici: {0}",
   "relayFailover": "Relay {0} no ha respondt, en comptes d'enviada per {1}.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

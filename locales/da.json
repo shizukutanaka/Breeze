@@ -485,6 +485,7 @@
   "relayAddTimeout": "Serveren svarede for langsomt — vent et øjeblik og prøv igen. Hvis det fortsætter, skal du kontrollere, at serveren kører og ikke er overbelastet.",
   "relayAddNotBreeze": "Adressen svarede, men den ligner ikke en Breeze-server — kontroller, at URL’en peger på din Breeze-server og ikke på et websted eller en anden app, og prøv igen.",
   "relayAdded": "Hjemmerelæ tilføjet: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Hjemmerelæ fjernet: {0}",
   "relayFailover": "Relæ {0} svarede ikke — leveret via {1} i stedet.",
   "relayRemoveConfirm": "Fjern {0} fra dine hjemmerelæer? Relæet beholder de data, det allerede har; det stopper bare med at modtage nye kopier.",

@@ -2155,6 +2155,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     relayAddTimeout: 'That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.',
     relayAddNotBreeze: 'That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.',
     relayAdded: 'Home relay added: {0}',
+    relayAddedInvitePrompt: 'Server added. Next, invite a friend so you can start chatting.',
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
@@ -4879,6 +4880,11 @@ async function initMessenger(dbName) {
     _lastPreKeyCheck = 0;
     checkAndReplenishPreKeys();
     maybeStartMailboxWs();
+    if (typeof _shareTools !== 'undefined' && _shareTools) {
+      try {
+        if (await showConfirm(t('relayAddedInvitePrompt'), { okText: t('btnInviteFriend') })) { await shareInvite(); }
+      } catch(e) { _dbg(e, 'relay-add-invite'); }
+    }
   }
   // Remove this account's push registration from every home relay
   // (account switch / account delete). Best-effort like the call

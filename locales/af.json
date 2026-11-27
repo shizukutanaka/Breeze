@@ -483,6 +483,7 @@
   "relayAddTimeout": "Daardie bediener het te lank geneem om te antwoord — wag 'n oomblik en probeer weer. As dit aanhou gebeur, maak seker dat die bediener loop en nie oorlaai is nie.",
   "relayAddNotBreeze": "Daardie adres het geantwoord, maar dit lyk nie soos 'n Breeze-bediener nie — maak seker dat die URL na jou Breeze-bediener wys, nie na 'n webwerf of 'n ander toep nie, en probeer dan weer.",
   "relayAdded": "Tuisherlaai bygevoeg: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Tuisherhaling verwyder: {0}",
   "relayFailover": "Relay {0} het nie geantwoord nie — afgelewer deur middel van {1}.",
   "relayRemoveConfirm": "Verwyder {0} van jou tuisgids? Die herlaai hou die data wat dit reeds bevat; dit hou net op om nuwe kopieë te ontvang.",

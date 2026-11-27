@@ -483,6 +483,7 @@
   "relayAddTimeout": "该服务器响应超时——稍等片刻后重试。如果反复出现，请检查服务器是否正在运行且没有过载。",
   "relayAddNotBreeze": "该地址有响应，但看起来不像 Breeze 服务器——请确认 URL 指向你的 Breeze 服务器，而不是网站或其他应用，然后重试。",
   "relayAdded": "主中继已添加：{0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "主中继已移除：{0}",
   "relayFailover": "中继 {0} 没有响应 — 改为通过 {1} 送达。",
   "relayRemoveConfirm": "从主中继中移除 {0}？中继会保留它已有的数据；只是不再接收新副本。",

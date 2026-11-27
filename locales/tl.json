@@ -485,6 +485,7 @@
   "relayAddTimeout": "Napakatagal sumagot ng server na iyon — maghintay sandali at subukan ulit. Kung paulit-ulit, suriin na tumatakbo ang server at hindi overloaded.",
   "relayAddNotBreeze": "Sumagot ang address na iyon, ngunit hindi mukhang Breeze server — siguraduhin na ang URL ay tumuturo sa iyong Breeze server, hindi sa isang website o ibang app, pagkatapos ay subukan ulit.",
   "relayAdded": "Naidagdag ang home relay: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Naalis ang home relay: {0}",
   "relayFailover": "Hindi sumagot ang relay na {0} — naihatid sa pamamagitan ng {1} sa halip.",
   "relayRemoveConfirm": "Alisin ang {0} mula sa iyong mga home relay? Itatago ng relay ang data na hawak na nito; titigil lang ito sa pagtanggap ng mga bagong kopya.",

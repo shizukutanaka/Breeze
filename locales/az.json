@@ -485,6 +485,7 @@
   "relayAddTimeout": "Server cavab vermək üçün çox uzun vaxt sərf etdi — bir az gözləyin və yenidən cəhd edin. Təkrarlansa, serverin işlədiyini və həddindən artıq yüklənmədiyini yoxlayın.",
   "relayAddNotBreeze": "Ünvan cavab verdi, amma Breeze serverinə oxşamır — URL-in veb-sayta və ya başqa tətbiqə deyil, Breeze serverinizə işarə etdiyindən əmin olun, sonra yenidən cəhd edin.",
   "relayAdded": "Ev relesi əlavə edildi: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Ev relesi silindi: {0}",
   "relayFailover": "Rele {0} cavab vermədi — əvəzində {1} vasitəsilə çatdırıldı.",
   "relayRemoveConfirm": "{0} ev relelərinizdən silinsin? Rele artıq əlində olan məlumatları saxlayır; sadəcə yeni nüsxələr almağı dayandırır.",

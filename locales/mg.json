@@ -540,6 +540,7 @@
   "relayAddTimeout": "Elaela loatra ilay server vao mamaly — andraso kely dia andramo indray. Raha mbola mitranga foana, jereo fa mihodina ny server ary tsy tafahoatra.",
   "relayAddNotBreeze": "Namaly ilay adiresy, saingy tsy toa server Breeze — ataovy azo antoka fa ny URL dia manondro ny server Breeze-nao, fa tsy tranokala na application hafa, dia andramo indray.",
   "relayAdded": "Nampiana fampitana an-trano: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Nesorina ny fampitana an-trano: {0}",
   "relayFailover": "Tsy namaly ny Relay {0} — naterina tamin'ny alalan'ny {1} kosa.",
   "relayRemoveConfirm": "Esory ny {0} amin'ny fampitaovana an-tranonao? Ny fampitana dia mitazona ny angon-drakitra efa tazoniny; mijanona fotsiny ny fandraisana dika vaovao.",

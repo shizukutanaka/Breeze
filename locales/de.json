@@ -485,6 +485,7 @@
   "relayAddTimeout": "Der Server hat zu lange nicht geantwortet — warte einen Moment und versuche es erneut. Wenn es weiterhin passiert, prüfe, ob der Server läuft und nicht überlastet ist.",
   "relayAddNotBreeze": "Die Adresse hat geantwortet, sieht aber nicht wie ein Breeze-Server aus — stelle sicher, dass die URL auf deinen Breeze-Server zeigt und nicht auf eine Website oder eine andere App, und versuche es erneut.",
   "relayAdded": "Home-Relay hinzugefügt: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Home-Relay entfernt: {0}",
   "relayFailover": "Relay {0} hat nicht geantwortet — stattdessen über {1} zugestellt.",
   "relayRemoveConfirm": "{0} aus Ihren Home-Relays entfernen? Das Relay behält die Daten, die es bereits hat; es erhält nur keine neuen Kopien mehr.",

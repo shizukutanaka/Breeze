@@ -542,6 +542,7 @@
   "relayAddTimeout": "Serveru trvalo príliš dlho, kým odpovedal — počkajte chvíľu a skúste znova. Ak sa to opakuje, skontrolujte, či server beží a nie je preťažený.",
   "relayAddNotBreeze": "Táto adresa odpovedala, ale nevyzerá ako server Breeze — uistite sa, že URL smeruje na váš server Breeze, nie na webovú stránku alebo inú aplikáciu, a skúste znova.",
   "relayAdded": "Domovský relé pridaný: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Odstránené domáce relé: {0}",
   "relayFailover": "Relé {0} neodpovedal ~ namiesto toho doručil cez {1}.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

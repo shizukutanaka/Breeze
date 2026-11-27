@@ -544,6 +544,7 @@
   "relayAddTimeout": "Thóg an freastalaí sin i bhfad aníos ag freagairt — fan nóiméad agus bain triail eile as. Má tharlaíonn sé arís, seiceáil go bhfuil an freastalaí ag rith agus nach bhfuil sé ró-luchtaithe.",
   "relayAddNotBreeze": "D'fhreagair an seoladh sin, ach ní cosúil le freastalaí Breeze é — cinntigh go dtreoraíonn an URL chuig do fhreastalaí Breeze, ní chuig láithreán gréasáin ná aip eile, agus bain triail eile as.",
   "relayAdded": "Cuir seilse baile leis: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Bainthe seilse baile: {0}",
   "relayFailover": "Níor fhreagair Relay {0} — seachadadh trí {1} in ionad.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

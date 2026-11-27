@@ -484,6 +484,7 @@
   "relayAddTimeout": "Eseva ithathe ixesha elide kakhulu ukuphendula — linda umzuzwana uze uzame kwakhona. Ukuba iyaqhubeka, qiniseka ukuba iseva iyasebenza kwaye ayithwalanga ngokugqithisileyo.",
   "relayAddNotBreeze": "Loo dilesi iphendule, kodwa ayibonakali njengeseva yeBreeze — qiniseka ukuba i-URL ijonge kwiseva yakho yeBreeze, hayi kwiwebhusayithi okanye enye i-app, uze uzame kwakhona.",
   "relayAdded": "Home Iindaba {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "I-Relays yasekhaya isusiwe: {0}",
   "relayFailover": "I-Relay {0} ayiphendulanga - ihanjiswe nge-{1} endaweni yoko.",
   "relayRemoveConfirm": "Susa {0} kwi-relays yakho yasekhaya? I-relay igcina idatha esele ibambe; Uyeka nje ukufumana iikopi ezintsha.",

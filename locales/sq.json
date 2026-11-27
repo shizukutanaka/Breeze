@@ -484,6 +484,7 @@
   "relayAddTimeout": "Ai server zgjati shumë për t’u përgjigjur — prit një moment dhe provo sërish. Nëse vazhdon, kontrollo që serveri është duke punuar dhe nuk është i mbingarkuar.",
   "relayAddNotBreeze": "Ajo adresë u përgjigj, por nuk duket si server Breeze — sigurohu që URL-ja drejton në serverin tënd Breeze, jo në një faqe interneti apo një aplikacion tjetër, pastaj provo sërish.",
   "relayAdded": "Stafeta e shtëpisë shtoi: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Home relay u hoq: {0}",
   "relayFailover": "Relay {0} nuk u përgjigj — u dorëzua përmes {1} në vend të kësaj.",
   "relayRemoveConfirm": "Të heqësh {0} nga relé-t e shtëpisë? Reléja ruan të dhënat që tashmë mban; Thjesht ndalon së marrë kopje të reja.",

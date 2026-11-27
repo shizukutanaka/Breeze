@@ -487,6 +487,7 @@
   "relayAddTimeout": "Strežnik je predolgo odgovarjal — počakajte trenutek in poskusite znova. Če se ponavlja, preverite, ali strežnik deluje in ni preobremenjen.",
   "relayAddNotBreeze": "Naslov je odgovoril, vendar ne izgleda kot strežnik Breeze — preverite, ali URL kaže na vaš strežnik Breeze in ne na spletno mesto ali drugo aplikacijo, nato poskusite znova.",
   "relayAdded": "Dodano domače rele: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Odstranjeno domače rele: {0}",
   "relayFailover": "Relay {0} ni odgovoril – dostavljeno prek {1}.",
   "relayRemoveConfirm": "Odstranite {0} iz svojih domačih relejev? Releje hrani podatke, ki jih že ima; samo preneha prejemati nove kopije.",

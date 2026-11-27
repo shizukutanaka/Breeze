@@ -489,6 +489,7 @@
   "relayAddTimeout": "Ten serwer zbyt długo nie odpowiadał — poczekaj chwilę i spróbuj ponownie. Jeśli problem się powtarza, sprawdź, czy serwer działa i nie jest przeciążony.",
   "relayAddNotBreeze": "Ten adres odpowiedział, ale nie wygląda na serwer Breeze — upewnij się, że adres URL wskazuje na Twój serwer Breeze, a nie na witrynę lub inną aplikację, i spróbuj ponownie.",
   "relayAdded": "Dodano przekaźnik domowy: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Usunięto przekaźnik domowy: {0}",
   "relayFailover": "Przekaźnik {0} nie odpowiedział — dostarczono przez {1}.",
   "relayRemoveConfirm": "Usunąć {0} z przekaźników domowych? Przekaźnik zachowuje dane, które już ma; przestaje tylko otrzymywać nowe kopie.",

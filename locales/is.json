@@ -538,6 +538,7 @@
   "relayAddTimeout": "Þjónninn tók of langan tíma að svara — bíddu í augnablik og reyndu aftur. Ef þetta endurtekur sig, athugaðu hvort þjónninn sé í gangi og ekki ofhlaðinn.",
   "relayAddNotBreeze": "Netfangið svaraði en lítur ekki út eins og Breeze þjónn — gakktu úr skugga um að slóðin bendi á Breeze þjóninn þinn, ekki á vefsíðu eða annað app, og reyndu aftur.",
   "relayAdded": "Heimareil bætt við: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Heimaflögur fjarlægt: {0}",
   "relayFailover": "Relay {0} svaraði ekki – sendist með {1} í stað.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

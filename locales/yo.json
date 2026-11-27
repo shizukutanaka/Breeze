@@ -483,6 +483,7 @@
   "relayAddTimeout": "Olùṣọ́ yìí pẹ́ jù lọ láti dáhùn — dúró díẹ̀ kí o sì tún gbìyànjú. Bí ó bá ń ṣẹ̀ṣẹ̀lẹ̀, ṣàyẹ̀wò pé olùṣọ́ ń ṣiṣẹ́ kó sì kò ṣàn láti ṣiṣẹ́ púpọ̀ jù.",
   "relayAddNotBreeze": "Àdírẹ́sì yìí dáhùn, ṣùgbọ́n kò dàbí olùṣọ́ Breeze — ríi dájú pé URL náà ń tọ́ka sí olùṣọ́ Breeze rẹ, kì í ṣe ojú-ìwé ayélujára tàbí ètò mìíràn, kí o sì tún gbìyànjú.",
   "relayAdded": "A ti fi relay ilé kún: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "A ti yọ relay ilé kúrò: {0}",
   "relayFailover": "Relay {0} kò dáhùn — a fi ránṣẹ́ nípasẹ̀ {1} dípò rẹ̀.",
   "relayRemoveConfirm": "Yọ {0} kúrò nínú àwọn relay ilé rẹ? Relay máa pa dátà tí ó ti ní mọ́; ó kàn dúró láti gba àwọn ẹ̀dà tuntun.",

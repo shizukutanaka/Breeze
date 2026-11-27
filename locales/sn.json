@@ -484,6 +484,7 @@
   "relayAddTimeout": "Server iyoyo yakatora nguva refu kupindura — mirai zvishoma muone zvakare. Kana zvichienderera mberi, tarisai kuti server iri kumhanya uye haina kuzara.",
   "relayAddNotBreeze": "Address iyoyo yapindura, asi haina kufanana neBreeze server — itai shuwa kuti URL inongedza kuBreeze server yenyu, kwete webhusaiti kana imwe application, uye edza zvakare.",
   "relayAdded": "Home relay added: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Home Relay Deleted: {0}",
   "relayFailover": "Relay {0} haina kupindura — yakaendeswa kuburikidza {1} pachinzvimbo.",
   "relayRemoveConfirm": "Bvisa {0} kubva kuimba yako relays? Iyo relay inochengeta iyo data yatove yakabata; Inongorega kugamuchira makopi matsva.",

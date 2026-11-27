@@ -542,6 +542,7 @@
   "relayAddTimeout": "Serveriui per ilgai užtruko atsakyti — palaukite akimirką ir bandykite dar kartą. Jei tai kartojasi, patikrinkite, ar serveris veikia ir neperkrautas.",
   "relayAddNotBreeze": "Adresas atsakė, bet nepanašu į Breeze serverį — įsitikinkite, kad URL nukreipia į jūsų Breeze serverį, o ne į svetainę ar kitą programą, ir bandykite dar kartą.",
   "relayAdded": "Pradžių relė pridėta: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Pašalintas namų rele: {0}",
   "relayFailover": "Relay {0} neatsakė – vietoje pristatyta per {1}.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

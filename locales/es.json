@@ -264,6 +264,7 @@
   "relayAddTimeout": "Ese servidor tardó demasiado en responder; espera un momento e inténtalo de nuevo. Si sigue ocurriendo, comprueba que el servidor esté en ejecución y no sobrecargado.",
   "relayAddNotBreeze": "Esa dirección respondió, pero no parece un servidor Breeze; asegúrate de que la URL apunte a tu servidor Breeze, no a un sitio web ni a otra aplicación, e inténtalo de nuevo.",
   "relayAdded": "Relé de inicio añadido: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Relé de inicio eliminado: {0}",
   "relayRemoveConfirm": "¿Quitar {0} de tus relés de inicio? El relé conserva los datos que ya tiene; simplemente deja de recibir copias nuevas.",
   "relayFanoutLabel": "Copias por contacto (entrega redundante):",
