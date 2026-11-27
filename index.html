@@ -802,6 +802,7 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 .server-gate-card { max-width: 420px; width: 100%; padding: var(--sp-5); border: 1px solid var(--b1); border-radius: var(--rad-lg); background: var(--s1); box-shadow: var(--shadow-float); text-align: center }
 .server-gate-title { color: var(--t1); font-size: var(--fs-title); font-weight: 700; margin-bottom: var(--sp-2) }
 .server-gate-desc { color: var(--t2); font-size: var(--fs-sub); line-height: 1.6; margin-bottom: var(--sp-4) }
+.server-gate-steps { color: var(--t2); font-size: var(--fs-sub); line-height: 1.6; margin-bottom: var(--sp-4) }
 .server-gate-add { max-width: 280px; margin: 0 auto; padding: var(--sp-3) }
 .sidebar-meta { font-size: var(--fs-caption); color: var(--g); font-family: var(--mono) }
 .conv-status { font-size: var(--fs-caption); font-family: var(--mono); color: var(--t3) }
@@ -1230,6 +1231,7 @@ del.md-del { opacity: .6 }
     <div id="msg-server-gate-panel" class="server-gate-panel hidden" role="alert">
       <div class="server-gate-title" data-i18n="gateServerTitle"></div>
       <p class="server-gate-desc" data-i18n="gateServerDesc"></p>
+      <p class="server-gate-steps" data-i18n="gateServerSteps"></p>
       <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
     </div>
     <input type="text" id="msg-name-random" class="field setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
@@ -1373,10 +1375,11 @@ del.md-del { opacity: .6 }
       <div id="settings-body" class="settings-body"></div>
     </div>
 
-    <div id="msg-server-gate" class="server-gate-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="msg-server-gate-title" aria-describedby="msg-server-gate-desc">
+    <div id="msg-server-gate" class="server-gate-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="msg-server-gate-title" aria-describedby="msg-server-gate-desc msg-server-gate-steps">
       <div class="server-gate-card">
         <div id="msg-server-gate-title" class="server-gate-title" data-i18n="gateServerTitle"></div>
         <p id="msg-server-gate-desc" class="server-gate-desc" data-i18n="gateServerDesc"></p>
+        <p id="msg-server-gate-steps" class="server-gate-steps" data-i18n="gateServerSteps"></p>
         <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
       </div>
     </div>
@@ -1844,6 +1847,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     gateServerTitle: 'A server is required',
     gateServerDesc: 'Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.',
     gateAddServer: 'Add your server',
+    gateServerSteps: 'About a minute, in 2 steps: 1) Enter your server address. 2) Check the fingerprint shown and confirm.',
     noIdentity: 'Create an identity in the messenger first',
     // Misc
     deleted: 'Message deleted',
@@ -2146,6 +2150,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     relayAddSelf: 'That URL is this relay itself — it is already your home relay.',
     relayAddDuplicate: 'That relay is already in your home relays.',
     relayAddKeyless: 'That relay has no identity key, so it cannot be pinned — it cannot be added as a home relay.',
+    relayAddInsecure: 'That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)',
     relayAddUnreachable: 'That relay could not be reached — check the URL and your connection, and make sure the server is running, then try again.',
     relayAddTimeout: 'That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.',
     relayAddNotBreeze: 'That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.',
@@ -2703,7 +2708,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
 // English table, which t() consults first, and the other 7 are never passed to t() anywhere.
 // It cost 569 KB, 44% of the app's payload, on every cold load. Even working it could only
 // ever reach ~25 of 667 strings: a 96%-English UI, which is not "supporting a language".)
-const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk', 'sl', 'bs', 'be', 'af', 'eo', 'fy', 'lb', 'mt', 'gd', 'cy', 'gu', 'kn', 'mr', 'ne', 'or', 'si', 'as', 'lo', 'mn', 'ky', 'ps', 'ug', 'tg', 'tt', 'jv', 'su', 'ceb', 'mi', 'haw', 'mg'];
+const FULL_LOCALES = ['ja', 'ko', 'zh-TW', 'es', 'th', 'id', 'pt-BR', 'zh-CN', 'fr', 'de', 'it', 'ru', 'uk', 'pl', 'nl', 'sv', 'nb', 'da', 'fi', 'cs', 'hu', 'ro', 'el', 'tr', 'ar', 'fa', 'he', 'hi', 'bn', 'ur', 'pa', 'ta', 'te', 'ml', 'ms', 'vi', 'my', 'km', 'tl', 'sw', 'ha', 'yo', 'ig', 'am', 'ka', 'az', 'kk', 'uz', 'sr', 'hr', 'bg', 'ca', 'et', 'eu', 'ga', 'gl', 'is', 'lt', 'lv', 'mk', 'sk', 'sl', 'bs', 'be', 'af', 'eo', 'fy', 'lb', 'mt', 'gd', 'cy', 'gu', 'kn', 'mr', 'ne', 'or', 'si', 'as', 'lo', 'mn', 'ky', 'ps', 'ug', 'tg', 'tt', 'jv', 'su', 'ceb', 'mi', 'haw', 'mg', 'ny', 'sn', 'st', 'xh', 'zu', 'so', 'ht', 'sd', 'yi', 'pt-PT', 'hy', 'sq', 'ku', 'qu', 'ckb', 'dv'];
 function detectLang() {
   const nav = (navigator.language || 'en');
   const lower = nav.toLowerCase();
@@ -4792,14 +4797,32 @@ async function initMessenger(dbName) {
     for (const id of ['msg-name-random', 'msg-name', 'msg-alias', 'b-msg-setup-random', 'b-msg-setup', 'b-msg-setup-simple', 'b-msg-setup-restore-toggle']) _serverGateControl(_DOM.get(id), setupGated);
     _DOM.get('setup-restore-more')?.querySelectorAll('button').forEach(btn => _serverGateControl(btn, setupGated));
   }
+  function _preflightRelayUrl(raw) {
+    if (typeof raw !== 'string') return { error: 'invalid' };
+    const trimmed = raw.trim();
+    if (!trimmed) return { error: 'invalid' };
+    let candidate = trimmed;
+    if (!/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(candidate)) {
+      candidate = candidate.startsWith('//') ? 'https:' + candidate : 'https://' + candidate;
+    }
+    const url = _normalizeRelayUrl(candidate);
+    if (!url) return { error: 'invalid' };
+    try {
+      const u = new URL(url);
+      const host = u.hostname.replace(/^\[|\]$/g, '');
+      if (u.protocol === 'http:' && host !== 'localhost' && host !== '127.0.0.1' && host !== '::1') return { error: 'insecure' };
+    } catch(_e) { return { error: 'invalid' }; }
+    return { url };
+  }
   // The add-flow's probe (settings UI): classify a pasted URL
   // before anything is stored. An added relay must attest — a
   // keyless relay keeps its legacy role as a serving origin only
   // (step 4's asymmetry), so 'keyless' is a refusal here, never a
   // pin-less entry.
   async function attestNewRelay(rawUrl) {
-    const url = _normalizeRelayUrl(rawUrl);
-    if (!url) return { error: 'invalid' };
+    const preflight = _preflightRelayUrl(rawUrl);
+    if (preflight.error) return { error: preflight.error };
+    const url = preflight.url;
     if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ !== true && url === _servingRelayUrl()) return { error: 'self' };
     if (homeRelays().some(r => r.url === url)) return { error: 'duplicate' };
     const r = await _relayAttestCheck(url + '/api', null);
@@ -4838,7 +4861,7 @@ async function initMessenger(dbName) {
     if (!raw) return;
     const res = await attestNewRelay(raw);
     if (res.error) {
-      const errKey = { invalid: 'relayAddInvalid', self: 'relayAddSelf', duplicate: 'relayAddDuplicate', keyless: 'relayAddKeyless', unreachable: 'relayAddUnreachable', timeout: 'relayAddTimeout', 'not-breeze': 'relayAddNotBreeze' }[res.error] || 'relayAddUnreachable';
+      const errKey = { invalid: 'relayAddInvalid', self: 'relayAddSelf', duplicate: 'relayAddDuplicate', keyless: 'relayAddKeyless', insecure: 'relayAddInsecure', unreachable: 'relayAddUnreachable', timeout: 'relayAddTimeout', 'not-breeze': 'relayAddNotBreeze' }[res.error] || 'relayAddUnreachable';
       showToast(t(errKey), 'error', 8000);
       return;
     }

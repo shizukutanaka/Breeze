@@ -622,8 +622,12 @@ separate, explicitly-scoped future work if it's wanted.
   as equivalent to membership**: share it the way you would add someone to the group, and
   rotate the group to revoke. Making this genuinely restrictive means gating *join* (e.g.
   admin approval), which is a product decision rather than a privacy patch.
-- **Post-quantum**: key exchange is classical (X25519) today; ML-KEM hybrid is detected but
-  not yet deployed (browsers ship ML-KEM ~2027).
+- **Post-quantum**: initial key agreement is PQXDH — a hybrid of X25519 and ML-KEM-768 —
+  and is on by default (CRYPTO-SPEC §2a). The ML-KEM-768 implementation is vendored
+  pure JavaScript, so it does not depend on browser support. This protects the session
+  establishment against harvest-now-decrypt-later collection. Ongoing sessions are
+  protected by the classical Double Ratchet only: a post-quantum ratchet that re-keys
+  with fresh ML-KEM material during the session is not deployed yet (backlog item I9).
 - **Multi-device (Phase 1)**: a linked device is a full Breeze identity with its own ratchets;
   the account is a **root-Ed25519-signed device registry** on the relay, re-verified by every
   sender before fan-out. Consequences to understand:
