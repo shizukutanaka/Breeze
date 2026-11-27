@@ -891,6 +891,7 @@
   "cmdDescExport": "Dëse Chat exportéieren",
   "cmdDescBackup": "Meng Daten späicheren",
   "cmdDescSettings": "Astellungen opmaachen",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit- Log ( Lescht 50)",
   "cmdBackupTitle": "Wëssenschafteg",
   "cmdWallpaperTitle": "Hannergrondbild- Astellungen",

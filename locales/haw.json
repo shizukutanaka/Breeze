@@ -1028,6 +1028,7 @@
   "cmdDescExport": "E lawe aku i kēia kamaʻilio",
   "cmdDescBackup": "E hoʻopaʻa i kaʻu ʻikepili",
   "cmdDescSettings": "E wehe i nā hoʻonohonoho",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "uiNewVersion": "Loaʻa ka mana hou.",
   "uiUpdateReady": "Hoʻohou mākaukau.",
   "uiRestartUpdate": "Hoʻomaka hou e hoʻohou",

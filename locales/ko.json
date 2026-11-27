@@ -994,6 +994,7 @@
   "cmdDescExport": "이 채팅 내보내기",
   "cmdDescBackup": "내 데이터 백업",
   "cmdDescSettings": "설정 열기",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "감사 로그 (최근 50개)",
   "cmdBackupTitle": "클라우드 백업",
   "cmdWallpaperTitle": "배경화면 프리셋",

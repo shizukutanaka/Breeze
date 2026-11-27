@@ -952,6 +952,7 @@
   "cmdDescExport": "इस चैट को निर्यात करें",
   "cmdDescBackup": "मेरे डेटा का बैकअप लें",
   "cmdDescSettings": "सेटिंग्स खोलें",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "ऑडिट लॉग (अंतिम 50)",
   "cmdBackupTitle": "क्लाउड बैकअप",
   "cmdWallpaperTitle": "वॉलपेपर प्रीसेट",

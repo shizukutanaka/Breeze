@@ -952,6 +952,7 @@
   "cmdDescExport": "Vie tämä keskustelu",
   "cmdDescBackup": "Varmuuskopioi tietoni",
   "cmdDescSettings": "Avaa asetukset",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Tarkastusloki (viimeiset 50)",
   "cmdBackupTitle": "Pilvipalvelun varmuuskopio",
   "cmdWallpaperTitle": "Taustakuvan esiasetukset",

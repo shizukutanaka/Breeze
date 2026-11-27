@@ -994,6 +994,7 @@
   "cmdDescExport": "Ekspor chat ini",
   "cmdDescBackup": "Cadangkan data saya",
   "cmdDescSettings": "Buka pengaturan",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Log Audit (50 terakhir)",
   "cmdBackupTitle": "Cadangan Cloud",
   "cmdWallpaperTitle": "Preset Wallpaper",

@@ -1020,6 +1020,7 @@
   "cmdDescExport": "Извези го овој разговор",
   "cmdDescBackup": "Направи резервна копија на моите податоци",
   "cmdDescSettings": "Отвори подесувања",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit Log (last 50)",
   "cmdBackupTitle": "Cloud Backup",
   "cmdWallpaperTitle": "Wallpaper Presets",

@@ -905,6 +905,7 @@
   "cmdDescExport": "Экспартаваць гэты чат",
   "cmdDescBackup": "Захаваць рэзервовую копію маіх даных",
   "cmdDescSettings": "Адкрыць налады",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Часопіс рэвізій (назоўнае 50)",
   "cmdBackupTitle": "Рэзервовая копія:% 1",
   "cmdWallpaperTitle": "Націск:",

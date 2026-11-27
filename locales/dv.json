@@ -888,6 +888,7 @@
   "cmdDescExport": "މި ޗެޓް އެކްސްޕޯޓް ކުރޭ",
   "cmdDescBackup": "އަޅުގަނޑުގެ ޑޭޓާ ބެކްއަޕް ކުރޭ",
   "cmdDescSettings": "ސެޓިންތައް ހުޅުވާ",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "އޮޑިޓް ލޮގް (އެންމެ ފަހު 50)",
   "cmdBackupTitle": "ކްލައުޑް ބެކަޕް",
   "cmdWallpaperTitle": "ވޯލްޕޭޕަރ ޕްރީސެޓް",

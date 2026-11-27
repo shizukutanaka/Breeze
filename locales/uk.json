@@ -966,6 +966,7 @@
   "cmdDescExport": "Експортувати цей чат",
   "cmdDescBackup": "Зберегти резервну копію моїх даних",
   "cmdDescSettings": "Відкрити налаштування",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Журнал аудиту (останні 50)",
   "cmdBackupTitle": "Хмарна резервна копія",
   "cmdWallpaperTitle": "Пресети шпалер",

@@ -1034,6 +1034,7 @@
   "cmdDescExport": "Exportovať tento chat",
   "cmdDescBackup": "Zálohovať moje údaje",
   "cmdDescSettings": "Otvoriť nastavenia",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit Log (last 50)",
   "cmdBackupTitle": "Cloud Backup",
   "cmdWallpaperTitle": "Wallpaper Presets",

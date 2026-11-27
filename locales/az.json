@@ -952,6 +952,7 @@
   "cmdDescExport": "Bu söhbəti ixrac et",
   "cmdDescBackup": "Məlumatlarımın ehtiyat nüsxəsini çıxar",
   "cmdDescSettings": "Ayarları aç",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit Jurnalı (son 50)",
   "cmdBackupTitle": "Bulud Ehtiyat Nüsxəsi",
   "cmdWallpaperTitle": "Divar Kağızı Presetləri",

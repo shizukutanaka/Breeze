@@ -1022,6 +1022,7 @@
   "cmdDescExport": "આ ચેટ નિકાસ કરો",
   "cmdDescBackup": "મારા ડેટાનો બેકઅપ લો",
   "cmdDescSettings": "સેટિંગ્સ ખોલો",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit Log (last 50)",
   "cmdBackupTitle": "Cloud Backup",
   "cmdWallpaperTitle": "Wallpaper Presets",

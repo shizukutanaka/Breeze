@@ -1041,6 +1041,7 @@
   "cmdDescExport": "Easpórtáil an comhrá seo",
   "cmdDescBackup": "Déan cúltaca de mo shonraí",
   "cmdDescSettings": "Oscail socruithe",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit Log (last 50)",
   "cmdBackupTitle": "Cloud Backup",
   "cmdWallpaperTitle": "Wallpaper Presets",
