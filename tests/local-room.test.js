@@ -15,6 +15,7 @@ import { inviteHostName, createLocalRoomActions } from '../src/app/local-room.js
 
 const ROOT = path.resolve(__dirname, '..');
 const INDEX = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const SETTINGS_VIEW = fs.readFileSync(path.join(ROOT, 'src/app/settings-view.js'), 'utf8');
 
 function sliceBetween(startMarker, endMarker) {
   const start = INDEX.indexOf(startMarker);
@@ -188,11 +189,25 @@ describe('local room in the settings panel', () => {
     const without = settingsPanelHtml({ ...base, localRoom: null });
     expect(without).not.toContain('stop-local-room');
   });
-  it('a joined room is shown under the inviter name', () => {
+  it('a host room tells the host to share the invite and offers the invite action', () => {
+    const host = settingsPanelHtml({ ...base, localRoom: { startedAt: 1 } });
+    expect(host).toContain('gateLocalWaiting');
+    expect(host).toContain('data-action="invite-from-room"');
+    expect(host).toContain('gateLocalInviteBtn');
+  });
+  it('a joined room is shown under the inviter name without host waiting guidance', () => {
     const joined = settingsPanelHtml({ ...base, localRoom: { startedAt: 1, joined: true, hostName: 'Alice' } });
     expect(joined).toContain('gateJoinedRoomLabel:Alice');
     expect(joined).toContain('gateJoinedHosting');
+    expect(joined).not.toContain('gateLocalWaiting');
+    expect(joined).not.toContain('invite-from-room');
     const joinedAnon = settingsPanelHtml({ ...base, localRoom: { startedAt: 1, joined: true, hostName: '' } });
     expect(joinedAnon).toContain('gateJoinedRoomAnon');
+    expect(joinedAnon).not.toContain('gateLocalWaiting');
+    expect(joinedAnon).not.toContain('invite-from-room');
+  });
+  it('the settings view delegates the room invite action to shareInvite', () => {
+    expect(SETTINGS_VIEW).toContain('ev.target.closest(\'[data-action="invite-from-room"]\')');
+    expect(SETTINGS_VIEW).toMatch(/inviteRoomBtn\) \{ deps\.haptic\.tap\(\); deps\.shareInvite\(\); return; \}/);
   });
 });

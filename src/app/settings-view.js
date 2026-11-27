@@ -128,6 +128,8 @@ export function createSettingsView(deps) {
       if (addBtn) { deps.haptic.tap(); await deps._addRelayFlow(); return; }
       const stopRoomBtn = ev.target.closest('[data-action="stop-local-room"]');
       if (stopRoomBtn) { deps.haptic.tap(); await deps.stopLocalRoom(); return; }
+      const inviteRoomBtn = ev.target.closest('[data-action="invite-from-room"]');
+      if (inviteRoomBtn) { deps.haptic.tap(); deps.shareInvite(); return; }
       const rmBtn = ev.target.closest('[data-action="remove-relay"]');
       if (!rmBtn) return;
       deps.haptic.tap();
