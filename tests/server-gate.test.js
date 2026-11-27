@@ -193,7 +193,11 @@ describe('server gate progress display', () => {
     expect(en.gateServerSteps).toContain('2 steps');
   });
 
-  it('every locale defines the steps key; Japanese is a real translation', () => {
+  it('every locale defines the steps key as a real translation', () => {
+    // At introduction (round 35) only en+ja were real translations and the
+    // other locales carried the English text; the first-run backfill then
+    // translated this key everywhere, so the invariant now is that no
+    // locale keeps the English value.
     const en = inlineEnglish();
     const dir = path.join(ROOT, 'locales');
     const files = fs.readdirSync(dir).filter(f => f.endsWith('.json'));
@@ -201,10 +205,8 @@ describe('server gate progress display', () => {
     for (const file of files) {
       const table = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8'));
       expect(table.gateServerSteps, file).toBeTypeOf('string');
-      if (file !== 'ja.json') expect(table.gateServerSteps, file).toBe(en.gateServerSteps);
+      expect(table.gateServerSteps, file).not.toBe(en.gateServerSteps);
     }
-    const ja = JSON.parse(fs.readFileSync(path.join(dir, 'ja.json'), 'utf8'));
-    expect(ja.gateServerSteps).not.toBe(en.gateServerSteps);
   });
 
   it('the steps line uses the shared server-gate CSS rule and existing design tokens', () => {
