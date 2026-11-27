@@ -797,6 +797,12 @@ label.tool:focus-within { outline: 2px solid var(--g); outline-offset: 2px }
 .setup-restore-more.hidden { display: none }
 .setup-footer { color: var(--t3); margin-top: var(--sp-4); font-size: var(--fs-caption) }
 .server-banner { background: var(--r); color: #000; padding: var(--sp-2) var(--sp-4); font-size: var(--fs-sub); text-align: center; border-radius: var(--rad); margin-bottom: var(--sp-1) }
+.server-gate-panel { margin: 0 auto var(--sp-4); padding: var(--sp-4); border: 1px solid var(--b1); border-radius: var(--rad-lg); background: var(--s1); box-shadow: var(--shadow-sm) }
+.server-gate-overlay { position: fixed; inset: 0; z-index: 95; background: rgba(0,0,0,.62); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); display: flex; align-items: center; justify-content: center; padding: var(--sp-5) }
+.server-gate-card { max-width: 420px; width: 100%; padding: var(--sp-5); border: 1px solid var(--b1); border-radius: var(--rad-lg); background: var(--s1); box-shadow: var(--shadow-float); text-align: center }
+.server-gate-title { color: var(--t1); font-size: var(--fs-title); font-weight: 700; margin-bottom: var(--sp-2) }
+.server-gate-desc { color: var(--t2); font-size: var(--fs-sub); line-height: 1.6; margin-bottom: var(--sp-4) }
+.server-gate-add { max-width: 280px; margin: 0 auto; padding: var(--sp-3) }
 .sidebar-meta { font-size: var(--fs-caption); color: var(--g); font-family: var(--mono) }
 .conv-status { font-size: var(--fs-caption); font-family: var(--mono); color: var(--t3) }
 .char-count { font-size: var(--fs-caption); color: var(--t3); font-family: var(--mono); min-width: 24px; text-align: right }
@@ -1221,6 +1227,11 @@ del.md-del { opacity: .6 }
   <div id="msg-setup" class="hidden setup-page">
     <h1 id="msg-setup-title" data-i18n-html="heroTitle"></h1>
     <p id="msg-setup-desc" class="setup-desc" data-i18n="heroDesc"></p>
+    <div id="msg-server-gate-panel" class="server-gate-panel hidden" role="alert">
+      <div class="server-gate-title" data-i18n="gateServerTitle"></div>
+      <p class="server-gate-desc" data-i18n="gateServerDesc"></p>
+      <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
+    </div>
     <input type="text" id="msg-name-random" class="field setup-input" data-i18n-ph="yourDisplayName" data-i18n-aria="yourDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="done" spellcheck="false">
     <button class="btn btn-g setup-cta" id="b-msg-setup-random" data-i18n="setupRandom"></button>
     <input type="text" id="msg-name" class="field setup-input" data-i18n-ph="yourName" data-i18n-aria="ariaDisplayName" maxlength="64" autocomplete="off" autocapitalize="words" enterkeyhint="next">
@@ -1360,6 +1371,14 @@ del.md-del { opacity: .6 }
         <span class="settings-title" data-i18n="helpSettings">Settings</span>
       </div>
       <div id="settings-body" class="settings-body"></div>
+    </div>
+
+    <div id="msg-server-gate" class="server-gate-overlay hidden" role="alertdialog" aria-modal="true" aria-labelledby="msg-server-gate-title" aria-describedby="msg-server-gate-desc">
+      <div class="server-gate-card">
+        <div id="msg-server-gate-title" class="server-gate-title" data-i18n="gateServerTitle"></div>
+        <p id="msg-server-gate-desc" class="server-gate-desc" data-i18n="gateServerDesc"></p>
+        <button type="button" class="btn btn-g server-gate-add" data-i18n="gateAddServer"></button>
+      </div>
     </div>
 
     <!-- Bottom tab bar (mobile list view only; CSS-gated, see #msg-tabbar) -->
@@ -1818,6 +1837,9 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     videoCall: 'Video call',
     // Errors
     serverNotConfigured: 'Server not configured: KV binding required. Follow README setup. P2P and message relay unavailable.', serverNoDefault: 'No server is configured. Add your relay in Settings → Home relays, or self-host Breeze first. Tap this banner to open Settings.',
+    gateServerTitle: 'A server is required',
+    gateServerDesc: 'Breeze has no official server. Add your own server to start. An invite link alone is not enough — you still need a server of your own.',
+    gateAddServer: 'Add your server',
     noIdentity: 'Create an identity in the messenger first',
     // Misc
     deleted: 'Message deleted',
@@ -4696,6 +4718,47 @@ async function initMessenger(dbName) {
     banner.dataset.noDefault = '1'; banner.classList.remove('hidden'); banner.textContent = t('serverNoDefault');
     banner.onclick = () => { openSettingsView(); requestAnimationFrame(() => document.querySelector('[data-action="add-relay"]')?.scrollIntoView({ block: 'center' })); };
   }
+  function _serverGateControl(el, gated) {
+    if (!el) return;
+    if (gated) {
+      if (el.dataset.serverGateHidden === undefined) el.dataset.serverGateHidden = el.classList.contains('hidden') ? '1' : '0';
+      el.classList.add('hidden');
+    } else if (el.dataset.serverGateHidden !== undefined) {
+      el.classList.toggle('hidden', el.dataset.serverGateHidden === '1');
+      delete el.dataset.serverGateHidden;
+    }
+  }
+  function _serverGateInert(el, gated) {
+    if (!el) return;
+    if (gated) {
+      if (el.dataset.serverGateInert === undefined) el.dataset.serverGateInert = el.hasAttribute('inert') ? '1' : '0';
+      el.setAttribute('inert', '');
+    } else if (el.dataset.serverGateInert !== undefined) {
+      if (el.dataset.serverGateInert === '1') el.setAttribute('inert', '');
+      else el.removeAttribute('inert');
+      delete el.dataset.serverGateInert;
+    }
+  }
+  function _serverGateAdd() { _addRelayFlow().catch(e => _dbg(e, 'server-gate-add')); }
+  function _updateServerGate() {
+    const panel = _DOM.get('msg-server-gate-panel');
+    const overlay = _DOM.get('msg-server-gate');
+    const setup = _DOM.get('msg-setup');
+    const main = _DOM.get('msg-main');
+    if (!panel || !overlay || !setup || !main) return;
+    const active = globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true && !globalThis.__breezeMock?.enabled?.() && homeRelays().length === 0;
+    const setupVisible = !setup.classList.contains('hidden');
+    const mainVisible = !main.classList.contains('hidden');
+    const setupGated = active && setupVisible;
+    const mainGated = active && mainVisible;
+    const overlayWasHidden = overlay.classList.contains('hidden');
+    panel.classList.toggle('hidden', !setupGated);
+    overlay.classList.toggle('hidden', !mainGated);
+    for (const child of main.children || []) _serverGateInert(child, child !== overlay && mainGated);
+    if (mainGated && overlayWasHidden) overlay.querySelector?.('.server-gate-add')?.focus();
+    for (const id of ['msg-name-random', 'msg-name', 'msg-alias', 'b-msg-setup-random', 'b-msg-setup', 'b-msg-setup-simple', 'b-msg-setup-restore-toggle']) _serverGateControl(_DOM.get(id), setupGated);
+    _DOM.get('setup-restore-more')?.querySelectorAll('button').forEach(btn => _serverGateControl(btn, setupGated));
+  }
   // The add-flow's probe (settings UI): classify a pasted URL
   // before anything is stored. An added relay must attest — a
   // keyless relay keeps its legacy role as a serving origin only
@@ -5241,13 +5304,13 @@ async function initMessenger(dbName) {
       if (localStorage.getItem('brz-wallpaper')) _settings.wallpaper = localStorage.getItem('brz-wallpaper');
       if (document.body.classList.contains('light')) _settings.theme = 'light';
     } catch(e) { _dbg(e, 'load-settings'); }
-    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) _updateNoDefaultBanner();
+    if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) { _updateNoDefaultBanner(); _updateServerGate(); }
   }
   async function saveSettings() {
     try {
       if (!db.objectStoreNames.contains('settings')) return;
       await dbPut('settings', _settings, 'app');
-      if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) _updateNoDefaultBanner();
+      if (globalThis.__BREEZE_NO_DEFAULT_SERVER__ === true) { _updateNoDefaultBanner(); _updateServerGate(); }
       // Sync to localStorage for backward compat
       localStorage.setItem('brz-notif-sound', _settings.sound ? '1' : '0');
       localStorage.setItem('brz-hide-rr', _settings.hideReadReceipts ? '1' : '0');
@@ -7798,6 +7861,7 @@ async function initMessenger(dbName) {
     _DOM.get('msg-main').classList.remove('hidden');
     _DOM.get('msg-input-bar').classList.remove('hidden');
     _DOM.get('msg-my-name').textContent = myName;
+    _updateServerGate();
     _armRelayPinGate(); // step 4 follow-up: this session's first calls hold for the pin verdict (checkRelayPin runs inside _startLiveSession below)
     await ensureSigningReady();
     startPresence(); startPolling();
@@ -7881,6 +7945,7 @@ async function initMessenger(dbName) {
     const _sbOk = !!window._serverFeatures?.backupStorage;
     _DOM.get('b-msg-setup-simple')?.classList.toggle('hidden', !_sbOk);
     _DOM.get('b-msg-setup-simple-restore')?.classList.toggle('hidden', !_sbOk);
+    _updateServerGate();
   }
   } // end _boot
 
@@ -7943,6 +8008,7 @@ async function initMessenger(dbName) {
     if (joinToken) await processJoinToken(joinToken);
     _openSettingsFromUrl();
   }
+  document.querySelectorAll('.server-gate-add').forEach(btn => btn.addEventListener('click', _serverGateAdd, { signal: _ac.signal }));
   // The first screen's primary action: one tap mints a random identity
   // through createIdentity's existing random generation path and enters
   // the app — no name, no alias, no phrase step. The record stays
