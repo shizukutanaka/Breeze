@@ -481,6 +481,8 @@
   "relayAddKeyless": "Այդ ռելեն չունի նույնականացման բանալի, ուստի այն չի կարող ամրացվել՝ այն չի կարող ավելացվել որպես տնային ռելե։",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Այդ ռելեն չհաջողվեց հաստատել՝ ստուգեք URL-ը եւ փորձեք կրկին։",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Տնային ռելեյ ավելացվել է՝ {0}",
   "relayRemoved": "Տնային ռելեը հեռացվել է՝ {0}",
   "relayFailover": "Relay {0} չպատասխանեց՝ փոխարենը փոխանցեց {1} միջոցով։",

@@ -482,6 +482,8 @@
   "relayAddKeyless": "அந்த ரிலேக்கு அடையாள விசை இல்லை, எனவே அதைப் பொருத்த முடியாது — அதை முகப்பு ரிலேயாகச் சேர்க்க முடியாது.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "அந்த ரிலேயைச் சரிபார்க்க முடியவில்லை — URL ஐச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "முகப்பு ரிலே சேர்க்கப்பட்டது: {0}",
   "relayRemoved": "முகப்பு ரிலே நீக்கப்பட்டது: {0}",
   "relayFailover": "ரிலே {0} பதிலளிக்கவில்லை — அதற்கு பதிலாக {1} வழியாக வழங்கப்பட்டது.",

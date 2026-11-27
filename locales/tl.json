@@ -482,6 +482,8 @@
   "relayAddKeyless": "Walang identity key ang relay na iyon, kaya hindi ito mai-pin — hindi ito maaaring idagdag bilang home relay.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Hindi ma-verify ang relay na iyon — suriin ang URL at subukang muli.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Naidagdag ang home relay: {0}",
   "relayRemoved": "Naalis ang home relay: {0}",
   "relayFailover": "Hindi sumagot ang relay na {0} — naihatid sa pamamagitan ng {1} sa halip.",

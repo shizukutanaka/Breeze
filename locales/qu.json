@@ -481,6 +481,8 @@
   "relayAddKeyless": "Chay relé mana identidad llaveyuqchu, chayrayku mana pinchasqachu kanman — mana wasi relé hina yapayta atikunmanchu.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Chay relé mana chiqaqchayta atirqanchu — URL qhaway chaymanta wakmanta kallpachakuy.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Relé de casa yapasqa: {0}",
   "relayRemoved": "Relé de casa hurqusqa: {0}",
   "relayFailover": "Relé {0} mana kutichirqachu — chaypa rantinpi {1} nisqawan qusqa.",

@@ -481,6 +481,8 @@
   "relayAddKeyless": "ئەو گواستنەوەیە کلیلی ناسنامەی نییە، بۆیە ناتوانرێت جێگیر بکرێت — ناتوانرێت وەک گواستنەوەی ماڵەوە زیاد بکرێت.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ئەو گواستنەوەیە نەتوانرا بسەلمێنرێت — بەستەرەکە بپشکنە و دووبارە هەوڵ بدە.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "گواستنەوەی ماڵەوە وتی: {0}",
   "relayRemoved": "گواستنەوەی ماڵەوە لابرا: {0}",
   "relayFailover": "Relay {0} وەڵامی نەدایەوە، بەڵکو لە ڕێگەی {1} گەیاند.",

@@ -482,6 +482,8 @@
   "relayAddKeyless": "Relay hiyo haina ufunguo wa utambulisho, kwa hivyo haiwezi kubandikwa — haiwezi kuongezwa kama relay ya nyumbani.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relay hiyo haikuweza kuthibitishwa — angalia URL na ujaribu tena.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Relay ya nyumbani imeongezwa: {0}",
   "relayRemoved": "Relay ya nyumbani imeondolewa: {0}",
   "relayFailover": "Relay {0} haikujibu — imefikishwa kupitia {1} badala yake.",

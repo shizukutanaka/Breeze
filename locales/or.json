@@ -537,6 +537,8 @@
   "relayAddKeyless": "ସେହି ରିଲେରେ କ identity ଣସି ପରିଚୟ ଚାବି ନାହିଁ, ତେଣୁ ଏହାକୁ ପିନ୍ କରାଯାଇପାରିବ ନାହିଁ - ଏହାକୁ ଏକ ହୋମ୍ ରିଲେ ଭାବରେ ଯୋଡିହେବ ନାହିଁ |",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ସେହି ରିଲେ ଯାଞ୍ଚ ହୋଇପାରିବ ନାହିଁ - URL ଯାଞ୍ଚ କରନ୍ତୁ ଏବଂ ପୁନର୍ବାର ଚେଷ୍ଟା କରନ୍ତୁ |",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "ହୋମ୍ ରିଲେ ଯୋଡି ହୋଇଛି: {0} |",
   "relayRemoved": "ହୋମ୍ ରିଲେ ଅପସାରିତ ହୋଇଛି: {0} |",
   "relayFailover": "ରିଲେ {0} ଉତ୍ତର ଦେଇନଥିଲା - ଏହା ବଦଳରେ {1} ମାଧ୍ୟମରେ ବିତରଣ କରାଯାଇଥିଲା |",

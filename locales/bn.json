@@ -482,6 +482,8 @@
   "relayAddKeyless": "ওই রিলের কোনো পরিচয় কি নেই, তাই এটি পিন করা যায় না — হোম রিলে হিসেবে যোগ করা যায় না।",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ওই রিলেটি যাচাই করা যায়নি — URL দেখে আবার চেষ্টা করুন।",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "হোম রিলে যোগ হয়েছে: {0}",
   "relayRemoved": "হোম রিলে সরানো হয়েছে: {0}",
   "relayFailover": "রিলে {0} সাড়া দেয়নি — বদলে {1} দিয়ে পৌঁছানো হয়েছে।",

@@ -482,6 +482,8 @@
   "relayAddKeyless": "Wannan relay ba shi da maɓallin shaida, don haka ba za a iya liƙa shi ba — ba za a iya ƙara shi a matsayin relay na gida ba.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Ba a iya tabbatar da wannan relay ba — duba URL kuma sake gwadawa.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "An ƙara relay na gida: {0}",
   "relayRemoved": "An cire relay na gida: {0}",
   "relayFailover": "Relay {0} bai amsa ba — an isar ta {1} maimakon haka.",

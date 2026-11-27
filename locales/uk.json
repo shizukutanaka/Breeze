@@ -486,6 +486,8 @@
   "relayAddKeyless": "У цього реле немає ключа ідентичності, тому його не можна закріпити — його не можна додати як домашнє реле.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Це реле не вдалося перевірити — перевірте URL і повторіть.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Домашнє реле додано: {0}",
   "relayRemoved": "Домашнє реле видалено: {0}",
   "relayFailover": "Реле {0} не відповіло — доставлено через {1}.",

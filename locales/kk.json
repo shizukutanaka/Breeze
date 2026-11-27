@@ -482,6 +482,8 @@
   "relayAddKeyless": "Бұл реледе сәйкестік кілті жоқ, сондықтан оны бекітуге болмайды — оны үй релесi ретінде қосуға болмайды.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Бұл релені тексеру мүмкін болмады — URL мекенжайын тексеріп, қайта әрекет етіңіз.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Үй релесi қосылды: {0}",
   "relayRemoved": "Үй релесi алып тасталды: {0}",
   "relayFailover": "{0} релесi жауап бермеді — оның орнына {1} арқылы жеткізілді.",

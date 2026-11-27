@@ -490,6 +490,8 @@
   "relayAddKeyless": "هذا المرحّل ليس لديه مفتاح هوية، لذا لا يمكن تثبيته — لا يمكن إضافته كمرحّل رئيسي.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "تعذر التحقق من هذا المرحّل — تحقق من الرابط وحاول مجددًا.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "تمت إضافة المرحّل الرئيسي: {0}",
   "relayRemoved": "تمت إزالة المرحّل الرئيسي: {0}",
   "relayFailover": "لم يرد المرحّل {0} — تم التسليم عبر {1} بدلًا من ذلك.",

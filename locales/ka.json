@@ -482,6 +482,8 @@
   "relayAddKeyless": "ამ სარელეოს იდენტობის გასაღები არ აქვს, ამიტომ მისი ჩამაგრება შეუძლებელია — ის ვერ დაემატება მთავარ სარელეოდ.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ამ სარელეოს შემოწმება ვერ მოხერხდა — შეამოწმეთ URL და სცადეთ ხელახლა.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "მთავარი სარელეო დაემატა: {0}",
   "relayRemoved": "მთავარი სარელეო წაიშალა: {0}",
   "relayFailover": "სარელეომ {0} არ უპასუხა — ამის ნაცვლად მიეწოდა {1}-ით.",

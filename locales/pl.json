@@ -486,6 +486,8 @@
   "relayAddKeyless": "Ten przekaźnik nie ma klucza tożsamości, więc nie można go przypiąć — nie można go dodać jako przekaźnika domowego.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Nie udało się zweryfikować tego przekaźnika — sprawdź URL i spróbuj ponownie.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Dodano przekaźnik domowy: {0}",
   "relayRemoved": "Usunięto przekaźnik domowy: {0}",
   "relayFailover": "Przekaźnik {0} nie odpowiedział — dostarczono przez {1}.",

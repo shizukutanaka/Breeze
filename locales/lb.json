@@ -480,6 +480,8 @@
   "relayAddKeyless": "Dëse Relay huet keng Schlëssel fir d' Identität vu hieremno nees, wëll se net duerchgefouert gi sinn. Et kann net eng Kéier geluede ginn.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Déi Ëmfänkt konnt net iwwerpréift ginn - d' URL automatësch nees probéieren.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "D'Home- Zesummendroung dobäigemaach: {0}",
   "relayRemoved": "Home Ufro ewechgeholl: {0}",
   "relayFailover": "Relay {0} didn't answer — delivered via {1} instead.",

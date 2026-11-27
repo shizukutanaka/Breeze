@@ -535,6 +535,8 @@
   "relayAddKeyless": "That relay has no identity key, so it cannot be pinned — it cannot be added as a home relay.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "That relay could not be verified — check the URL and try again.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Heimareil bætt við: {0}",
   "relayRemoved": "Heimaflögur fjarlægt: {0}",
   "relayFailover": "Relay {0} svaraði ekki – sendist með {1} í stað.",

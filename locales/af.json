@@ -480,6 +480,8 @@
   "relayAddKeyless": "Daardie relais het geen identiteitssleutel nie, en daarom kan dit nie gesny word nie — dit kan nie as ’ n tuisverwerking bygevoeg word nie.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Daardie aflewering kon nie bevestig word nie — gaan die URL na en probeer weer.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Tuisherlaai bygevoeg: {0}",
   "relayRemoved": "Tuisherhaling verwyder: {0}",
   "relayFailover": "Relay {0} het nie geantwoord nie — afgelewer deur middel van {1}.",

@@ -481,6 +481,8 @@
   "relayAddKeyless": "Esse relé não tem chave de identidade, por isso não pode ser fixado — não pode ser adicionado como retransmissão principal.",
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Esse retransmissor não pôde ser verificado — verifique o URL e tente novamente.",
+  "relayAddTimeout": "That server took too long to answer — wait a moment and try again. If it keeps happening, check that the server is running and not overloaded.",
+  "relayAddNotBreeze": "That address answered, but it does not look like a Breeze server — make sure the URL points to your Breeze server, not to a website or another app, then try again.",
   "relayAdded": "Retransmissão doméstica adicionada: {0}",
   "relayRemoved": "Retransmissão doméstica removida: {0}",
   "relayFailover": "Relay {0} não respondeu — entreguei via {1} em vez disso.",
