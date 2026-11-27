@@ -536,6 +536,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "That relay could not be verified — check the URL and try again.",
   "relayAdded": "Heimareil bætt við: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Heimaflögur fjarlægt: {0}",
   "relayFailover": "Relay {0} svaraði ekki – sendist með {1} í stað.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

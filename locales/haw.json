@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ʻAʻole hiki ke hōʻoia ʻia kēlā relay - e nānā i ka URL a hoʻāʻo hou.",
   "relayAdded": "Hoʻohui ʻia ka relay home: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Wehe ʻia ka relay home: {0}",
   "relayFailover": "ʻAʻole pane ʻo Relay {0} - hāʻawi ʻia ma {1} ma kahi.",
   "relayRemoveConfirm": "Wehe i ka {0} mai kou home relays? Mālama ka relay i ka ʻikepili i paʻa ai; oki wale ia i ka loaa ana i na kope hou.",

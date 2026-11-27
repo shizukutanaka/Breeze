@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Այդ ռելեն չհաջողվեց հաստատել՝ ստուգեք URL-ը եւ փորձեք կրկին։",
   "relayAdded": "Տնային ռելեյ ավելացվել է՝ {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Տնային ռելեը հեռացվել է՝ {0}",
   "relayFailover": "Relay {0} չպատասխանեց՝ փոխարենը փոխանցեց {1} միջոցով։",
   "relayRemoveConfirm": "Հեռացնե՞լ {0} ձեր տան ռելեներից։ Ռելեն պահպանում է արդեն պահվող տվյալները։ Պարզապես դադարում է նոր օրինակներ ստանալ։",

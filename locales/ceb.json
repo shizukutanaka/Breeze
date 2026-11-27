@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Kana nga relay dili mapamatud-an - susiha ang URL ug sulayi pag-usab.",
   "relayAdded": "Gidugang ang relay sa balay: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Gitangtang ang relay sa balay: {0}",
   "relayFailover": "Ang relay {0} wala motubag — gihatud na hinuon pinaagi sa {1}.",
   "relayRemoveConfirm": "Kuhaa ang {0} gikan sa imong mga relay sa balay? Ang relay nagtipig sa datos nga gihuptan na niini; mohunong ra kini sa pagdawat og bag-ong mga kopya.",

@@ -485,6 +485,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Acest releu nu a putut fi verificat — verifică URL-ul și reîncearcă.",
   "relayAdded": "Releu de domiciliu adăugat: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Releu de domiciliu eliminat: {0}",
   "relayFailover": "Releul {0} nu a răspuns — livrat prin {1} în schimb.",
   "relayRemoveConfirm": "Elimini {0} din releele tale de domiciliu? Releul păstrează datele pe care le deține deja; doar nu mai primește copii noi.",

@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Kulandirana kumeneko sikunatsimikizidwe - onani URL ndikuyesanso.",
   "relayAdded": "Kulandirana kunyumba anawonjezera kuti: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Kulandirana kunyumba kuchotsedwa: {0}",
   "relayFailover": "Relay {0} sanayankhe - yoperekedwa kudzera pa {1} m'malo mwake.",
   "relayRemoveConfirm": "Chotsani {0} kuchokera ku kulandirana kwanu kunyumba? Kulandirana kumasunga deta yomwe ili nayo kale; zimangosiya kulandira makope atsopano.",

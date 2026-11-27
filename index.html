@@ -2153,6 +2153,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     relayAddInsecure: 'That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)',
     relayAddUnreachable: 'That relay could not be verified — check the URL and try again.',
     relayAdded: 'Home relay added: {0}',
+    relayAddedInvitePrompt: 'Server added. Next, invite a friend so you can start chatting.',
     relayRemoved: 'Home relay removed: {0}',
     relayFailover: "Relay {0} didn't answer — delivered via {1} instead.",
     relayRemoveConfirm: 'Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.',
@@ -4866,6 +4867,11 @@ async function initMessenger(dbName) {
     _lastPreKeyCheck = 0;
     checkAndReplenishPreKeys();
     maybeStartMailboxWs();
+    if (typeof _shareTools !== 'undefined' && _shareTools) {
+      try {
+        if (await showConfirm(t('relayAddedInvitePrompt'), { okText: t('btnInviteFriend') })) { await shareInvite(); }
+      } catch(e) { _dbg(e, 'relay-add-invite'); }
+    }
   }
   // Remove this account's push registration from every home relay
   // (account switch / account delete). Best-effort like the call

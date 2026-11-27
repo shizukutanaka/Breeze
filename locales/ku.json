@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Ew relay nehat piştrastkirin - URLyê kontrol bikin û dîsa biceribînin.",
   "relayAdded": "Veguhestina malê zêde kir: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Veguhestina malê hate rakirin: {0}",
   "relayFailover": "Relay {0} bersiv neda - li şûna wê bi rêya {1} radest kir.",
   "relayRemoveConfirm": "{0} ji veguhestinên mala xwe derxin? Relay daneyên ku berê digire digire; ew tenê wergirtina kopiyên nû radiwestîne.",

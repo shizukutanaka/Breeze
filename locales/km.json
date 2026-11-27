@@ -481,6 +481,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ឧបករណ៍បញ្ជូនបន្តនោះមិនអាចត្រូវបានផ្ទៀងផ្ទាត់ទេ — ពិនិត្យ URL ហើយព្យាយាមម្តងទៀត។",
   "relayAdded": "ឧបករណ៍បញ្ជូនបន្តផ្ទះត្រូវបានបន្ថែម៖ {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "ឧបករណ៍បញ្ជូនបន្តផ្ទះត្រូវបានដកចេញ៖ {0}",
   "relayFailover": "ឧបករណ៍បញ្ជូនបន្ត {0} មិនបានឆ្លើយតបទេ — បានបញ្ជូនតាមរយៈ {1} ជំនួសវិញ។",
   "relayRemoveConfirm": "ដក {0} ចេញពីឧបករណ៍បញ្ជូនបន្តផ្ទះរបស់អ្នក? ឧបករណ៍បញ្ជូនបន្តរក្សាទុកទិន្នន័យដែលវាមានរួចហើយ។ វាគ្រាន់តែឈប់ទទួលច្បាប់ចម្លងថ្មីប៉ុណ្ណោះ។",

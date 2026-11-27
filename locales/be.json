@@ -485,6 +485,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Рэлея не можа быць праверана: праверце адрас і паспрабуйце зноў.",
   "relayAdded": "Дададзенае хатняе реле: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Хатняя перадача выдаленыя: {0}",
   "relayFailover": "Relay {0} didn't answer — delivered via {1} instead.",
   "relayRemoveConfirm": "Выдаліць {0} з вашага хатняга пераслання? Перадача захоўвае дадзеныя, якія яна ужо змяшчае, і проста перастане атрымліваць новыя копіі.",

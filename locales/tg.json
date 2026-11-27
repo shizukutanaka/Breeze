@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Ин реле тасдиқ карда нашуд - URL-ро тафтиш кунед ва дубора кӯшиш кунед.",
   "relayAdded": "Эстафетаи хонагӣ илова карда шуд: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Эстафетаи хонагӣ хориҷ карда шуд: {0}",
   "relayFailover": "Эстафетаи {0} ҷавоб надод - ба ҷои он тавассути {1} расонида шуд.",
   "relayRemoveConfirm": "{0}-ро аз релеҳои хонагии худ хориҷ кунед? Эстафета маълумотеро, ки аллакай дорад, нигоҳ медорад; он танҳо гирифтани нусхаҳои навро қатъ мекунад.",

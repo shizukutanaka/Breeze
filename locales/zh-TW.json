@@ -261,6 +261,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "無法驗證該中繼 — 請檢查 URL 後再試一次。",
   "relayAdded": "已新增主中繼：{0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "已移除主中繼：{0}",
   "relayRemoveConfirm": "將 {0} 從主中繼中移除嗎？中繼會保留其已有資料，只是停止接收新副本。",
   "relayFanoutLabel": "每位聯絡人的副本數（冗餘傳送）：",

@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ആ റിലേ പരിശോധിക്കാനായില്ല — URL പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.",
   "relayAdded": "ഹോം റിലേ ചേർത്തു: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "ഹോം റിലേ നീക്കം ചെയ്തു: {0}",
   "relayFailover": "റിലേ {0} മറുപടി നൽകിയില്ല — പകരം {1} വഴി എത്തിച്ചു.",
   "relayRemoveConfirm": "{0} നിങ്ങളുടെ ഹോം റിലേകളിൽ നിന്ന് നീക്കം ചെയ്യണോ? റിലേ അതിൽ ഇതിനകം ഉള്ള ഡാറ്റ സൂക്ഷിക്കും; അത് പുതിയ പകർപ്പുകൾ സ്വീകരിക്കുന്നത് നിർത്തും എന്ന് മാത്രം.",

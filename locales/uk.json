@@ -487,6 +487,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Це реле не вдалося перевірити — перевірте URL і повторіть.",
   "relayAdded": "Домашнє реле додано: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Домашнє реле видалено: {0}",
   "relayFailover": "Реле {0} не відповіло — доставлено через {1}.",
   "relayRemoveConfirm": "Видалити {0} із ваших домашніх реле? Реле збереже вже наявні дані; воно просто перестане отримувати нові копії.",

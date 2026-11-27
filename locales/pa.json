@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ਉਸ ਰਿਲੇਅ ਦੀ ਪੁਸ਼ਟੀ ਨਹੀਂ ਹੋ ਸਕੀ — URL ਦੇਖ ਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।",
   "relayAdded": "ਹੋਮ ਰਿਲੇਅ ਸ਼ਾਮਲ ਹੋ ਗਿਆ: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "ਹੋਮ ਰਿਲੇਅ ਹਟਾ ਦਿੱਤਾ ਗਿਆ: {0}",
   "relayFailover": "ਰਿਲੇਅ {0} ਨੇ ਜਵਾਬ ਨਹੀਂ ਦਿੱਤਾ — ਇਸ ਦੀ ਬਜਾਏ {1} ਰਾਹੀਂ ਪਹੁੰਚਾਇਆ ਗਿਆ।",
   "relayRemoveConfirm": "{0} ਨੂੰ ਆਪਣੇ ਹੋਮ ਰਿਲੇਅ ਤੋਂ ਹਟਾਓ? ਰਿਲੇਅ ਆਪਣੇ ਕੋਲ ਪਹਿਲਾਂ ਤੋਂ ਮੌਜੂਦ ਡਾਟਾ ਰੱਖਦਾ ਹੈ; ਬੱਸ ਨਵੀਆਂ ਕਾਪੀਆਂ ਮਿਲਣੀਆਂ ਬੰਦ ਹੋ ਜਾਂਦੀਆਂ ਹਨ।",

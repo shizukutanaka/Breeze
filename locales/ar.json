@@ -491,6 +491,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "تعذر التحقق من هذا المرحّل — تحقق من الرابط وحاول مجددًا.",
   "relayAdded": "تمت إضافة المرحّل الرئيسي: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "تمت إزالة المرحّل الرئيسي: {0}",
   "relayFailover": "لم يرد المرحّل {0} — تم التسليم عبر {1} بدلًا من ذلك.",
   "relayRemoveConfirm": "إزالة {0} من مرحّلاتك الرئيسية؟ يحتفظ المرحّل بالبيانات التي لديه بالفعل؛ يتوقف فقط عن استقبال نسخ جديدة.",

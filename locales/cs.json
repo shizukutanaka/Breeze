@@ -487,6 +487,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Tento relay se nepodařilo ověřit — zkontrolujte URL a zkuste to znovu.",
   "relayAdded": "Domácí relay přidán: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Domácí relay odebrán: {0}",
   "relayFailover": "Relay {0} neodpověděl — doručeno místo toho přes {1}.",
   "relayRemoveConfirm": "Odebrat {0} z vašich domácích relay? Relay si ponechá data, která už má; jen přestane dostávat nové kopie.",

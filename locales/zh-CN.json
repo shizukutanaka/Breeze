@@ -481,6 +481,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "无法验证该中继 — 请检查 URL 并重试。",
   "relayAdded": "主中继已添加：{0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "主中继已移除：{0}",
   "relayFailover": "中继 {0} 没有响应 — 改为通过 {1} 送达。",
   "relayRemoveConfirm": "从主中继中移除 {0}？中继会保留它已有的数据；只是不再接收新副本。",

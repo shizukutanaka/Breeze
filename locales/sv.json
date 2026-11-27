@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Det reläet kunde inte verifieras — kontrollera URL:en och försök igen.",
   "relayAdded": "Hemrelä tillagt: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Hemrelä borttaget: {0}",
   "relayFailover": "Relä {0} svarade inte — levererat via {1} i stället.",
   "relayRemoveConfirm": "Ta bort {0} från dina hemreläer? Reläet behåller data det redan har; det slutar bara ta emot nya kopior.",

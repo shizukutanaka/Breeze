@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Hindi ma-verify ang relay na iyon — suriin ang URL at subukang muli.",
   "relayAdded": "Naidagdag ang home relay: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Naalis ang home relay: {0}",
   "relayFailover": "Hindi sumagot ang relay na {0} — naihatid sa pamamagitan ng {1} sa halip.",
   "relayRemoveConfirm": "Alisin ang {0} mula sa iyong mga home relay? Itatago ng relay ang data na hawak na nito; titigil lang ito sa pagtanggap ng mga bagong kopya.",

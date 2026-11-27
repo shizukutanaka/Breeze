@@ -487,6 +487,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Nie udało się zweryfikować tego przekaźnika — sprawdź URL i spróbuj ponownie.",
   "relayAdded": "Dodano przekaźnik domowy: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Usunięto przekaźnik domowy: {0}",
   "relayFailover": "Przekaźnik {0} nie odpowiedział — dostarczono przez {1}.",
   "relayRemoveConfirm": "Usunąć {0} z przekaźników domowych? Przekaźnik zachowuje dane, które już ma; przestaje tylko otrzymywać nowe kopie.",

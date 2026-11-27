@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Esse retransmissor não pôde ser verificado — verifique o URL e tente novamente.",
   "relayAdded": "Retransmissão doméstica adicionada: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Retransmissão doméstica removida: {0}",
   "relayFailover": "Relay {0} não respondeu — entreguei via {1} em vez disso.",
   "relayRemoveConfirm": "Remover {0} dos seus relés domésticos? O relé mantém os dados que já contém; simplesmente deixa de receber cópias novas.",

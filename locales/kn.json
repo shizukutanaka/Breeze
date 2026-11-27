@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ಆ ರಿಲೇಯನ್ನು ಪರಿಶೀಲಿಸಲಾಗಲಿಲ್ಲ - URL ಅನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
   "relayAdded": "ಹೋಮ್ ರಿಲೇ ಸೇರಿಸಲಾಗಿದೆ: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "ಹೋಮ್ ರಿಲೇ ತೆಗೆದುಹಾಕಲಾಗಿದೆ: {0}",
   "relayFailover": "ರಿಲೇ {0} ಉತ್ತರಿಸಲಿಲ್ಲ - ಬದಲಿಗೆ {1} ಮೂಲಕ ವಿತರಿಸಲಾಗಿದೆ.",
   "relayRemoveConfirm": "ನಿಮ್ಮ ಹೋಮ್ ರಿಲೇಗಳಿಂದ {0} ಅನ್ನು ತೆಗೆದುಹಾಕುವುದೇ? ರಿಲೇ ಈಗಾಗಲೇ ಹೊಂದಿರುವ ಡೇಟಾವನ್ನು ಇಡುತ್ತದೆ; ಇದು ಕೇವಲ ಹೊಸ ಪ್ರತಿಗಳನ್ನು ಸ್ವೀಕರಿಸುವುದನ್ನು ನಿಲ್ಲಿಸುತ್ತದೆ.",

@@ -485,6 +485,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Taj relej nije mogao da se proveri — proverite URL i pokušajte ponovo.",
   "relayAdded": "Kućni relej je dodat: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Kućni relej je uklonjen: {0}",
   "relayFailover": "Relej {0} nije odgovorio — isporučeno preko {1} umesto njega.",
   "relayRemoveConfirm": "Ukloniti {0} iz vaših kućnih releja? Relej zadržava podatke koje već ima; samo prestaje da prima nove kopije.",

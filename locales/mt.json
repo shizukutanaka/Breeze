@@ -487,6 +487,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Din il - relay ma setgħetx tiġi vverifikata — iċċekkja l - URL u terġaʼ tipprova.",
   "relayAdded": "Home relay added: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Home relay removed: {0}",
   "relayFailover": "Relay {0} didn't answer — delivered via {1} instead.",
   "relayRemoveConfirm": "Remove {0} from your home relays? The relay keeps the data it already holds; it just stops receiving new copies.",

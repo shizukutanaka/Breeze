@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "بۇ يەتكۈزۈشنى دەلىللىگىلى بولمىدى - URL نى تەكشۈرۈپ قايتا سىناڭ.",
   "relayAdded": "ئائىلە يەتكۈزۈش پائالىيىتى قوشۇلدى: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "ئائىلە يەتكۈزۈش پائالىيىتى چىقىرىۋېتىلدى: {0}",
   "relayFailover": "يەتكۈزۈش {0} جاۋاب بەرمىدى - ئۇنىڭ ئورنىغا {1} ئارقىلىق يەتكۈزۈلدى.",
   "relayRemoveConfirm": "{0} نى ئۆيىڭىزنىڭ رېلىستىن چىقىرىۋېتىڭ؟ يەتكۈزۈش پائالىيىتىدە ئۇ ساقلىغان سانلىق مەلۇماتلارنى ساقلايدۇ. ئۇ پەقەت يېڭى نۇسخىسىنى تاپشۇرۇۋېلىشنى توختىتىدۇ.",

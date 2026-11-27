@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Quel relay non è stato verificato — controlla l'URL e riprova.",
   "relayAdded": "Relay principale aggiunto: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Relay principale rimosso: {0}",
   "relayFailover": "Il relay {0} non ha risposto — consegnato invece tramite {1}.",
   "relayRemoveConfirm": "Rimuovere {0} dai tuoi relay principali? Il relay conserva i dati che già detiene; smette solo di ricevere nuove copie.",

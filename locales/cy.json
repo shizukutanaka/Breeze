@@ -489,6 +489,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Nid oedd modd dilysu'r ail-osodiad hwnnw — gwiriwch y LAU a cheisiwch eto.",
   "relayAdded": "Cyfnewid cartref: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Tynnwyd adfer cartref: {0}",
   "relayFailover": "Wnaeth Relay {0} ddim ateb — fe'i danfonwyd drwy {1} yn lle hynny.",
   "relayRemoveConfirm": "Tynnu {0} o'ch cartref yn ail-osod? Mae'r ail-osod yn cadw'r data mae'n ei ddal yn barod; mae ond yn atal derbyn copïau newydd.",

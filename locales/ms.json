@@ -481,6 +481,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Geganti itu tidak dapat disahkan — semak URL dan cuba semula.",
   "relayAdded": "Geganti utama ditambah: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Geganti utama dibuang: {0}",
   "relayFailover": "Geganti {0} tidak menjawab — dihantar melalui {1} sebaliknya.",
   "relayRemoveConfirm": "Buang {0} daripada geganti utama anda? Geganti menyimpan data yang sudah dimilikinya; ia hanya berhenti menerima salinan baharu.",

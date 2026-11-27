@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Bu relayni tekshirib bo'lmadi — URL ni tekshiring va qayta urining.",
   "relayAdded": "Uy relay qo'shildi: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Uy relay olib tashlandi: {0}",
   "relayFailover": "Relay {0} javob bermadi — buning o'rniga {1} orqali yetkazildi.",
   "relayRemoveConfirm": "{0} uy relaylaringizdan olib tashlansinmi? Relay o'zida mavjud ma'lumotlarni saqlaydi; u faqat yangi nusxalarni olishni to'xtatadi.",

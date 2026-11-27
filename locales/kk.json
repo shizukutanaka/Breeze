@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Бұл релені тексеру мүмкін болмады — URL мекенжайын тексеріп, қайта әрекет етіңіз.",
   "relayAdded": "Үй релесi қосылды: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Үй релесi алып тасталды: {0}",
   "relayFailover": "{0} релесi жауап бермеді — оның орнына {1} арқылы жеткізілді.",
   "relayRemoveConfirm": "{0} үй релелеріңізден алып тастау керек пе? Реле өзінде бар деректерді сақтайды; ол тек жаңа көшірмелерді алуды тоқтатады.",

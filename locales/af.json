@@ -481,6 +481,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Daardie aflewering kon nie bevestig word nie — gaan die URL na en probeer weer.",
   "relayAdded": "Tuisherlaai bygevoeg: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Tuisherhaling verwyder: {0}",
   "relayFailover": "Relay {0} het nie geantwoord nie — afgelewer deur middel van {1}.",
   "relayRemoveConfirm": "Verwyder {0} van jou tuisgids? Die herlaai hou die data wat dit reeds bevat; dit hou net op om nuwe kopieë te ontvang.",

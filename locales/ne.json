@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "त्यो रिले प्रमाणित गर्न सकिएन — URL जाँच गर्नुहोस् र पुन: प्रयास गर्नुहोस्।",
   "relayAdded": "गृह रिले थपियो: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "गृह रिले हटाइयो: {0}",
   "relayFailover": "रिले {0} ले जवाफ दिएन — यसको सट्टा {1} मार्फत डेलिभर गरियो।",
   "relayRemoveConfirm": "तपाईको घर रिलेबाट {0} हटाउने हो? रिलेले पहिले नै राखेको डाटा राख्छ; यसले नयाँ प्रतिलिपिहरू प्राप्त गर्न मात्र रोक्छ।",

@@ -481,6 +481,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ထိုရီလေးကို အတည်ပြု၍ မရပါ — URL ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။",
   "relayAdded": "မူရင်း ရီလေး ထည့်ပြီးပါပြီ: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "မူရင်း ရီလေး ဖယ်ရှားပြီးပါပြီ: {0}",
   "relayFailover": "ရီလေး {0} က မဖြေပါ — အစား {1} မှတဆင့် ပို့ပြီးပါပြီ။",
   "relayRemoveConfirm": "{0} ကို သင့်မူရင်း ရီလေးများမှ ဖယ်ရှားမလား? ရီလေးသည် ၎င်းရှိပြီးသား ဒေတာကို သိမ်းထားပါမည်။ မိတ္တူအသစ်များ ရရှိခြင်းသာ ရပ်ပါမည်။",

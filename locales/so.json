@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relay-gaas lama xaqiijin karo — hubi URL-ka oo mar kale isku day.",
   "relayAdded": "Home relay ayaa lagu daray: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Home relay waa la saaray: {0}",
   "relayFailover": "Relay {0} jawaab ma bixin — halkii {1} loo diray.",
   "relayRemoveConfirm": "Ma ka saartaa {0} relays-ka gurigaaga? Relay-gu wuxuu hayaa xogta uu horey u hayay; Wuxuu joojiyaa helitaanka nuqullo cusub.",

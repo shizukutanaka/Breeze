@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "ამ სარელეოს შემოწმება ვერ მოხერხდა — შეამოწმეთ URL და სცადეთ ხელახლა.",
   "relayAdded": "მთავარი სარელეო დაემატა: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "მთავარი სარელეო წაიშალა: {0}",
   "relayFailover": "სარელეომ {0} არ უპასუხა — ამის ნაცვლად მიეწოდა {1}-ით.",
   "relayRemoveConfirm": "წაიშალოს {0} თქვენი მთავარი სარელეოებიდან? სარელეო ინახავს მონაცემებს, რომლებიც უკვე აქვს; ის უბრალოდ აღარ იღებს ახალ ასლებს.",

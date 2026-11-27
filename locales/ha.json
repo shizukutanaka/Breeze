@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Ba a iya tabbatar da wannan relay ba — duba URL kuma sake gwadawa.",
   "relayAdded": "An ƙara relay na gida: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "An cire relay na gida: {0}",
   "relayFailover": "Relay {0} bai amsa ba — an isar ta {1} maimakon haka.",
   "relayRemoveConfirm": "Cire {0} daga relays na gidanka? Relay yana riƙe bayanan da ya riga ya riƙe; yana daina karɓar sabbin kwafi kawai.",

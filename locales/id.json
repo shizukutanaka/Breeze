@@ -261,6 +261,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relai tersebut tidak dapat diverifikasi — periksa URL dan coba lagi.",
   "relayAdded": "Relai rumah ditambahkan: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Relai rumah dihapus: {0}",
   "relayRemoveConfirm": "Hapus {0} dari relai rumah Anda? Relai tetap menyimpan data yang sudah dimilikinya; hanya berhenti menerima salinan baru.",
   "relayFanoutLabel": "Salinan per kontak (pengiriman redundan):",

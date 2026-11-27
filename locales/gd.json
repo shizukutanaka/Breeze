@@ -485,6 +485,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Cha b' urrainn dhuinn an ath-shlàinte sin a dhearbhadh — sgrùd an URL is feuch ris a-rithist.",
   "relayAdded": "Cuirear ath-sheachad sa bhaile ris: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Chaidh ath-sheachad a' bhaile a thoirt air falbh: {0}",
   "relayFailover": "Cha deach {0} a fhreagairt air ais — seachad tro {1} an àite.",
   "relayRemoveConfirm": "Thoir air falbh {0} bhon ath-sheachadan a' bhaile agad? Coinnidh an t-ath-shlàinte an dàta a tha aige mar-thà; stadaidh seo dìreach lethbhreacan ùra.",

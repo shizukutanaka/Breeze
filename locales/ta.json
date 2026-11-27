@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "அந்த ரிலேயைச் சரிபார்க்க முடியவில்லை — URL ஐச் சரிபார்த்து மீண்டும் முயற்சிக்கவும்.",
   "relayAdded": "முகப்பு ரிலே சேர்க்கப்பட்டது: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "முகப்பு ரிலே நீக்கப்பட்டது: {0}",
   "relayFailover": "ரிலே {0} பதிலளிக்கவில்லை — அதற்கு பதிலாக {1} வழியாக வழங்கப்பட்டது.",
   "relayRemoveConfirm": "{0} ஐ உங்கள் முகப்பு ரிலேகளிலிருந்து நீக்கவா? ரிலே ஏற்கனவே வைத்திருக்கும் தரவை வைத்திருக்கும்; அது புதிய நகல்களைப் பெறுவதை மட்டும் நிறுத்தும்.",

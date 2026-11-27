@@ -483,6 +483,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "آن رله راستی‌آزمایی نشد — نشانی را بررسی کنید و دوباره تلاش کنید.",
   "relayAdded": "رله خانگی اضافه شد: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "رله خانگی حذف شد: {0}",
   "relayFailover": "رله {0} پاسخ نداد — به‌جای آن از طریق {1} تحویل داده شد.",
   "relayRemoveConfirm": "{0} از رله‌های خانگی شما حذف شود؟ رله داده‌هایی را که همین حالا دارد نگه می‌دارد؛ فقط دریافت نسخه‌های تازه متوقف می‌شود.",

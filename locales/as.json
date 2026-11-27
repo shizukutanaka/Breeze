@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "সেই ৰিলে পৰীক্ষা কৰিব পৰা নগ'ল — URL পৰীক্ষা কৰক আৰু পুনৰ চেষ্টা কৰক।",
   "relayAdded": "হোম ৰিলে যোগ কৰা হৈছে: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "হোম ৰিলে আঁতৰোৱা হৈছে: {0}",
   "relayFailover": "ৰিলে {0} এ উত্তৰ নিদিলে — ইয়াৰ পৰিৱৰ্তে {1} ৰ জৰিয়তে ডেলিভাৰী কৰা হ'ল।",
   "relayRemoveConfirm": "আপোনাৰ ঘৰৰ ৰিলেৰ পৰা {0} আঁতৰাই পেলাওক? ৰিলেই ইতিমধ্যে ৰখা তথ্যবোৰ ৰাখে; ই মাত্ৰ নতুন কপি লাভ কৰা বন্ধ কৰি দিয়ে।",

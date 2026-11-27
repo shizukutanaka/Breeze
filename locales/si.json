@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "එම රිලේ සත්‍යාපනය කළ නොහැකි විය - URL පරීක්ෂා කර නැවත උත්සාහ කරන්න.",
   "relayAdded": "මුල් පිටුව රිලේ එකතු කරන ලදී: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "මුල් පිටුව රිලේ ඉවත් කරන ලදී: {0}",
   "relayFailover": "Relay {0} පිළිතුරු දුන්නේ නැත - ඒ වෙනුවට {1} හරහා බෙදා හරිනු ලැබේ.",
   "relayRemoveConfirm": "ඔබේ නිවසේ රිලේවලින් {0} ඉවත් කරන්නද? රිලේ එය දැනටමත් තබා ඇති දත්ත තබා ගනී; එය නව පිටපත් ලැබීම නතර කරයි.",

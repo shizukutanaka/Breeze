@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Iyo relay haina kukwanisa kusimbiswa — tarisa iyo URL uye edza zvakare.",
   "relayAdded": "Home relay added: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Home Relay Deleted: {0}",
   "relayFailover": "Relay {0} haina kupindura — yakaendeswa kuburikidza {1} pachinzvimbo.",
   "relayRemoveConfirm": "Bvisa {0} kubva kuimba yako relays? Iyo relay inochengeta iyo data yatove yakabata; Inongorega kugamuchira makopi matsva.",

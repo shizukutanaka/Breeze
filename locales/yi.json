@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "דער רעלע קען נישט זיין וועראַפייד - קאָנטראָלירן די URL און פּרובירן ווידער.",
   "relayAdded": "היים רעלע צוגעגעבן: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "היים רעלע אַוועקגענומען: {0}",
   "relayFailover": "רעלע {0} האט נישט ענטפֿערן - איבערגעגעבן דורך {1} אַנשטאָט.",
   "relayRemoveConfirm": "אַראָפּנעמען {0} פון דיין היים רילייז? די רעלע האלט די דאַטן עס שוין האלט; עס נאָר סטאַפּס צו באַקומען נייַע קאָפּיעס.",

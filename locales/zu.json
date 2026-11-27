@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Lokho kudluliselwa akukwazanga ukuqinisekiswa — hlola i-URL bese uzama futhi.",
   "relayAdded": "Home Ezemidlalo Wanezela: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Ukudluliselwa kwasekhaya kususiwe: {0}",
   "relayFailover": "I-Relay {0} ayiphendulanga — ihanjiswe nge-{1} esikhundleni.",
   "relayRemoveConfirm": "Susa {0} kusuka kuma-relays akho asekhaya? I-relay igcina idatha esevele ibambe; Uyeka nje ukuthola amakhophi amasha.",

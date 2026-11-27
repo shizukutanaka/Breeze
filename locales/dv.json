@@ -482,6 +482,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "އެ ރިލޭ ކަށަވަރު ނުކުރެވުނު، ޔޫއާރްއެލް ޗެކް ކުރުމަށްފަހު އަލުން ޓްރައި ކުރާށެވެ.",
   "relayAdded": "ހޯމް ރިލޭ: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "ހޯމް ރިލޭ ނެގުމުން: {0}",
   "relayFailover": "ރިލޭ {0} ޖަވާބެއް ނުދީ ޑެލިވަރީ ކުރީ {1} މެދުވެރިކޮށެވެ.",
   "relayRemoveConfirm": "ގޭގެ ރިލޭތަކުން {0} ނައްޓާލަނީތަ؟ ރިލޭގައި މިހާރު ހުރި ޑޭޓާތައް ރައްކާކުރެވެއެވެ. އާ ކޮޕީތައް ލިބުން ހުއްޓާލަ އެވެ.",

@@ -538,6 +538,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "دا ریل تایید نشي - URL وګورئ او بیا هڅه وکړئ.",
   "relayAdded": "د کور ریل اضافه شوی: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "د کور ریل لرې شوی: {0}",
   "relayFailover": "Relay {0} ځواب ورنکړ - د دې پرځای د {1} له لارې ورکړل شو.",
   "relayRemoveConfirm": "{0} ستاسو د کور ریل څخه لرې کړئ؟ ریلي هغه معلومات ساتي چې دمخه یې لري؛ دا یوازې د نوي کاپي ترلاسه کول ودروي.",

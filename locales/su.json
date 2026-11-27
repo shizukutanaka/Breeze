@@ -536,6 +536,7 @@
   "relayAddInsecure": "That relay uses http://, which is not encrypted — use its https:// address instead. (http:// is accepted only for a relay running on this device itself.)",
   "relayAddUnreachable": "Relay éta henteu tiasa diverifikasi - pariksa URL sareng cobian deui.",
   "relayAdded": "Imah relay ditambahkeun: {0}",
+  "relayAddedInvitePrompt": "Server added. Next, invite a friend so you can start chatting.",
   "relayRemoved": "Imah relay dihapus: {0}",
   "relayFailover": "Relay {0} teu ngajawab - dikirimkeun via {1} gantina.",
   "relayRemoveConfirm": "Cabut {0} tina relay bumi anjeun? relay nu ngajaga data eta geus nahan; eta ngan eureun narima salinan anyar.",
