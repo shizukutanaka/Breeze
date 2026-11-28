@@ -905,6 +905,7 @@
   "cmdDescExport": "Às-phortaich a' chòmhradh seo",
   "cmdDescBackup": "Dèan cùl-taic de na dàta agam",
   "cmdDescSettings": "Fosgail na suidhichidhean",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Log iniúchadh (50 an t-Ògmhios mu dheireadh)",
   "cmdBackupTitle": "Lethbhreac-glèidhidh cudromach",
   "cmdWallpaperTitle": "Ro-shocrachaidhean a' phàipear-naidheachd",

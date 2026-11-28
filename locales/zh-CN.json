@@ -945,6 +945,7 @@
   "cmdDescExport": "导出此聊天",
   "cmdDescBackup": "备份我的数据",
   "cmdDescSettings": "打开设置",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "审计日志（最近50条）",
   "cmdBackupTitle": "云备份",
   "cmdWallpaperTitle": "壁纸预设",

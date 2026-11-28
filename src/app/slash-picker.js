@@ -25,6 +25,46 @@ export const SLASH_DESCS = {
   '/settings': 'cmdDescSettings',
 };
 
+export function slashHelpLines(t) {
+  return [
+    '<b class="i-g13">' + t('helpTitle') + '</b>',
+    '',
+    '<b>' + t('helpChat') + '</b>',
+    '/search · /searchall · /pins · /bookmarks · /reply · /poll · /timer',
+    '/schedule &lt;time&gt; &lt;msg&gt; · /schedule list · /schedule cancel',
+    '/clear · /export [json|csv|html|all] · /import · /summarize · /reactions · /compact',
+    '/files · /print · /rendezvous · /offlinepair',
+    '',
+    '<b>' + t('helpContacts') + '</b>',
+    '/info · /note · /pin · /mute · /archive · /unblock · /members · /admin',
+    '/add · /label · /sort · /newgroup · /rename · /invite · /qr · /share',
+    '/contacts export · /contacts import',
+    '',
+    '<b>' + t('helpSettings') + '</b>',
+    '/focus [min] [all]',
+    '/settings · /theme · /wallpaper · /lock · /sound · /compress',
+    '/alias &lt;name&gt; · /whoami · /who · /debug',
+    '',
+    '<b>' + t('helpSecurity') + '</b>',
+    '/security · /verify · /audit · /retention · /backup · /vault · /keywrap',
+    '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
+    '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers · /location',
+    '',
+    '<b>' + t('helpDiag') + '</b>',
+    '/retry',
+    '',
+    '<b>' + t('helpDeadDrop') + '</b>',
+    '/drop &lt;secret&gt; · /room [name]',
+    '',
+    '<b>' + t('helpFormat') + '</b>',
+    '**bold** *italic* ~~strike~~ `code` ```block``` ||spoiler|| @mention',
+    t('helpTableHint'),
+    '',
+    '<b>' + t('helpKeys') + '</b>',
+    t('helpKeysHint'),
+  ];
+}
+
 export function createSlashPicker({ input, DOM, t, esc, safeSetHTML }) {
   input?.addEventListener('input', (e) => {
     const input = e.target;

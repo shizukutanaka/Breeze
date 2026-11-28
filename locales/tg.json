@@ -1028,6 +1028,7 @@
   "cmdDescExport": "Ин чатро содир кунед",
   "cmdDescBackup": "Маълумоти маро нусхабардорӣ кунед",
   "cmdDescSettings": "Танзимотро кушоед",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "uiNewVersion": "Версияи нав дастрас.",
   "uiUpdateReady": "Навсозӣ омода.",
   "uiRestartUpdate": "Барои навсозӣ аз нав оғоз кунед",

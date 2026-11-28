@@ -1015,6 +1015,7 @@
   "cmdDescExport": "ສົ່ງອອກແຊັດນີ້",
   "cmdDescBackup": "ສຳຮອງຂໍ້ມູນຂອງຂ້ອຍ",
   "cmdDescSettings": "ເປີດການຕັ້ງຄ່າ",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit Log (last 50)",
   "cmdBackupTitle": "Cloud Backup",
   "cmdWallpaperTitle": "Wallpaper Presets",

@@ -980,6 +980,7 @@
   "cmdDescExport": "تصدير هذه الدردشة",
   "cmdDescBackup": "النسخ الاحتياطي لبياناتي",
   "cmdDescSettings": "فتح الإعدادات",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "سجل التدقيق (آخر 50)",
   "cmdBackupTitle": "النسخة الاحتياطية السحابية",
   "cmdWallpaperTitle": "إعدادات الخلفية المسبقة",

@@ -952,6 +952,7 @@
   "cmdDescExport": "இந்த அரட்டையை ஏற்றுமதி செய்",
   "cmdDescBackup": "என் தரவை காப்புப்பிரதி செய்",
   "cmdDescSettings": "அமைப்புகளைத் திற",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "தணிக்கைப் பதிவு (கடைசி 50)",
   "cmdBackupTitle": "மேகக் காப்பு",
   "cmdWallpaperTitle": "வால்பேப்பர் முன்னமைவுகள்",

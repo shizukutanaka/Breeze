@@ -952,6 +952,7 @@
   "cmdDescExport": "ഈ ചാറ്റ് എക്സ്പോർട്ട് ചെയ്യുക",
   "cmdDescBackup": "എന്റെ ഡാറ്റ ബാക്കപ്പ് ചെയ്യുക",
   "cmdDescSettings": "ക്രമീകരണങ്ങൾ തുറക്കുക",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "ഓഡിറ്റ് ലോഗ് (അവസാന 50)",
   "cmdBackupTitle": "ക്ലൗഡ് ബാക്കപ്പ്",
   "cmdWallpaperTitle": "വാൾപേപ്പർ പ്രീസെറ്റുകൾ",

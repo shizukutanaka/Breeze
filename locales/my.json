@@ -945,6 +945,7 @@
   "cmdDescExport": "ဤချတ်ကို ထုတ်ယူပါ",
   "cmdDescBackup": "ကျွန်ုပ်၏ဒေတာကို အရန်သိမ်းပါ",
   "cmdDescSettings": "ဆက်တင်များကို ဖွင့်ပါ",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "စာရင်းစစ် မှတ်တမ်း (နောက်ဆုံး 50)",
   "cmdBackupTitle": "Cloud အရန်ကူး",
   "cmdWallpaperTitle": "နောက်ခံပုံ ကြိုတင်သတ်မှတ်ချက်များ",

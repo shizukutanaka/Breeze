@@ -888,6 +888,7 @@
   "cmdDescExport": "Eksporto këtë bisedë",
   "cmdDescBackup": "Bëj kopje rezervë të të dhënave të mia",
   "cmdDescSettings": "Cilësimet e hapura",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Regjistri i Auditimit (50 të fundit)",
   "cmdBackupTitle": "Cloud Backup",
   "cmdWallpaperTitle": "Paracaktimet e Wallpaper-it",

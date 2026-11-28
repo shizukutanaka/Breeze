@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import { deflateRawSync } from 'node:zlib';
 import { canonical, createEnvelopeCodec, gatherDescription, attachManualPeer, createRendezvous, MAX_CODE_SIZE, MAX_ENVELOPE_SIZE } from '../src/app/rendezvous.js';
 import { createInfoPanels } from '../src/app/info-panels.js';
+import { slashHelpLines } from '../src/app/slash-picker.js';
 
 const MS = { SEC: 1000, MIN: 60000 };
 const desc = { type: 'offer', sdp: 'v=0\r\na=candidate:1 1 udp 1 abc.local 123 typ host\r\n' };
@@ -220,7 +221,7 @@ describe('deployed rendezvous wiring and relay preservation', () => {
   it('registers the deployed bridge, inert entry, localized command and help', () => {
     expect(html).toContain("import { createRendezvous, attachManualPeer } from './src/app/rendezvous.js'");
     expect(html).toContain('globalThis.__breezeRendezvous?.createRendezvous');
-    expect(html).toContain("if (val === '/rendezvous')"); expect(html).toContain('/files · /print · /rendezvous');
+    expect(html).toContain("if (val === '/rendezvous')"); expect(slashHelpLines((key) => key).join('<br>')).toContain('/files · /print · /rendezvous');
     expect(html).toContain("await _rendezvous?.open(activeContact)");
     expect(readFileSync(new URL('../sw.js', import.meta.url), 'utf8')).toContain('/src/app/rendezvous.js');
   });

@@ -1020,6 +1020,7 @@
   "cmdDescExport": "Flytja út þetta spjall",
   "cmdDescBackup": "Öryggisafrita gögnin mín",
   "cmdDescSettings": "Opna stillingar",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit Log (last 50)",
   "cmdBackupTitle": "Cloud Backup",
   "cmdWallpaperTitle": "Wallpaper Presets",

@@ -1001,6 +1001,7 @@
   "cmdDescExport": "Exportar este chat",
   "cmdDescBackup": "Hacer una copia de seguridad de mis datos",
   "cmdDescSettings": "Abrir configuración",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Registro de auditoría (últimos 50)",
   "cmdBackupTitle": "Copia de seguridad en la nube",
   "cmdWallpaperTitle": "Fondos de pantalla predefinidos",
