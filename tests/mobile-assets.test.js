@@ -45,6 +45,17 @@ describe('mobile/prepare.js copies everything the app fetches', () => {
     }
   });
 
+  it('ships with no default server — API is empty and the gate flag is injected', () => {
+    // The old hosted default (breeze.pages.dev) answers 404: there is no
+    // official server, and distributions ship unset like the web package.
+    // This run sets no BREEZE_API_ORIGIN, so www/ must carry the empty API
+    // line plus the no-default flag that makes the server gate appear.
+    const html = readFileSync(join(www, 'index.html'), 'utf8');
+    expect(html).toContain("const API = '';");
+    expect(html).toContain('src="./no-default-server-flag.js"');
+    expect(existsSync(join(www, 'no-default-server-flag.js'))).toBe(true);
+  });
+
   it('hashes every copied file into .build-manifest.json', () => {
     const manifest = JSON.parse(readFileSync(join(www, '.build-manifest.json'), 'utf8'));
     for (const f of readdirSync(join(root, 'locales')).filter(f => f.endsWith('.json'))) {
