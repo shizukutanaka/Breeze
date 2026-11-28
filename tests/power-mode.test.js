@@ -13,7 +13,7 @@ function slice(start, end) {
 }
 const block = slice('const _powerState', '\nfunction _updateNetInfo()');
 const create = new Function('MS', '_settings', 'navigator', '_dbg',
-  block + '\nreturn { _powerState, _powerModeFromBattery, _effectivePowerMode, _powerPollFloorMs, _powerPresenceOff };');
+  block + '\nreturn { _powerState, _powerModeFromBattery, _effectivePowerMode, _powerPollFloorMs, _powerWindowDelayMs, _powerPresenceOff };');
 
 function harness(powerMode = 'auto') {
   return create({ MIN: 60000 }, { powerMode }, {}, () => {});
@@ -78,6 +78,29 @@ describe('power mode — manual setting wins over the battery', () => {
     const p = harness('bogus');
     p._powerState.level = 0.1;
     expect(p._effectivePowerMode()).toBe('emergency');
+  });
+});
+
+describe('power mode — phase-aligned polling windows', () => {
+  it('returns the full interval when now is exactly on a 10-minute boundary', () => {
+    const p = harness();
+    expect(p._powerWindowDelayMs(600000, 600000)).toBe(600000);
+  });
+  it('returns the remainder to the next 10-minute boundary mid-window', () => {
+    const p = harness();
+    expect(p._powerWindowDelayMs(600000, 600000 + 12345)).toBe(600000 - 12345);
+  });
+  it('follows the same boundary rule for a one-minute interval', () => {
+    const p = harness();
+    expect(p._powerWindowDelayMs(60000, 60000)).toBe(60000);
+    expect(p._powerWindowDelayMs(60000, 60000 + 12345)).toBe(60000 - 12345);
+  });
+  it('returns zero unchanged when there is no interval', () => {
+    const p = harness();
+    expect(p._powerWindowDelayMs(0, 12345)).toBe(0);
+  });
+  it('uses the window delay when schedulePoll has a power floor', () => {
+    expect(html).toContain('_powerWindowDelayMs(interval, Date.now())');
   });
 });
 

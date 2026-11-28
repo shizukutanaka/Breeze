@@ -3214,8 +3214,7 @@ const _adaptiveConfig = {
   },
 };
 
-// Power saving (emergency design, phase 1): what drains a battery is how often
-// the radio wakes, not how much data moves — so only LISTENING is throttled,
+// Power saving (emergency design, phase 1): what drains a battery is how often the radio wakes, not how much data moves — so only LISTENING is throttled,
 // never sending. In 'auto' the mode follows the battery: >50% normal,
 // 20–50% saver, <=20% emergency; charging steps one level back toward normal.
 // Without a Battery API (iOS Safari) auto resolves to normal and the manual
@@ -3237,6 +3236,7 @@ function _powerPollFloorMs() {
   const m = _effectivePowerMode();
   return m === 'emergency' ? 10 * MS.MIN : m === 'saver' ? MS.MIN : 0;
 }
+function _powerWindowDelayMs(intervalMs, nowMs) { if (!(intervalMs > 0)) return intervalMs; const r = nowMs % intervalMs; return r === 0 ? intervalMs : intervalMs - r; }
 function _powerPresenceOff() { return _effectivePowerMode() !== 'normal'; }
 if (typeof navigator !== 'undefined' && navigator.getBattery) {
   navigator.getBattery().then(b => {
@@ -11365,7 +11365,7 @@ async function initMessenger(dbName) {
       await pollOnce();
       maybeStartMailboxWs();
       schedulePoll();
-    }, interval);
+    }, _powerPollFloorMs() > 0 ? _powerWindowDelayMs(interval, Date.now()) : interval);
   }
   async function startPolling() {
     try {  
