@@ -1028,6 +1028,7 @@
   "cmdDescExport": "Kaweake i tenei korerorero",
   "cmdDescBackup": "Whakahokia aku raraunga",
   "cmdDescSettings": "Whakatuwherahia nga tautuhinga",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "uiNewVersion": "Putanga hou e waatea ana.",
   "uiUpdateReady": "Kua reri te whakahou.",
   "uiRestartUpdate": "Tīmata anō ki te whakahōu",

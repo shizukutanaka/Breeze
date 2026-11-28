@@ -888,6 +888,7 @@
   "cmdDescExport": "Kay rimanakuyta exporta ruway",
   "cmdDescBackup": "Datosnoypa respaldo-kopian ruray",
   "cmdDescSettings": "Ajustes-kunata kichay",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Auditoría registro (qhipa 50) .",
   "cmdBackupTitle": "Puyu Waqaychasqa",
   "cmdWallpaperTitle": "Wallpaper Presets nisqa",

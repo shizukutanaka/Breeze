@@ -71,10 +71,10 @@ describe('first-conversation notification permission explanation (A5)', () => {
     }
   });
 
-  it('ships all three keys in every locale with an identical 1175-key set', () => {
+  it('ships all three keys in every locale with an identical 1176-key set', () => {
     const I = inlineTables();
     const referenceKeys = Object.keys(I.en).sort();
-    expect(referenceKeys).toHaveLength(1175);
+    expect(referenceKeys).toHaveLength(1176);
     const files = readdirSync(join(root, 'locales')).filter(f => f.endsWith('.json')).sort();
     expect(files).toHaveLength(107);
     for (const file of files) {

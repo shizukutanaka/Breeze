@@ -881,6 +881,7 @@
   "cmdDescExport": "このチャットを書き出し",
   "cmdDescBackup": "自分のデータをバックアップ",
   "cmdDescSettings": "設定を開く",
+  "cmdUnknown": "不明なコマンドです: {0}。/help でコマンドの一覧を表示できます",
   "cmdAuditTitle": "監査ログ（最新50件）",
   "cmdBackupTitle": "クラウドバックアップ",
   "cmdWallpaperTitle": "壁紙プリセット",

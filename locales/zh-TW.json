@@ -994,6 +994,7 @@
   "cmdDescExport": "匯出此聊天",
   "cmdDescBackup": "備份我的資料",
   "cmdDescSettings": "開啟設定",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "稽核日誌（最近 50 筆）",
   "cmdBackupTitle": "雲端備份",
   "cmdWallpaperTitle": "桌布預設",

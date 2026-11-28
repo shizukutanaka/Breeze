@@ -1028,6 +1028,7 @@
   "cmdDescExport": "Manondrana ity chat ity",
   "cmdDescBackup": "Amboary ny angonako",
   "cmdDescSettings": "Sokafy ny fanovana",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "uiNewVersion": "Misy dikan-teny vaovao.",
   "uiUpdateReady": "Vonona ny fanavaozana.",
   "uiRestartUpdate": "Avereno indray ny fanavaozana",

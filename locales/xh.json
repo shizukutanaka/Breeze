@@ -888,6 +888,7 @@
   "cmdDescExport": "Hambisa le ngxoxo",
   "cmdDescBackup": "Gcina i-data yam",
   "cmdDescSettings": "Vula imimiselo",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Ingxelo yophicotho-zincwadi (yokugqibela 50)",
   "cmdBackupTitle": "Ugcino lwelifu",
   "cmdWallpaperTitle": "Imimiselo yangaphambili yephepha lodonga",

@@ -1001,6 +1001,7 @@
   "cmdDescExport": "Exportar esta conversa",
   "cmdDescBackup": "Fazer backup dos meus dados",
   "cmdDescSettings": "Abrir configurações",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Registro de Auditoria (últimos 50)",
   "cmdBackupTitle": "Backup na Nuvem",
   "cmdWallpaperTitle": "Papéis de Parede Predefinidos",

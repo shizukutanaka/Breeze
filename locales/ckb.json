@@ -888,6 +888,7 @@
   "cmdDescExport": "هەناردەکردنی ئەم چاتە",
   "cmdDescBackup": "پاڵپشت کردنی داتاکانم",
   "cmdDescSettings": "کردنەوەی ڕێکبەندەکان",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "تۆماری وردبینی (دوا 50)",
   "cmdBackupTitle": "پاڵپشتی هەور",
   "cmdWallpaperTitle": "ڕێکخستنەکانی کاغەزی دیوار",

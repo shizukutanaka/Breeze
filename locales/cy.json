@@ -919,6 +919,7 @@
   "cmdDescExport": "Allforio'r sgwrs hon",
   "cmdDescBackup": "Cefnogi fy data",
   "cmdDescSettings": "Agor gosodiadau",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Cofnod Archwilio (50 diwethaf)",
   "cmdBackupTitle": "Cymylu",
   "cmdWallpaperTitle": "Presetiau Papur Wal",

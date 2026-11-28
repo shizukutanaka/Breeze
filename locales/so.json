@@ -888,6 +888,7 @@
   "cmdDescExport": "Dhoofso sheekadan",
   "cmdDescBackup": "Kaydi xogtayda",
   "cmdDescSettings": "Fur dejimaha",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Diiwaanka Kormeerka (50-kii ugu dambeeyay)",
   "cmdBackupTitle": "Kaydinta Daruuraha",
   "cmdWallpaperTitle": "Dejinta Wallpaper-ka",

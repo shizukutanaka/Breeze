@@ -966,6 +966,7 @@
   "cmdDescExport": "Eksportuj ten czat",
   "cmdDescBackup": "Utwórz kopię zapasową moich danych",
   "cmdDescSettings": "Otwórz ustawienia",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Dziennik audytu (ostatnie 50)",
   "cmdBackupTitle": "Kopia zapasowa w chmurze",
   "cmdWallpaperTitle": "Presety tapet",

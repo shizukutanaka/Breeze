@@ -1451,8 +1451,8 @@ import { noDefaultBannerNeeded, deliveryStuck, createServerHints } from './src/a
 window.__breezeServerHints = { noDefaultBannerNeeded, deliveryStuck, createServerHints };
 </script>
 <script type="module">
-import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS } from './src/app/slash-picker.js';
-window.__breezeSlashPicker = { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS };
+import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, slashHelpLines } from './src/app/slash-picker.js';
+window.__breezeSlashPicker = { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, slashHelpLines };
 </script>
 <script type="module">
 // Modularization: app-logic subsystems extracted from the classic script
@@ -2623,6 +2623,7 @@ mrTitle: "Requests", mrIntro: "Messages from people outside your contacts stay h
     cmdDescExport: 'Export this chat',
     cmdDescBackup: 'Back up my data',
     cmdDescSettings: 'Open settings',
+    cmdUnknown: 'Unknown command: {0}. Type /help to see all commands.',
     uiNewVersion: 'New version available.',
     uiUpdateReady: 'Update ready.',
     uiRestartUpdate: 'Restart to update',
@@ -14432,43 +14433,8 @@ async function initMessenger(dbName) {
     if (val === '/help') {
       e.preventDefault(); clearInput();
       const [box, d] = _cmdPanelEl('cmd-panel');
-      safeSetHTML(d, [
-        '<b class="i-g13">' + t('helpTitle') + '</b>',
-        '',
-        '<b>' + t('helpChat') + '</b>',
-        '/search · /searchall · /pins · /bookmarks · /reply · /poll · /timer',
-        '/schedule &lt;time&gt; &lt;msg&gt; · /schedule list · /schedule cancel',
-        '/clear · /export [json|csv|html|all] · /import · /summarize · /reactions · /compact',
-        '/files · /print · /rendezvous · /offlinepair',
-        '',
-        '<b>' + t('helpContacts') + '</b>',
-        '/info · /note · /pin · /mute · /archive · /unblock · /members · /admin',
-        '/add · /label · /sort · /newgroup · /rename · /invite · /qr · /share',
-        '/contacts export · /contacts import',
-        '',
-        '<b>' + t('helpSettings') + '</b>',
-        '/focus [min] [all]',
-        '/settings · /theme · /wallpaper · /lock · /sound · /compress',
-        '/alias &lt;name&gt; · /whoami · /who · /debug',
-        '',
-        '<b>' + t('helpSecurity') + '</b>',
-        '/security · /verify · /audit · /retention · /backup · /vault · /keywrap',
-        '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
-        '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers · /location',
-        '',
-        '<b>' + t('helpDiag') + '</b>',
-        '/retry',
-        '',
-        '<b>' + t('helpDeadDrop') + '</b>',
-        '/drop &lt;secret&gt; · /room [name]',
-        '',
-        '<b>' + t('helpFormat') + '</b>',
-        '**bold** *italic* ~~strike~~ `code` ```block``` ||spoiler|| @mention',
-        t('helpTableHint'),
-        '',
-        '<b>' + t('helpKeys') + '</b>',
-        t('helpKeysHint'),
-      ].join('<br>'));
+      const { slashHelpLines } = globalThis.__breezeSlashPicker || {};
+      safeSetHTML(d, slashHelpLines(t).join('<br>'));
       box.appendChild(d); box.scrollTop = box.scrollHeight;
       return;
     }
@@ -15630,6 +15596,11 @@ async function initMessenger(dbName) {
       box.appendChild(d);
       box.scrollTop = box.scrollHeight;
     }
+
+    // Unmatched slash input used to fail silently: the first composer keydown refuses
+    // to send it, and every handled branch here calls preventDefault(). At the listener
+    // tail, defaultPrevented=false is therefore proof no command claimed the input.
+    if (!e.defaultPrevented) { e.preventDefault(); clearInput(); showToast(t('cmdUnknown', val.split(/\s+/)[0]), 'error'); }
   });
 
   // Expose to global scope for onclick handlers in dynamic HTML

@@ -891,6 +891,7 @@
   "cmdDescExport": "Voer hierdie klets uit",
   "cmdDescBackup": "Maak rugsteun van my data",
   "cmdDescSettings": "Maak instellings oop",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "Audit-staaf (Laaste 50)",
   "cmdBackupTitle": "Rugsteun",
   "cmdWallpaperTitle": "Geen muurpapiervoorstelling",

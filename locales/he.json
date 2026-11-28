@@ -959,6 +959,7 @@
   "cmdDescExport": "ייצוא צ'אט זה",
   "cmdDescBackup": "גיבוי הנתונים שלי",
   "cmdDescSettings": "פתיחת הגדרות",
+  "cmdUnknown": "Unknown command: {0}. Type /help to see all commands.",
   "cmdAuditTitle": "יומן ביקורת (50 אחרונות)",
   "cmdBackupTitle": "גיבוי ענן",
   "cmdWallpaperTitle": "הגדרות מראש של טפט",

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, SLASH_FEATURED, SLASH_EXAMPLES } from '../src/app/slash-picker.js';
+import { readFileSync, readdirSync } from 'node:fs';
+import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, SLASH_FEATURED, SLASH_EXAMPLES, slashHelpLines } from '../src/app/slash-picker.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const sw = readFileSync(new URL('../sw.js', import.meta.url), 'utf8');
@@ -107,8 +107,8 @@ describe('slash-picker module wiring', () => {
     const blocks = [...html.matchAll(/<script type="module">([\s\S]*?)<\/script>/g)].map((m) => m[1]);
     const block = blocks.find((b) => b.includes('window.__breezeSlashPicker'));
     expect(block).toBeTruthy();
-    expect(block).toContain("import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS } from './src/app/slash-picker.js';");
-    expect(block).toContain('window.__breezeSlashPicker = { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS };');
+    expect(block).toContain("import { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, slashHelpLines } from './src/app/slash-picker.js';");
+    expect(block).toContain('window.__breezeSlashPicker = { createSlashPicker, SLASH_COMMANDS, SLASH_DESCS, slashHelpLines };');
     expect(block).not.toContain('p2p-stats.js');
     expect(sw).toContain("'/src/app/slash-picker.js'");
   });
@@ -217,6 +217,99 @@ describe('slash-picker behaviour', () => {
     expect(h.picker()).not.toBeNull();
     h.type('/zzzzzz');
     expect(h.picker()).toBeNull();
+  });
+});
+
+describe('slash-help extraction and unknown-command fallback', () => {
+  it('slashHelpLines returns the unchanged /help display rows', () => {
+    const translations = {
+      helpTitle: 'TITLE',
+      helpChat: 'CHAT',
+      helpContacts: 'CONTACTS',
+      helpSettings: 'SETTINGS',
+      helpSecurity: 'SECURITY',
+      helpDiag: 'DIAGNOSTICS',
+      helpDeadDrop: 'DEAD DROP',
+      helpFormat: 'FORMATTING',
+      helpKeys: 'KEYS',
+      helpTableHint: 'TABLE HINT',
+      helpKeysHint: 'KEYS HINT',
+    };
+    const t = (key) => translations[key] || key;
+    expect(slashHelpLines(t)).toEqual([
+      '<b class="i-g13">TITLE</b>',
+      '',
+      '<b>CHAT</b>',
+      '/search · /searchall · /pins · /bookmarks · /reply · /poll · /timer',
+      '/schedule &lt;time&gt; &lt;msg&gt; · /schedule list · /schedule cancel',
+      '/clear · /export [json|csv|html|all] · /import · /summarize · /reactions · /compact',
+      '/files · /print · /rendezvous · /offlinepair',
+      '',
+      '<b>CONTACTS</b>',
+      '/info · /note · /pin · /mute · /archive · /unblock · /members · /admin',
+      '/add · /label · /sort · /newgroup · /rename · /invite · /qr · /share',
+      '/contacts export · /contacts import',
+      '',
+      '<b>SETTINGS</b>',
+      '/focus [min] [all]',
+      '/settings · /theme · /wallpaper · /lock · /sound · /compress',
+      '/alias &lt;name&gt; · /whoami · /who · /debug',
+      '',
+      '<b>SECURITY</b>',
+      '/security · /verify · /audit · /retention · /backup · /vault · /keywrap',
+      '/sessions · /wipe · /gdpr · /panic (Ctrl+Shift+Backspace)',
+      '/devices · /link [pub] · /linkto &lt;pub&gt; · /unlink &lt;n&gt; · /history · /migrate · /profile · /stickers · /location',
+      '',
+      '<b>DIAGNOSTICS</b>',
+      '/retry',
+      '',
+      '<b>DEAD DROP</b>',
+      '/drop &lt;secret&gt; · /room [name]',
+      '',
+      '<b>FORMATTING</b>',
+      '**bold** *italic* ~~strike~~ `code` ```block``` ||spoiler|| @mention',
+      'TABLE HINT',
+      '',
+      '<b>KEYS</b>',
+      'KEYS HINT',
+    ]);
+  });
+
+  it('the /help branch renders exactly the extracted lines through the bridge', () => {
+    expect(html).toContain('const { slashHelpLines } = globalThis.__breezeSlashPicker || {};');
+    expect(html).toContain("safeSetHTML(d, slashHelpLines(t).join('<br>'));");
+    expect(html).not.toContain("'<b class=\"i-g13\">' + t('helpTitle') + '</b>'");
+  });
+
+  it('puts the cmdUnknown fallback after /room and before the dispatch listener closes', () => {
+    const start = html.indexOf("  _DOM.get('msg-input')?.addEventListener('keydown', async (e) => {");
+    expect(start).toBeGreaterThan(-1);
+    const end = html.indexOf('\n\n  // Expose to global scope', start);
+    expect(end).toBeGreaterThan(start);
+    const listener = html.slice(start, end);
+    const fallback = "if (!e.defaultPrevented) { e.preventDefault(); clearInput(); showToast(t('cmdUnknown', val.split(/\\s+/)[0]), 'error'); }";
+    const roomAt = listener.indexOf("if (val.startsWith('/room'))");
+    const roomBlockEndAt = listener.indexOf('\n    }\n\n    // Unmatched slash input', roomAt);
+    const fallbackAt = listener.indexOf(fallback);
+    const closeAt = listener.lastIndexOf('\n  });');
+    expect(roomAt).toBeGreaterThan(-1);
+    expect(roomBlockEndAt).toBeGreaterThan(roomAt);
+    expect(fallbackAt).toBeGreaterThan(roomBlockEndAt);
+    expect(closeAt).toBeGreaterThan(fallbackAt);
+    expect(listener.slice(closeAt)).toBe('\n  });');
+  });
+
+  it('defines cmdUnknown in inline English and every locale, with ja translated', () => {
+    const enUnknown = 'Unknown command: {0}. Type /help to see all commands.';
+    const jaUnknown = '不明なコマンドです: {0}。/help でコマンドの一覧を表示できます';
+    const inline = html.match(/\n\s+cmdUnknown: '([^']+)',/);
+    expect(inline?.[1]).toBe(enUnknown);
+    const files = readdirSync(new URL('../locales/', import.meta.url)).filter((f) => f.endsWith('.json')).sort();
+    expect(files).toHaveLength(107);
+    for (const file of files) {
+      const table = JSON.parse(readFileSync(new URL(`../locales/${file}`, import.meta.url), 'utf8'));
+      expect(table.cmdUnknown, `${file}.cmdUnknown`).toBe(file === 'ja.json' ? jaUnknown : enUnknown);
+    }
   });
 });
 
