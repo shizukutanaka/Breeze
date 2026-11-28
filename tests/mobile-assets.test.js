@@ -16,7 +16,9 @@ let www;
 beforeAll(() => {
   www = mkdtempSync(join(tmpdir(), 'breeze-www-'));
   execFileSync('node', [join(root, 'mobile/prepare.js')], {
-    env: { ...process.env, BREEZE_WWW: www },
+    // BREEZE_API_ORIGIN is pinned empty: this run pins the no-default-server
+    // shipping state, whatever the developer's shell happens to export.
+    env: { ...process.env, BREEZE_WWW: www, BREEZE_API_ORIGIN: '' },
     stdio: 'pipe',
   });
 });
@@ -43,6 +45,17 @@ describe('mobile/prepare.js copies everything the app fetches', () => {
     for (const f of ['404.html', '404.js']) {
       expect(existsSync(join(www, f)), `${f} missing from www/`).toBe(true);
     }
+  });
+
+  it('ships with no default server — API is empty and the gate flag is injected', () => {
+    // The old hosted default (breeze.pages.dev) answers 404: there is no
+    // official server, and distributions ship unset like the web package.
+    // This run sets no BREEZE_API_ORIGIN, so www/ must carry the empty API
+    // line plus the no-default flag that makes the server gate appear.
+    const html = readFileSync(join(www, 'index.html'), 'utf8');
+    expect(html).toContain("const API = '';");
+    expect(html).toContain('src="./no-default-server-flag.js"');
+    expect(existsSync(join(www, 'no-default-server-flag.js'))).toBe(true);
   });
 
   it('hashes every copied file into .build-manifest.json', () => {

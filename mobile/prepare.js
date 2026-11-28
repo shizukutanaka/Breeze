@@ -20,6 +20,11 @@ const ROOT = path.join(__dirname, '..');
 // into a temp dir instead of mobile/www.
 const WWW = process.env.BREEZE_WWW || path.join(__dirname, 'www');
 const CHECK_ONLY = process.argv.includes('--check');
+// BREEZE_API_ORIGIN names the builder's own backend for self-hosted mobile
+// builds. Unset means the package ships with NO default server (see the API
+// origin rewrite below): the packaged app opens on the server gate, the same
+// unset state the web distribution ships in.
+const API_ORIGIN = (process.env.BREEZE_API_ORIGIN || '').replace(/\/+$/, '');
 
 // ── Asset manifest ──────────────────────────────────────────
 // [source, destination (relative to www/), required?]
@@ -44,6 +49,11 @@ if (fs.existsSync(LOCALE_DIR)) {
     ASSETS.push([`locales/${f}`, `locales/${f}`, true]);
   }
 }
+
+// A no-default package needs the same flag script the web package injects
+// (tools/package-release.sh): without it the app never shows the server gate
+// and an empty API would fail silently against the virtual host.
+if (!API_ORIGIN) ASSETS.push(['no-default-server-flag.js', 'no-default-server-flag.js', true]);
 
 // ── Validate ────────────────────────────────────────────────
 let errors = 0;
@@ -90,8 +100,13 @@ for (const [src, dst, required] of ASSETS) {
 // ops — to a host that does not exist. The app renders but is silently non-functional.
 // Rewrite the line to the real backend, exactly the way tests/e2e/server.mjs already
 // anchors and rewrites it for the local harness. Self-hosted mobile builds set
-// BREEZE_API_ORIGIN; the hosted default is breeze.pages.dev (README).
-const API_ORIGIN = (process.env.BREEZE_API_ORIGIN || 'https://breeze.pages.dev').replace(/\/+$/, '');
+// BREEZE_API_ORIGIN to their own backend. With no origin set, the package ships
+// unset: the line becomes `const API = '';` and the no-default flag script
+// (copied above) is injected before the first module script — exactly the
+// state tools/package-release.sh produces for the web distribution — so the
+// app opens on the server gate instead of calling a default host. (The old
+// hosted default, breeze.pages.dev, answers 404: there is no official server,
+// and distributions ship with no server configured.)
 const idxPath = path.join(WWW, 'index.html');
 let idxText = fs.readFileSync(idxPath, 'utf8');
 const API_LINE_RE = /^const API = globalThis\.__BREEZE_NO_DEFAULT_SERVER__ === true \? '' : \(location\.hostname === 'localhost' \|\| location\.hostname === '127\.0\.0\.1' \? '' : location\.origin \+ '\/api'\);$/m;
@@ -100,10 +115,19 @@ if (!API_LINE_RE.test(idxText)) {
   process.exit(1);
 }
 const idxSizeBefore = fs.statSync(idxPath).size;
-idxText = idxText.replace(API_LINE_RE, `const API = ${JSON.stringify(API_ORIGIN + '/api')};`);
+if (API_ORIGIN) {
+  idxText = idxText.replace(API_LINE_RE, `const API = ${JSON.stringify(API_ORIGIN + '/api')};`);
+} else {
+  idxText = idxText.replace(API_LINE_RE, `const API = '';`);
+  if (!idxText.includes('<script type="module">')) {
+    console.error('  ✗ index.html has no <script type="module"> anchor — cannot inject no-default-server-flag.js, or the packaged app would ship without the server gate');
+    process.exit(1);
+  }
+  idxText = idxText.replace('<script type="module">', '  <script src="./no-default-server-flag.js"></script>\n  <script type="module">');
+}
 fs.writeFileSync(idxPath, idxText);
 totalBytes += fs.statSync(idxPath).size - idxSizeBefore;
-console.log(`  ✓ API origin → ${API_ORIGIN}/api`);
+console.log(API_ORIGIN ? `  ✓ API origin → ${API_ORIGIN}/api` : '  ✓ API origin → (none — no default server; gate on first run)');
 
 // ── Integrity check: verify index.html contains <script> ───
 const idx = fs.readFileSync(path.join(WWW, 'index.html'), 'utf8');
