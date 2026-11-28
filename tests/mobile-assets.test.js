@@ -16,7 +16,9 @@ let www;
 beforeAll(() => {
   www = mkdtempSync(join(tmpdir(), 'breeze-www-'));
   execFileSync('node', [join(root, 'mobile/prepare.js')], {
-    env: { ...process.env, BREEZE_WWW: www },
+    // BREEZE_API_ORIGIN is pinned empty: this run pins the no-default-server
+    // shipping state, whatever the developer's shell happens to export.
+    env: { ...process.env, BREEZE_WWW: www, BREEZE_API_ORIGIN: '' },
     stdio: 'pipe',
   });
 });
